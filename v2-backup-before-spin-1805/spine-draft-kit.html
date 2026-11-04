@@ -1,0 +1,3270 @@
+<title>Spine Draft Kit</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="theme-color" content="#f2f2f4" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#151517" media="(prefers-color-scheme: dark)">
+<style>
+:root {
+  color-scheme: light;
+  --paper: #f2f2f4;
+  --paper-sunk: #e6e6ea;
+  --card: #ffffff;
+  --ink: #151517;
+  --ink-rgb: 21 21 23;
+  --segment: #ffffff;
+  --brand: #007aff;
+  --brand-hover: #0066d6;
+  --success: #24a148;
+  --warning: #a86a00;
+  --destructive: #e3352b;
+  --achievement: #e8801a;
+  --scrim: #121114;
+  --shadow-rgb: 0 0 0;
+  --backdrop-alpha: 0.4;
+  --brand-soft: color-mix(in srgb, var(--brand) 16%, var(--card));
+  --line: rgb(var(--ink-rgb) / 0.2);
+  --f-text: ui-sans-serif, system-ui, sans-serif;
+  --f-head: -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+  --f-num: ui-rounded, "SF Pro Rounded", -apple-system, system-ui, sans-serif;
+  --f-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --float-shadow: 0 12px 32px -8px rgb(var(--shadow-rgb) / 0.18), 0 0 2px rgb(0 0 0 / 0.06);
+  --gutter: 32px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --paper: #151517; --paper-sunk: #303033; --card: #242426; --ink: #f4f4f6; --ink-rgb: 244 244 246;
+    --segment: color-mix(in srgb, #f4f4f6 24%, #242426);
+    --brand: #0a84ff; --brand-hover: #0077ed; --success: #2eb84c; --warning: #fbbf24; --destructive: #ff453a; --achievement: #ff9c33;
+    --scrim: #121114; --shadow-rgb: 0 0 0; --backdrop-alpha: 0.6;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --paper: #151517; --paper-sunk: #303033; --card: #242426; --ink: #f4f4f6; --ink-rgb: 244 244 246;
+  --segment: color-mix(in srgb, #f4f4f6 24%, #242426);
+  --brand: #0a84ff; --brand-hover: #0077ed; --success: #2eb84c; --warning: #fbbf24; --destructive: #ff453a; --achievement: #ff9c33;
+  --scrim: #121114; --shadow-rgb: 0 0 0; --backdrop-alpha: 0.6;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--paper); color: var(--ink); font: 400 15px/1.45 var(--f-text); -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+code, .mono { font-family: var(--f-mono); font-size: 0.86em; }
+h1, h2, h3 { margin: 0; font-family: var(--f-head); font-weight: 700; letter-spacing: -0.02em; line-height: 1.1; text-wrap: balance; }
+h2 { font-size: 20px; }
+button, input, select { font: inherit; color: inherit; }
+button, label[for], summary, select, input[type="checkbox"] { cursor: pointer; -webkit-tap-highlight-color: transparent; }
+button:disabled, input:disabled, select:disabled { cursor: default; }
+:focus { outline: none; }
+:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
+[hidden] { display: none !important; }
+.num { font-family: var(--f-num); font-variant-numeric: tabular-nums; }
+
+.app { display: grid; grid-template-columns: 264px minmax(0, 1fr); align-items: start; min-height: 100dvh; }
+.main-col { min-width: 0; }
+.bar { position: sticky; top: 0; z-index: 20; background: var(--paper); padding-top: env(safe-area-inset-top, 0px); }
+.bar-in { display: flex; align-items: center; gap: 12px; min-height: 64px; padding-left: max(var(--gutter), env(safe-area-inset-left, 0px)); padding-right: max(var(--gutter), env(safe-area-inset-right, 0px)); }
+.crumb { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 700 20px/1.2 var(--f-head); letter-spacing: -0.02em; }
+.menu-btn { display: none; }
+.brand { font: 700 17px/1 var(--f-head); letter-spacing: -0.02em; display: inline-flex; align-items: center; gap: 10px; white-space: nowrap; }
+.brand i { display: inline-grid; grid-template-columns: repeat(3, 6px); gap: 2px; }
+.brand i b { width: 6px; height: 6px; border-radius: 2px; background: rgb(var(--ink-rgb) / 0.3); }
+.brand i b:nth-child(5) { background: var(--brand); }
+
+.tabs, .presets { display: flex; gap: 4px; padding: 4px; border-radius: 9999px; background: rgb(var(--ink-rgb) / 0.06); flex: none; }
+.tab, .preset { display: inline-flex; align-items: center; height: 36px; padding: 0 12px; border: 0; border-radius: 9999px; background: none; color: rgb(var(--ink-rgb) / 0.6); font: 500 15px/1 var(--f-text); white-space: nowrap; transition: background-color 150ms var(--ease), color 150ms var(--ease); }
+.preset { height: 32px; padding: 0 10px; font: 500 14px/1 var(--f-num); font-variant-numeric: tabular-nums; }
+.tab[aria-selected="true"], .preset[aria-pressed="true"] { background: var(--segment); color: var(--ink); font-weight: 600; box-shadow: 0 1px 2px rgb(var(--shadow-rgb) / 0.08); }
+.presets { flex-wrap: wrap; border-radius: 20px; }
+
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 44px; padding: 0 20px; border: 0; border-radius: 9999px; background: var(--paper-sunk); color: var(--ink); font: 500 15px/1 var(--f-text); white-space: nowrap; transition: background-color 150ms var(--ease), color 150ms var(--ease), transform 150ms var(--ease); }
+.btn:active:not(:disabled) { transform: scale(0.97); }
+.btn.primary { background: var(--brand); color: #fff; }
+.btn.ghost { background: transparent; color: rgb(var(--ink-rgb) / 0.7); }
+.btn.sm { height: 36px; padding: 0 16px; font-size: 14px; }
+.btn.icon { width: 36px; height: 36px; padding: 0; flex: none; font-size: 16px; }
+.btn.icon:active:not(:disabled) { transform: scale(0.95); }
+.btn:disabled { opacity: 0.6; }
+.menu-btn.btn { display: none; width: 44px; height: 44px; background: none; border: 1px solid rgb(var(--ink-rgb) / 0.1); }
+.menu-btn svg { opacity: 0.5; }
+@media (hover: hover) {
+  .tab:not([aria-selected="true"]):hover, .preset:not([aria-pressed="true"]):hover { color: var(--ink); }
+  .btn:hover:not(:disabled) { background: rgb(var(--ink-rgb) / 0.1); }
+  .btn.primary:hover:not(:disabled) { background: var(--brand-hover); }
+  .btn.ghost:hover:not(:disabled) { background: rgb(var(--ink-rgb) / 0.05); color: var(--ink); }
+  .p-act .btn.icon:hover:not(:disabled) { background: color-mix(in srgb, var(--tint) 26%, transparent); }
+  .p-act .p-set[aria-pressed="true"]:hover:not(:disabled) { background: var(--tint); }
+}
+.file { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+.sidebar { min-width: 0; position: sticky; top: 0; height: 100dvh; overflow-y: auto; background: var(--card); border-right: 1px solid rgb(var(--ink-rgb) / 0.08); padding: env(safe-area-inset-top, 0px) 12px 20px max(12px, env(safe-area-inset-left, 0px)); }
+.sb-brand { display: flex; min-height: 64px; padding: 0 12px; }
+.work { min-width: 0; container-type: inline-size; padding: 16px max(var(--gutter), env(safe-area-inset-right, 0px)) calc(48px + env(safe-area-inset-bottom, 0px)) max(var(--gutter), env(safe-area-inset-left, 0px)); }
+.scrim { display: none; }
+.sb-projects { display: grid; gap: 12px; }
+.sb-head { display: flex; align-items: center; gap: 8px; padding: 0 12px; }
+.sb-head h2 { font: 500 14px/1.3 var(--f-text); letter-spacing: 0; color: rgb(var(--ink-rgb) / 0.6); }
+.plist { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.pitem { border-radius: 12px; }
+.pitem.active { background: rgb(var(--ink-rgb) / 0.1); }
+.p-open, .comp-open { position: relative; border: 0; background: none; text-align: left; color: inherit; transition: opacity 150ms var(--ease); }
+.p-open:active, .comp-open:active { opacity: 0.6; }
+.p-open { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 12px; align-items: center; width: 100%; min-height: 52px; padding: 6px 12px 6px 6px; border-radius: 12px; }
+.p-ico { width: 44px; height: 34px; border-radius: 8px; background: rgb(var(--ink-rgb) / 0.06); display: grid; place-items: center; }
+.pitem.active .p-ico .gc { fill: var(--brand-soft); stroke: var(--brand); }
+.p-txt { display: grid; min-width: 0; gap: 1px; }
+.p-name { font: 500 15px/1.3 var(--f-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.p-meta { font: 400 13px/1.3 var(--f-num); font-variant-numeric: tabular-nums; color: rgb(var(--ink-rgb) / 0.5); }
+.p-act { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 0 6px 8px; }
+.p-act .btn.ghost.sm { padding: 0 12px; }
+.p-act .btn.icon { --tint: var(--brand); background: color-mix(in srgb, var(--tint) 16%, transparent); color: var(--tint); }
+.p-act .btn.icon svg { width: 18px; height: 18px; }
+.p-act .p-set { --tint: var(--achievement); }
+.p-act .p-set[aria-pressed="true"] { background: var(--tint); color: #fff; }
+.p-act .p-copy { --tint: var(--success); }
+.p-act .p-del { --tint: var(--destructive); }
+.p-confirm { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 0 12px 8px; font-size: 14px; color: rgb(var(--ink-rgb) / 0.6); }
+.p-confirm .btn:not(.ghost) { color: var(--destructive); }
+.sb-foot { display: grid; gap: 6px; justify-items: start; padding-top: 8px; }
+.store-note { font-size: 13px; color: var(--warning); padding: 0 12px; }
+
+.wizard { display: grid; gap: 16px; align-content: start; }
+.wz-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding-left: 12px; }
+.wz-head b { font: 700 17px/1.2 var(--f-head); letter-spacing: -0.02em; }
+.wz-steps { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; }
+.wz-steps li { display: grid; gap: 6px; font: 500 12px/1 var(--f-num); color: rgb(var(--ink-rgb) / 0.5); text-align: center; }
+.wz-steps li::before { content: ""; height: 4px; border-radius: 9999px; background: rgb(var(--ink-rgb) / 0.1); }
+.wz-steps li.done::before { background: rgb(var(--ink-rgb) / 0.4); }
+.wz-steps li.cur::before { background: var(--brand); }
+.wz-steps li.cur { color: var(--ink); font-weight: 600; }
+.wz-title { display: flex; align-items: center; gap: 8px; }
+.wz-title h3 { font-size: 20px; }
+.wz-body { display: grid; gap: 12px; }
+.wz-body input[type="text"] { width: 100%; }
+.wz-nav { display: flex; gap: 8px; justify-content: space-between; position: sticky; bottom: -20px; background: var(--card); padding-block: 12px; }
+.gtiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.gtile { display: grid; gap: 6px; justify-items: center; align-content: center; min-height: 76px; padding: 10px 4px 8px; border: 1px solid rgb(var(--ink-rgb) / 0.1); border-radius: 16px; background: none; font: 500 14px/1 var(--f-num); font-variant-numeric: tabular-nums; color: rgb(var(--ink-rgb) / 0.6); transition: border-color 150ms var(--ease); }
+.gtile[aria-pressed="true"] { border-color: var(--brand); box-shadow: inset 0 0 0 1px var(--brand); color: var(--ink); }
+.gtile[aria-pressed="true"] .gc { fill: var(--brand-soft); stroke: var(--brand); }
+.gtile small { font: 400 12px/1 var(--f-text); color: rgb(var(--ink-rgb) / 0.5); }
+.steppers { display: grid; gap: 8px; }
+.stepper { display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto; gap: 8px; align-items: center; font-size: 15px; }
+.stepper output { min-width: 2ch; text-align: center; font: 600 16px/1 var(--f-num); font-variant-numeric: tabular-nums; }
+.stepper code { color: rgb(var(--ink-rgb) / 0.5); font-size: 12px; }
+.wz-names { display: flex; flex-wrap: wrap; gap: 4px; }
+.wz-names span { font: 500 12px/1.6 var(--f-mono); padding: 0 8px; border-radius: 9999px; background: rgb(var(--ink-rgb) / 0.06); }
+.wz-drop { border: 1.5px dashed rgb(var(--ink-rgb) / 0.15); border-radius: 16px; padding: 12px; display: grid; gap: 8px; justify-items: center; font-size: 14px; color: rgb(var(--ink-rgb) / 0.6); text-align: center; }
+.wz-drop.over { border-color: var(--brand); background: var(--brand-soft); }
+.wz-comps { display: grid; gap: 6px; }
+.wz-comp { display: grid; grid-template-columns: auto auto minmax(0, 1fr); gap: 12px; align-items: center; padding: 10px 12px; border-radius: 16px; border: 1px solid rgb(var(--ink-rgb) / 0.1); background: none; }
+.wz-comp:has(input:checked) { border-color: var(--brand); }
+.wz-comp b { font-weight: 500; font-size: 15px; display: block; }
+.wz-comp small { display: block; font: 400 12px/1.35 var(--f-mono); color: rgb(var(--ink-rgb) / 0.5); overflow-wrap: anywhere; }
+.wz-art { padding: 8px; border-radius: 16px; background: rgb(var(--ink-rgb) / 0.04); }
+
+button.info { position: relative; display: inline-grid; place-items: center; width: 20px; height: 20px; padding: 0; border-radius: 50%; border: 1px solid rgb(var(--ink-rgb) / 0.1); background: none; color: rgb(var(--ink-rgb) / 0.5); font: 600 12px/1 var(--f-head); vertical-align: middle; flex: none; letter-spacing: 0; transition: color 150ms var(--ease), border-color 150ms var(--ease); }
+button.info::after { content: ""; position: absolute; inset: -12px; }
+button.info:active { transform: scale(0.95); }
+@media (hover: hover) { button.info:hover { color: var(--ink); border-color: rgb(var(--ink-rgb) / 0.2); } }
+.lbl button.info { margin-left: 2px; }
+.tech-line { display: flex; align-items: flex-start; gap: 8px; }
+
+.dlg { width: min(560px, calc(100% - 32px)); max-height: calc(100dvh - 2rem); border: 1px solid rgb(var(--ink-rgb) / 0.08); border-radius: 24px; padding: 0; background: var(--paper); color: var(--ink); box-shadow: var(--float-shadow); overflow-y: auto; overscroll-behavior: contain; }
+.dlg::backdrop { background: rgb(0 0 0 / 0.4); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .dlg::backdrop { background: rgb(0 0 0 / 0.6); } }
+:root[data-theme="dark"] .dlg::backdrop { background: rgb(0 0 0 / 0.6); }
+.dlg-head { position: sticky; top: 0; z-index: 1; background: var(--paper); padding: 32px 60px 0 24px; }
+.dlg-head h3 { font-size: 26px; letter-spacing: -0.035em; line-height: 1.04; }
+.dlg-head .btn { position: absolute; top: 12px; right: 12px; background: var(--paper-sunk); color: rgb(var(--ink-rgb) / 0.6); font-size: 14px; }
+.dlg-art { margin: 24px 24px 0; padding: 16px; border-radius: 18px; background: var(--card); border: 1px solid rgb(var(--ink-rgb) / 0.08); }
+.dlg-art:empty { display: none; }
+.dlg-text { padding: 12px 24px 24px; display: grid; gap: 10px; font-size: 16px; line-height: 1.625; color: rgb(var(--ink-rgb) / 0.6); }
+.dlg-art:not(:empty) + .dlg-text { padding-top: 20px; }
+.dlg-text p { margin: 0; max-width: 62ch; }
+.dlg-text b, .dlg-text code { color: var(--ink); }
+.ilist { margin: 0; padding-left: 1.1em; display: grid; gap: 6px; }
+.ill { width: 100%; height: auto; display: block; max-width: 100%; }
+.ill .gc, .mini .gc, .icon .gc { fill: rgb(var(--ink-rgb) / 0.08); stroke: rgb(var(--ink-rgb) / 0.15); stroke-width: 1; }
+.ill .gas, .icon .gas { fill: var(--brand-soft); stroke: var(--brand); stroke-width: 1.5; }
+.ill .ga, .icon .ga { fill: var(--brand); }
+.ill .ga-o { fill: var(--brand); opacity: 0.7; }
+.ill .gk { fill: none; stroke: var(--brand); stroke-width: 2; }
+.ill .gk2 { fill: color-mix(in srgb, var(--success) 16%, transparent); stroke: var(--success); stroke-width: 1.5; }
+.ill .gk-l, .icon .gk-l { fill: none; stroke: var(--brand); stroke-width: 1.6; }
+.ill .gl { fill: none; stroke: rgb(var(--ink-rgb) / 0.5); stroke-width: 1; }
+.ill .gd, .icon .gd { stroke-dasharray: 4 3; }
+.ill .gbg, .icon .gbg { fill: var(--card); }
+.ill .gm-f, .icon .gm-f { fill: rgb(var(--ink-rgb) / 0.5); }
+.ill .gt { fill: var(--ink); font: 500 11px var(--f-mono); }
+.ill .gtk { fill: var(--brand); font: 600 12px var(--f-text); }
+.ill .gm { fill: rgb(var(--ink-rgb) / 0.6); font: 400 11px var(--f-text); }
+.ill .gbig { fill: var(--brand); font: 700 26px var(--f-num); }
+.icon { flex: none; }
+.demos { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 12px 8px; }
+.demo { display: grid; justify-items: center; gap: 6px; font-size: 13px; color: var(--ink); }
+.demo b { font-weight: 500; }
+.demo-box { width: 64px; height: 64px; display: grid; place-items: center; border-radius: 16px; background: rgb(var(--ink-rgb) / 0.06); overflow: hidden; }
+.demo i { display: block; width: 30px; height: 30px; border-radius: 9px; background: linear-gradient(135deg, var(--brand), #66d4cf); animation-duration: 1.8s; animation-iteration-count: infinite; animation-fill-mode: both; animation-timing-function: ease-in-out; }
+.dm-fade_in { animation-name: dmFadeIn; } .dm-fade_out { animation-name: dmFadeOut; } .dm-pop_in { animation-name: dmPopIn; } .dm-pop_out { animation-name: dmPopOut; }
+.dm-pulse { animation-name: dmPulse; } .dm-breathe { animation-name: dmBreathe; } .dm-land { animation-name: dmLand; } .dm-win { animation-name: dmWin; }
+.dm-shake { animation-name: dmShake; } .dm-float_up { animation-name: dmFloat; } .dm-glow { animation-name: dmGlow; } .dm-flash { animation-name: dmFlash; }
+@keyframes dmFadeIn { 0% { opacity: 0; } 25%, 100% { opacity: 1; } }
+@keyframes dmFadeOut { 0%, 15% { opacity: 1; } 40%, 100% { opacity: 0; } }
+@keyframes dmPopIn { 0% { transform: scale(0.3) rotate(-4deg); opacity: 0; } 22% { transform: scale(1.12); opacity: 1; } 34%, 100% { transform: scale(1); opacity: 1; } }
+@keyframes dmPopOut { 0%, 15% { transform: scale(1); opacity: 1; } 35%, 100% { transform: scale(0.3); opacity: 0; } }
+@keyframes dmPulse { 0%, 45%, 100% { transform: scale(1); } 18% { transform: scale(1.16); } }
+@keyframes dmBreathe { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.09); } }
+@keyframes dmLand { 0% { transform: translateY(-16px); } 18% { transform: translateY(4px); } 32%, 100% { transform: translateY(0); } }
+@keyframes dmWin { 0%, 55%, 100% { transform: none; } 16% { transform: scale(1.28) rotate(-7deg); } 34% { transform: scale(1.12) rotate(5deg); } }
+@keyframes dmShake { 0%, 45%, 100% { transform: none; } 5%, 15%, 25%, 35% { transform: translate(-3px, 1px); } 10%, 20%, 30%, 40% { transform: translate(3px, -1px); } }
+@keyframes dmFloat { 0% { transform: translateY(14px) scale(0.6); opacity: 0; } 15% { transform: translateY(6px) scale(1.15); opacity: 1; } 60% { transform: translateY(-8px); opacity: 1; } 85%, 100% { transform: translateY(-18px); opacity: 0; } }
+@keyframes dmGlow { 0%, 100% { filter: none; box-shadow: none; } 50% { filter: brightness(1.3); box-shadow: 0 0 16px 5px var(--metric-hint, #ffd60a); } }
+@keyframes dmFlash { 0%, 100% { opacity: 0.25; } 8% { opacity: 1; filter: brightness(2); } 45% { opacity: 0.25; filter: none; } }
+.tree { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; font-size: 14px; color: var(--ink); }
+.tree li { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding-left: calc(var(--d) * 18px); }
+.tree code { overflow-wrap: anywhere; }
+.tree .ti { flex: none; border-radius: 3px; }
+.tree .ti.d { width: 14px; height: 11px; background: var(--brand); }
+.tree .ti.f { width: 11px; height: 13px; background: rgb(var(--ink-rgb) / 0.08); border: 1px solid rgb(var(--ink-rgb) / 0.15); }
+.tree em { font-style: normal; font-size: 12px; color: var(--brand); background: var(--brand-soft); padding: 0 8px; border-radius: 9999px; }
+
+.layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(320px, 400px); grid-template-areas: "game side" "comps side"; gap: 24px; align-items: start; }
+.layout > * { min-width: 0; }
+.layout.no-game { grid-template-areas: "comps side"; }
+.game { grid-area: game; }
+.comps { grid-area: comps; display: grid; gap: 12px; }
+.side { grid-area: side; position: sticky; top: calc(env(safe-area-inset-top, 0px) + 64px + 16px); display: grid; gap: 16px; }
+
+.card, .comp { background: var(--card); border: 1px solid rgb(var(--ink-rgb) / 0.08); border-radius: 24px; }
+.game { padding: 20px; display: grid; gap: 16px; }
+.game-row { display: flex; flex-wrap: wrap; gap: 16px 24px; align-items: end; }
+.field { display: grid; gap: 6px; min-width: 0; }
+.lbl { display: inline-flex; align-items: center; gap: 4px; flex-wrap: wrap; font: 500 14px/1.3 var(--f-text); color: rgb(var(--ink-rgb) / 0.6); }
+input[type="text"], input[type="number"], select {
+  height: 48px; padding: 0 16px; border: 1px solid rgb(var(--ink-rgb) / 0.1); border-radius: 12px; background-color: var(--card); color: var(--ink); font: 400 16px/1.2 var(--f-text); min-width: 0; max-width: 100%;
+  transition: border-color 150ms var(--ease);
+}
+select { -webkit-appearance: none; appearance: none; padding-right: 40px;
+  background-image: linear-gradient(45deg, transparent 50%, rgb(var(--ink-rgb) / 0.4) 50%), linear-gradient(135deg, rgb(var(--ink-rgb) / 0.4) 50%, transparent 50%);
+  background-position: calc(100% - 21px) 50%, calc(100% - 16px) 50%; background-size: 5px 5px; background-repeat: no-repeat; }
+input[type="number"] { font-family: var(--f-num); font-variant-numeric: tabular-nums; padding: 0 12px; }
+input::placeholder { color: rgb(var(--ink-rgb) / 0.4); }
+@media (hover: hover) { input[type="text"]:hover, input[type="number"]:hover, select:hover { border-color: rgb(var(--ink-rgb) / 0.2); } }
+input[type="text"]:focus, input[type="number"]:focus, select:focus { border-color: var(--ink); }
+input[type="text"]:focus-visible, input[type="number"]:focus-visible, select:focus-visible { outline: none; }
+input[type="checkbox"] {
+  -webkit-appearance: none; appearance: none; flex: none; width: 48px; height: 28px; margin: 0; border-radius: 9999px;
+  background-color: rgb(var(--ink-rgb) / 0.15);
+  background-image: radial-gradient(circle closest-side, #fff calc(100% - 2.5px), rgb(0 0 0 / 0.2) calc(100% - 2px), transparent 100%);
+  background-size: 28px 28px; background-position: 0 0; background-repeat: no-repeat;
+  transition: background-color 200ms var(--ease), background-position 200ms var(--ease);
+}
+input[type="checkbox"]:checked { background-color: var(--success); background-position: 20px 0; }
+input[type="checkbox"]:disabled { opacity: 0.6; }
+.dims { display: inline-flex; align-items: center; gap: 8px; color: rgb(var(--ink-rgb) / 0.5); font-family: var(--f-num); }
+.dims input { width: 84px; }
+.grid-pick { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+details.tech > summary { font-size: 14px; color: rgb(var(--ink-rgb) / 0.6); width: max-content; max-width: 100%; line-height: 20px; }
+details.tech[open] > summary { margin-bottom: 12px; }
+.tech-row { display: flex; flex-wrap: wrap; gap: 12px 16px; }
+.tech-row input { width: 120px; }
+.tech-row input.wide { width: 240px; }
+
+.comps-head { display: flex; align-items: center; gap: 8px; padding: 8px 4px 0; }
+.comps-head .mono { margin-left: 4px; color: rgb(var(--ink-rgb) / 0.5); font: 400 15px/1 var(--f-num); font-variant-numeric: tabular-nums; }
+.c-list { display: grid; gap: 12px; }
+.comp { transition: border-color 150ms var(--ease), box-shadow 150ms var(--ease); }
+.comp.off { opacity: 0.6; }
+.comp.sel { border-color: var(--brand); box-shadow: 0 0 0 1px var(--brand); }
+.comp-head { display: flex; align-items: center; gap: 8px 12px; flex-wrap: wrap; padding: 6px; }
+.comp-open { display: flex; align-items: center; gap: 12px; min-width: 0; flex: 1 1 220px; min-height: 52px; padding: 4px 10px; border-radius: 18px; }
+.chev { flex: none; width: 18px; height: 18px; display: grid; place-items: center; opacity: 0.4; transition: transform 150ms var(--ease); }
+.chev::before { content: ""; width: 7px; height: 7px; border-right: 2px solid var(--ink); border-bottom: 2px solid var(--ink); transform: translateX(-2px) rotate(-45deg); }
+.comp-open[aria-expanded="true"] .chev { transform: rotate(90deg); }
+.comp-thumb { flex: none; width: 36px; height: 36px; border-radius: 10px; background: rgb(var(--ink-rgb) / 0.06); display: grid; place-items: center; overflow: hidden; }
+.comp-thumb img, .comp-thumb canvas { max-width: 100%; max-height: 100%; }
+.comp-t { display: grid; min-width: 0; gap: 1px; }
+.comp-t b { font: 500 16px/1.3 var(--f-text); }
+.comp-t code { color: rgb(var(--ink-rgb) / 0.5); overflow-wrap: anywhere; font-size: 13px; }
+.comp-act { display: flex; align-items: center; gap: 4px; margin-left: auto; padding-right: 4px; }
+.switch { display: inline-flex; align-items: center; gap: 10px; font-size: 15px; color: var(--ink); padding: 0 6px; }
+.comp-body { padding: 4px 20px 20px; display: grid; gap: 16px; }
+.comp-body > * { min-width: 0; }
+.sub { display: flex; align-items: center; gap: 6px; font: 500 14px/1.3 var(--f-text); color: rgb(var(--ink-rgb) / 0.6); padding-top: 8px; }
+.row { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; }
+.row .field input[type="text"] { width: 220px; }
+.row .field input.w-name { width: 260px; }
+
+.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 8px; padding: 8px; border: 1.5px dashed rgb(var(--ink-rgb) / 0.12); border-radius: 18px; background: rgb(var(--ink-rgb) / 0.03); }
+.tiles.over { border-color: var(--brand); background: var(--brand-soft); }
+.tile { display: grid; gap: 4px; justify-items: center; padding: 8px 4px 6px; border: 0; border-radius: 12px; background: var(--card); min-width: 0; color: var(--ink); box-shadow: inset 0 0 0 1px rgb(var(--ink-rgb) / 0.08); transition: box-shadow 150ms var(--ease), transform 150ms var(--ease); }
+.tile:active { transform: scale(0.97); }
+.tile[aria-pressed="true"] { box-shadow: inset 0 0 0 2px var(--brand); }
+.tile img { width: 56px; height: 56px; object-fit: contain; }
+.tile span { font: 500 12px/1.2 var(--f-mono); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tile.add { box-shadow: none; border: 1.5px dashed rgb(var(--ink-rgb) / 0.15); background: transparent; color: rgb(var(--ink-rgb) / 0.5); align-content: center; font-size: 22px; min-height: 88px; }
+.tile .own { color: var(--brand); }
+@media (hover: hover) { .tile:not([aria-pressed="true"]):hover { box-shadow: inset 0 0 0 1px rgb(var(--ink-rgb) / 0.2); } .tile.add:hover { color: var(--ink); } }
+.sym-edit { display: grid; grid-template-columns: 76px minmax(0, 1fr); gap: 16px; padding: 12px; border-radius: 18px; background: rgb(var(--ink-rgb) / 0.04); }
+.sym-edit > * { min-width: 0; }
+.sym-edit img { width: 76px; height: 76px; object-fit: contain; background: rgb(var(--ink-rgb) / 0.06); border-radius: 12px; }
+.sym-edit .grid { display: grid; gap: 10px; }
+.img-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.img-row .prev { width: 64px; height: 44px; border-radius: 10px; background: rgb(var(--ink-rgb) / 0.06); display: grid; place-items: center; overflow: hidden; }
+.img-row .prev img { max-width: 100%; max-height: 100%; }
+.img-row .note { font-size: 14px; color: rgb(var(--ink-rgb) / 0.6); }
+
+.anims { display: grid; gap: 6px; }
+.a-head, .a-row { display: grid; grid-template-columns: minmax(110px, 1.2fr) 80px minmax(120px, 1fr) 48px minmax(110px, 1fr) 36px; gap: 8px; align-items: center; }
+.a-head { font-size: 13px; color: rgb(var(--ink-rgb) / 0.5); padding: 0 2px; }
+.a-head > span { display: inline-flex; align-items: center; gap: 4px; }
+.a-head span:nth-child(4) { justify-content: center; }
+.a-row > * { min-width: 0; width: 100%; }
+.a-row input[type="text"], .a-row input[type="number"], .a-row select { height: 40px; font-size: 15px; padding-left: 12px; }
+.a-row select { padding-right: 32px; background-position: calc(100% - 17px) 50%, calc(100% - 12px) 50%; }
+.a-row input[type="checkbox"] { justify-self: center; width: 48px; }
+.a-row .del { justify-self: center; width: 36px; }
+.a-row input.ev { font-family: var(--f-mono); font-size: 13px; }
+.facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 6px 16px; margin: 0; font-size: 15px; padding-top: 8px; }
+.facts dt { color: rgb(var(--ink-rgb) / 0.6); }
+.facts dd { margin: 0; font-family: var(--f-mono); font-size: 13px; overflow-wrap: anywhere; align-self: center; }
+
+.add-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 4px; }
+.add-row .lbl { margin-right: 4px; }
+
+.window { padding: 8px; display: grid; gap: 8px; }
+.win-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; padding: 6px 8px 0; font: 500 14px/1.3 var(--f-text); color: rgb(var(--ink-rgb) / 0.6); }
+.win-head b { font: 600 14px/1 var(--f-num); font-variant-numeric: tabular-nums; color: var(--ink); }
+#grid-canvas { width: 100%; height: auto; display: block; border-radius: 16px; background: rgb(var(--ink-rgb) / 0.04); }
+.stage { position: relative; height: 300px; border-radius: 16px; overflow: hidden; background-color: rgb(var(--ink-rgb) / 0.03);
+  background-image: linear-gradient(45deg, rgb(var(--ink-rgb) / 0.05) 25%, transparent 25%, transparent 75%, rgb(var(--ink-rgb) / 0.05) 75%), linear-gradient(45deg, rgb(var(--ink-rgb) / 0.05) 25%, transparent 25%, transparent 75%, rgb(var(--ink-rgb) / 0.05) 75%);
+  background-size: 20px 20px; background-position: 0 0, 10px 10px; }
+.stage .pc { position: absolute; inset: 0; }
+.stage-msg { position: absolute; inset: 0; display: grid; place-items: center; padding: 16px; text-align: center; color: rgb(var(--ink-rgb) / 0.5); font-size: 14px; }
+.spine-player { box-sizing: border-box; width: 100%; height: 100%; position: relative; background: none; }
+.spine-player canvas { display: block; width: 100%; height: 100%; }
+.spine-player-controls, .spine-player-popup { display: none !important; }
+.spine-player-hidden { display: none; }
+.spine-player-error { position: absolute; inset: 0; display: grid; place-items: center; padding: 16px; color: var(--destructive); font-size: 14px; }
+.pv-ctrl { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px; align-items: center; }
+.pv-ctrl select { width: 100%; height: 44px; font-size: 15px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 4px 4px; }
+.chip { height: 32px; padding: 0 12px; border: 0; border-radius: 9999px; background: rgb(var(--ink-rgb) / 0.06); font: 500 13px/1 var(--f-mono); color: rgb(var(--ink-rgb) / 0.6); transition: color 150ms var(--ease), box-shadow 150ms var(--ease); }
+.chip:active { transform: scale(0.97); }
+.chip[aria-pressed="true"] { color: var(--ink); box-shadow: inset 0 0 0 2px var(--brand); background: none; }
+@media (hover: hover) { .chip:hover { color: var(--ink); } }
+.dl { padding: 12px; display: grid; gap: 10px; }
+.dl .btn.primary { height: 48px; padding: 0 28px; font-size: 16px; }
+.dl-meta { font-size: 14px; color: rgb(var(--ink-rgb) / 0.6); text-align: center; display: flex; justify-content: center; align-items: center; gap: 6px; flex-wrap: wrap; }
+.warns { list-style: none; margin: 0; padding: 0 4px; display: grid; gap: 4px; font-size: 14px; color: var(--warning); }
+
+.check { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 24px; align-items: start; }
+.check > * { min-width: 0; }
+.drop { border: 1.5px dashed rgb(var(--ink-rgb) / 0.15); border-radius: 24px; padding: 32px 16px; display: grid; gap: 12px; justify-items: center; text-align: center; background: var(--card); }
+.drop.over { border-color: var(--brand); background: var(--brand-soft); }
+.drop b { font-weight: 500; font-size: 16px; }
+.files { list-style: none; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: 6px; font: 400 13px/1.5 var(--f-mono); }
+.files li { padding: 2px 10px; border-radius: 9999px; background: rgb(var(--ink-rgb) / 0.06); }
+.verdict { padding: 16px 20px; border-radius: 24px; background: var(--card); border: 1px solid rgb(var(--ink-rgb) / 0.08); display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.verdict b { font: 700 17px/1.2 var(--f-head); letter-spacing: -0.02em; }
+.pill { display: inline-flex; align-items: center; height: 26px; padding: 0 10px; border-radius: 9999px; font-size: 13px; font-weight: 600; }
+.pill.error { background: color-mix(in srgb, var(--destructive) 16%, transparent); color: var(--destructive); }
+.pill.warning { background: color-mix(in srgb, var(--warning) 18%, transparent); color: var(--warning); }
+.pill.ok { background: color-mix(in srgb, var(--success) 16%, transparent); color: var(--success); }
+.findings { list-style: none; padding: 4px 0; margin: 0; display: grid; background: var(--card); border: 1px solid rgb(var(--ink-rgb) / 0.08); border-radius: 24px; overflow: hidden; }
+.findings:empty { display: none; }
+.finding { position: relative; padding: 12px 16px 12px 36px; display: grid; gap: 2px; font-size: 15px; }
+.finding::before { content: ""; position: absolute; left: 16px; top: 19px; width: 8px; height: 8px; border-radius: 50%; background: rgb(var(--ink-rgb) / 0.3); }
+.finding.error::before { background: var(--destructive); }
+.finding.warning::before { background: var(--warning); }
+.finding.info { color: rgb(var(--ink-rgb) / 0.6); }
+.finding span { font: 400 13px/1.45 var(--f-mono); color: rgb(var(--ink-rgb) / 0.6); overflow-wrap: anywhere; }
+.toast { position: fixed; z-index: 50; left: 50%; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: var(--paper); color: var(--ink); border: 1px solid rgb(var(--ink-rgb) / 0.08); box-shadow: var(--float-shadow); padding: 12px 20px; border-radius: 9999px; font: 500 15px/1.3 var(--f-text); max-width: min(420px, calc(100% - 32px)); }
+
+@media (hover: hover) {
+  .p-open::after, .comp-open::after { content: ""; position: absolute; inset: 0; border-radius: inherit; background: rgb(var(--ink-rgb) / 0.05); opacity: 0; pointer-events: none; transition: opacity 150ms var(--ease); }
+  .p-open:hover::after, .comp-open:hover::after { opacity: 1; }
+  .pitem.active .p-open:hover::after { opacity: 0; }
+  .gtile:not([aria-pressed="true"]):hover, .wz-comp:not(:has(input:checked)):hover { border-color: rgb(var(--ink-rgb) / 0.2); }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .dlg[open] { animation: dlgIn 320ms cubic-bezier(0.2, 0.7, 0.2, 1); }
+  .dlg[open]::backdrop { animation: fadeIn 240ms ease-out; }
+  .dlg[open] .dlg-art, .dlg[open] .dlg-text { animation: fadeIn 240ms ease-out; }
+  .toast { animation: toastIn 240ms ease-out; }
+}
+@keyframes dlgIn { from { opacity: 0; transform: translateY(12px) scale(0.96); } }
+@keyframes fadeIn { from { opacity: 0; } }
+@keyframes toastIn { from { opacity: 0; transform: translate(-50%, 8px); } }
+
+@container (max-width: 860px) {
+  .layout { grid-template-columns: minmax(0, 1fr); grid-template-areas: "game" "side" "comps"; }
+  .layout.no-game { grid-template-areas: "side" "comps"; }
+  .side { position: static; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); align-items: start; }
+  .check { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 860px) {
+  .app { grid-template-columns: minmax(0, 1fr); }
+  .menu-btn.btn { display: inline-flex; }
+  .sidebar { position: fixed; z-index: 40; top: 0; left: 0; bottom: 0; height: auto; width: min(320px, 88vw); transform: translateX(-104%); transition: transform 240ms cubic-bezier(0.2, 0.7, 0.2, 1); padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 16px); box-shadow: var(--float-shadow); }
+  .sidebar.open { transform: none; }
+  .scrim:not([hidden]) { display: block; position: fixed; inset: 0; z-index: 35; background: rgb(0 0 0 / 0.5); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); }
+}
+@media (max-width: 639px) {
+  :root { --gutter: 20px; }
+  .bar-in { gap: 10px; }
+  .tab { padding: 0 12px; }
+  .crumb { font-size: 17px; }
+  .a-head { display: none; }
+  .a-row { grid-template-columns: minmax(0, 1fr) 80px 48px; padding: 8px; border-radius: 16px; background: rgb(var(--ink-rgb) / 0.04); }
+  .a-row select, .a-row input.ev { grid-column: span 2; }
+  .a-row .del { grid-column: 3; grid-row: 2; }
+  .a-row input[type="checkbox"] { grid-column: 3; grid-row: 1; }
+  .row .field input[type="text"], .row .field input.w-name { width: 100%; }
+  .row .field { flex: 1 1 100%; }
+  .sym-edit { grid-template-columns: minmax(0, 1fr); }
+  .stage { height: 240px; }
+  .game, .comp-body { padding-left: 16px; padding-right: 16px; }
+  .dlg { width: 100%; max-width: 100%; margin: auto auto 0; border-radius: 24px 24px 0 0; border-bottom: 0; padding-bottom: env(safe-area-inset-bottom, 0px); }
+}
+@media (min-width: 640px) {
+  .tab { padding: 0 16px; }
+  .dlg-head { padding-left: 32px; }
+  .dlg-head h3 { font-size: 28px; }
+  .dlg-art { margin-left: 32px; margin-right: 32px; }
+  .dlg-text { padding: 12px 32px 32px; }
+}
+@media (min-width: 1120px) { .app { grid-template-columns: 280px minmax(0, 1fr); } }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+
+<div class="app">
+  <aside class="sidebar" id="sidebar" aria-label="Проекти">
+    <div class="sb-brand"><span class="brand"><i aria-hidden="true"><b></b><b></b><b></b><b></b><b></b><b></b><b></b><b></b><b></b></i>Spine Draft Kit</span></div>
+    <div class="sb-projects" id="sb-projects">
+      <div class="sb-head"><h2>Проекти</h2><button class="info" type="button" data-info="projects" aria-label="Що таке проекти">i</button></div>
+      <button class="btn primary" type="button" id="new-project">+ Новий проект</button>
+      <ul class="plist" id="plist"></ul>
+      <div class="sb-foot">
+        <input type="file" class="file" id="import-file" accept=".json,application/json">
+        <label class="btn ghost sm" for="import-file">Імпорт .json</label>
+        <span class="store-note" id="store-note" hidden>Сховище браузера недоступне: експортуйте проект перед закриттям.</span>
+      </div>
+    </div>
+    <div class="wizard" id="wizard" hidden></div>
+  </aside>
+  <div class="scrim" id="scrim" hidden></div>
+
+  <div class="main-col">
+  <header class="bar">
+    <div class="bar-in">
+      <button class="btn ghost icon menu-btn" type="button" id="menu-btn" aria-label="Проекти" aria-controls="sidebar" aria-expanded="false"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
+      <span class="crumb" id="crumb"></span>
+      <nav class="tabs" role="tablist" aria-label="Розділи">
+        <button class="tab" role="tab" id="tab-drafts" data-view="drafts" aria-selected="true">Чернетки</button>
+        <button class="tab" role="tab" id="tab-check" data-view="check" aria-selected="false">Перевірка</button>
+      </nav>
+    </div>
+  </header>
+
+  <main class="work">
+    <section id="view-drafts" class="layout no-game" role="tabpanel" aria-labelledby="tab-drafts">
+      <section class="game card" id="game" aria-labelledby="h-game" hidden>
+        <h2 id="h-game">Гра</h2>
+        <div class="game-row">
+          <div class="field"><span class="lbl"><label for="g-name">Назва</label> <button class="info" type="button" data-info="game" aria-label="Що таке назва гри">i</button></span><input type="text" id="g-name" placeholder="my-slot" spellcheck="false" autocomplete="off"></div>
+          <div class="field">
+            <span class="lbl">Сітка, барабани × ряди <button class="info" type="button" data-info="grid" aria-label="Що таке сітка">i</button></span>
+            <div class="grid-pick">
+              <div class="presets" id="g-presets"></div>
+              <span class="dims"><input type="number" id="g-reels" min="1" max="12" aria-label="Барабани"> × <input type="number" id="g-rows" min="1" max="12" aria-label="Ряди"></span>
+            </div>
+          </div>
+          <div class="field">
+            <span class="lbl">Клітинка, px <button class="info" type="button" data-info="cell" aria-label="Що таке клітинка">i</button></span>
+            <span class="dims"><input type="number" id="g-cw" min="16" max="2000" aria-label="Ширина клітинки"> × <input type="number" id="g-ch" min="16" max="2000" aria-label="Висота клітинки"></span>
+          </div>
+        </div>
+        <div class="tech-line">
+          <details class="tech" id="tech">
+            <summary id="tech-sum">Spine 4.1.24 · 30 fps</summary>
+            <div class="tech-row">
+              <label class="field" for="t-ver"><span class="lbl">Версія Spine</span><input type="text" id="t-ver" spellcheck="false"></label>
+              <label class="field" for="t-fps"><span class="lbl">Кадрів за секунду</span><input type="number" id="t-fps" min="1" max="120"></label>
+              <label class="field" for="t-folder"><span class="lbl">Папка в арт-репо</span><input type="text" id="t-folder" class="wide" spellcheck="false"></label>
+            </div>
+          </details>
+          <button class="info" type="button" data-info="tech" aria-label="Що таке технічні налаштування">i</button>
+        </div>
+      </section>
+
+      <section class="comps" aria-labelledby="h-comps">
+        <div class="comps-head"><h2 id="h-comps">Компоненти</h2><button class="info" type="button" data-info="components" aria-label="Що таке компоненти">i</button><span class="mono" id="c-count"></span></div>
+        <div class="c-list" id="c-list"></div>
+        <div class="add-row" id="add-row">
+          <span class="lbl">Додати</span>
+          <button class="btn sm" type="button" data-add="background">+ Фон</button>
+          <button class="btn sm" type="button" data-add="logo">+ Логотип</button>
+          <button class="btn sm" type="button" data-add="popup">+ Попап</button>
+          <button class="btn sm" type="button" data-add="custom">+ Свій</button>
+        </div>
+      </section>
+
+      <aside class="side" aria-label="Превʼю і файли">
+        <div class="card window">
+          <div class="win-head"><span>Сітка</span><b id="grid-label"></b></div>
+          <canvas id="grid-canvas" width="760" height="460" role="img" aria-label="Сітка барабанів з рамками і символами"></canvas>
+        </div>
+        <div class="card window">
+          <div class="pv-ctrl">
+            <select id="pv-spine" aria-label="Спайн у превʼю"></select>
+            <select id="pv-skin" aria-label="Скін"></select>
+            <button class="info" type="button" data-info="preview" aria-label="Що показує превʼю">i</button>
+          </div>
+          <div class="stage" id="stage"><div class="stage-msg">Завантажую рантайм Spine…</div></div>
+          <div class="chips" id="pv-anims"></div>
+        </div>
+        <div class="card dl">
+          <button class="btn primary" type="button" id="dl-all">Завантажити все</button>
+          <div class="dl-meta"><span id="dl-meta"></span> <button class="info" type="button" data-info="download" aria-label="Що в архіві">i</button></div>
+          <ul class="warns" id="warns"></ul>
+        </div>
+      </aside>
+    </section>
+
+    <section id="view-check" class="check" role="tabpanel" aria-labelledby="tab-check" hidden>
+      <div style="display: grid; gap: 12px;">
+        <div class="drop" id="ck-drop">
+          <b>.json, .atlas і .png зі Spine Editor <button class="info" type="button" data-info="check" aria-label="Що перевіряє кіт">i</button></b>
+          <input type="file" class="file" id="ck-files" multiple accept=".json,.atlas,.png,application/json,image/png,text/plain">
+          <label class="btn sm" for="ck-files">Вибрати файли</label>
+        </div>
+        <label class="field" for="ck-as"><span class="lbl">Перевіряти як</span><select id="ck-as"></select></label>
+        <ul class="files" id="ck-list"></ul>
+      </div>
+      <div style="display: grid; gap: 10px;">
+        <div class="verdict" id="ck-verdict"><span class="lbl">Перевірка бере назви з компонентів поточного проекту.</span></div>
+        <ul class="findings" id="ck-findings"></ul>
+      </div>
+    </section>
+  </main>
+  </div>
+</div>
+
+<dialog class="dlg" id="info-dlg" aria-labelledby="dlg-title">
+  <div class="dlg-head"><h3 id="dlg-title"></h3><button class="btn ghost icon" type="button" id="dlg-close" aria-label="Закрити">✕</button></div>
+  <div class="dlg-art" id="dlg-art"></div>
+  <div class="dlg-text" id="dlg-text"></div>
+</dialog>
+
+<script>(function (root) {
+  'use strict';
+
+  var VERSION = '2.0.0';
+  var TECH = { spineVersion: '4.1.24', fps: 30, folder: 'skins/main/Motion/spine/', spacer: 'shapes/spacer', white: 'shapes/bg_white', maxPage: 4096, padding: 2, timingTolerance: 0.1 };
+
+  function roundTo(v, d) {
+    var f = Math.pow(10, d);
+    var r = Math.round(v * f) / f;
+    return Object.is(r, -0) ? 0 : r;
+  }
+  function r4(v) { return roundTo(v, 4); }
+  function r2(v) { return roundTo(v, 2); }
+  function clone(v) { return v === undefined ? undefined : JSON.parse(JSON.stringify(v)); }
+  function isObj(v) { return v !== null && typeof v === 'object' && !Array.isArray(v); }
+  function slug(s) { return String(s || '').trim().toLowerCase().replace(/\.[a-z0-9]+$/, '').replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, ''); }
+  function listOf(s) { return (Array.isArray(s) ? s : String(s || '').split(',')).map(function (x) { return String(x).trim(); }).filter(Boolean); }
+
+  var EASE = {
+    linear: null,
+    'ease-in': [0.42, 0, 1, 1],
+    'ease-out': [0, 0, 0.58, 1],
+    'ease-in-out': [0.42, 0, 0.58, 1],
+    back: [0.2, 1.5, 0.4, 1],
+    shake: [0.36, 0.07, 0.19, 0.97],
+    soft: [0.2, 0.8, 0.3, 1]
+  };
+
+  function bezier(t0, t1, v0, v1, c) {
+    return [r4(t0 + (t1 - t0) * c[0]), r4(v0 + (v1 - v0) * c[1]), r4(t0 + (t1 - t0) * c[2]), r4(v0 + (v1 - v0) * c[3])];
+  }
+
+  function timeline(keys, duration, ease, channels, toFrame) {
+    var curve = EASE[ease] || null;
+    return keys.map(function (key, i) {
+      var time = r4((key.at / 100) * duration);
+      var frame = {};
+      if (time) frame.time = time;
+      var body = toFrame(key);
+      Object.keys(body).forEach(function (k) { frame[k] = body[k]; });
+      var next = keys[i + 1];
+      if (next && curve) {
+        var nextTime = r4((next.at / 100) * duration);
+        frame.curve = [];
+        channels.forEach(function (ch) { bezier(time, nextTime, key[ch], next[ch], curve).forEach(function (n) { frame.curve.push(n); }); });
+      }
+      return frame;
+    });
+  }
+
+  function hex2(v) {
+    var n = Math.max(0, Math.min(255, Math.round(v * 255)));
+    return (n < 16 ? '0' : '') + n.toString(16);
+  }
+  function parseHex(hex) {
+    var s = String(hex || 'ffffff').replace(/^#/, '');
+    if (s.length === 6) s += 'ff';
+    return { r: parseInt(s.slice(0, 2), 16) / 255, g: parseInt(s.slice(2, 4), 16) / 255, b: parseInt(s.slice(4, 6), 16) / 255, a: parseInt(s.slice(6, 8), 16) / 255 };
+  }
+
+  function channelKeys(keys, has, pick, identity) {
+    var list = keys.filter(has).map(function (k) { var v = pick(k); v.at = k.at; return v; });
+    if (!list.length) return list;
+    if (list[0].at !== 0) { var first = identity(); first.at = 0; list.unshift(first); }
+    if (list[list.length - 1].at !== 100) { var last = identity(); last.at = 100; list.push(last); }
+    return list;
+  }
+
+  function motion(duration, ease, keys, ctx) {
+    var bone = {};
+    var sk = channelKeys(keys,
+      function (k) { return k.scale !== undefined; },
+      function (k) { return { s: k.scale }; },
+      function () { return { s: 1 }; });
+    if (sk.some(function (k) { return k.s !== 1; })) {
+      sk.forEach(function (k) { k.sx = k.s; k.sy = k.s; });
+      bone.scale = timeline(sk, duration, ease, ['sx', 'sy'], function (k) { return { x: r4(k.s), y: r4(k.s) }; });
+    }
+    var rk = channelKeys(keys,
+      function (k) { return k.rotate !== undefined; },
+      function (k) { return { rot: r4(-k.rotate) }; },
+      function () { return { rot: 0 }; });
+    if (rk.some(function (k) { return k.rot !== 0; })) {
+      bone.rotate = timeline(rk, duration, ease, ['rot'], function (k) { return { value: k.rot }; });
+    }
+    var mk = channelKeys(keys,
+      function (k) { return k.x !== undefined || k.y !== undefined; },
+      function (k) { return { x: r4(k.x || 0), y: r4(-(k.y || 0)) }; },
+      function () { return { x: 0, y: 0 }; });
+    if (mk.some(function (k) { return k.x !== 0 || k.y !== 0; })) {
+      bone.translate = timeline(mk, duration, ease, ['x', 'y'], function (k) { return { x: k.x, y: k.y }; });
+    }
+    var ck = channelKeys(keys,
+      function (k) { return k.opacity !== undefined || k.color !== undefined; },
+      function (k) { var c = parseHex(k.color || 'ffffff'); return { r: c.r, g: c.g, b: c.b, a: k.opacity !== undefined ? k.opacity : 1 }; },
+      function () { return { r: 1, g: 1, b: 1, a: 1 }; });
+    var anim = {};
+    if (ck.some(function (k) { return k.r !== 1 || k.g !== 1 || k.b !== 1 || k.a !== 1; })) {
+      anim.slots = {};
+      anim.slots[ctx.slot] = { rgba: timeline(ck, duration, ease, ['r', 'g', 'b', 'a'], function (k) { return { color: hex2(k.r) + hex2(k.g) + hex2(k.b) + hex2(k.a) }; }) };
+    }
+    if (Object.keys(bone).length) {
+      anim.bones = {};
+      anim.bones[ctx.bone] = bone;
+    }
+    return anim;
+  }
+
+  var PRESETS = {
+    hold: { label: 'Пауза', duration: 1 },
+    fade_in: { label: 'Поява', duration: 0.35, ease: 'ease-out', keys: function () { return [{ at: 0, opacity: 0 }, { at: 100, opacity: 1 }]; } },
+    fade_out: { label: 'Зникнення', duration: 0.35, ease: 'ease-in', keys: function () { return [{ at: 0, opacity: 1 }, { at: 100, opacity: 0 }]; } },
+    pop_in: { label: 'Вистрибує', duration: 0.55, ease: 'back', keys: function () { return [{ at: 0, scale: 0.3, rotate: -4, opacity: 0 }, { at: 100, scale: 1, rotate: 0, opacity: 1 }]; } },
+    pop_out: { label: 'Стискається', duration: 0.3, ease: 'ease-in', keys: function () { return [{ at: 0, scale: 1, opacity: 1 }, { at: 100, scale: 0.3, opacity: 0 }]; } },
+    pulse: { label: 'Пульс', duration: 0.65, ease: 'ease-out', keys: function () { return [{ at: 0, scale: 1 }, { at: 45, scale: 1.06 }, { at: 100, scale: 1 }]; } },
+    breathe: { label: 'Дихання', duration: 2, ease: 'ease-in-out', keys: function () { return [{ at: 0, scale: 1 }, { at: 50, scale: 1.015 }, { at: 100, scale: 1 }]; } },
+    land: { label: 'Приземлення', duration: 0.28, ease: 'ease-out', keys: function (c) { var d = r4(0.02 * (c.cellH || c.h || 100)); return [{ at: 0, y: 0 }, { at: 40, y: d }, { at: 100, y: 0 }]; } },
+    win: { label: 'Виграш', duration: 0.85, ease: 'ease-in-out', keys: function () { return [{ at: 0, scale: 1, rotate: 0 }, { at: 30, scale: 1.18, rotate: -4 }, { at: 60, scale: 1.08, rotate: 3 }, { at: 100, scale: 1, rotate: 0 }]; } },
+    shake: {
+      label: 'Трясіння', duration: 0.55, ease: 'shake',
+      keys: function (c) {
+        var a = 0.025 * (c.h || 100);
+        var k = function (at, x, y) { return { at: at, x: r4(x * a), y: r4(y * a) }; };
+        return [k(10, -0.2, 0.2), k(20, 0.6, -0.4), k(30, -1, 0.4), k(40, 1, -0.2), k(50, -1, 0.4), k(60, 1, -0.2), k(70, -1, 0.4), k(80, 0.6, -0.4), k(90, -0.2, 0.2)];
+      }
+    },
+    float_up: {
+      label: 'Злітає', duration: 1.1, ease: 'soft',
+      keys: function (c) { var h = 1.2 * (c.h || 100); return [{ at: 0, opacity: 0, scale: 0.5, y: 0 }, { at: 18, opacity: 1, scale: 1.25, y: -h * 0.25 }, { at: 70, opacity: 1, scale: 1, y: -h * 2 / 3 }, { at: 100, opacity: 0, scale: 0.95, y: -h }]; }
+    },
+    glow: { label: 'Світіння', duration: 1.15, ease: 'ease-in-out', keys: function () { return [{ at: 0, color: 'ffffff' }, { at: 50, color: 'ffe875' }, { at: 100, color: 'ffffff' }]; } },
+    flash: { label: 'Спалах', duration: 0.6, ease: 'ease-out', keys: function () { return [{ at: 0, opacity: 0.85 }, { at: 100, opacity: 0 }]; } }
+  };
+
+  function presetFor(name, kind) {
+    var n = String(name).split('/').pop();
+    if (n === 'stop' || n === 'pressed') return 'land';
+    if (n === 'win' || n === 'win_idle') return kind === 'symbol' ? 'win' : 'pulse';
+    if (n === 'win_insignificant') return 'pulse';
+    if (/^(in|show|enter|intro|fade_in)(_|$)/.test(n)) return 'fade_in';
+    if (/^(out|hide|exit|fade_out)(_|$)/.test(n)) return 'fade_out';
+    if (/anticipation/.test(n)) return 'glow';
+    if (n === 'idle') return 'breathe';
+    return 'hold';
+  }
+
+  function parseEvents(s) {
+    return listOf(s).map(function (part) {
+      var m = /^([A-Za-z_][\w]*)(?:\((-?\d+)\))?(?:@([\d.]+))?$/.exec(part.replace(/\s+/g, ''));
+      if (!m) return null;
+      var e = { name: m[1], time: m[3] ? Number(m[3]) : 0 };
+      if (m[2] !== undefined && Number(m[2]) !== 0) e.int = Number(m[2]);
+      return e;
+    }).filter(Boolean);
+  }
+
+  function buildAnimation(spec, ctx) {
+    var preset = PRESETS[spec.preset] ? spec.preset : 'hold';
+    var d = Number(spec.duration);
+    if (!isFinite(d) || d < 0) d = PRESETS[preset].duration;
+    var anim;
+    if (preset === 'hold' || !d) {
+      anim = {};
+      if (d) {
+        anim.bones = {};
+        anim.bones[ctx.bone] = { translate: [{}, { time: r4(d) }] };
+      }
+    } else {
+      anim = motion(d, PRESETS[preset].ease, PRESETS[preset].keys(ctx), ctx);
+    }
+    var events = (spec.events || []).filter(function (e) { return e && e.name; }).slice().sort(function (a, b) { return (a.time || 0) - (b.time || 0); });
+    if (events.length) {
+      anim.events = events.map(function (e) {
+        var o = {};
+        var t = r4(Math.min(Number(e.time) || 0, d || 0));
+        if (t) o.time = t;
+        o.name = e.name;
+        if (e.int) o.int = e.int;
+        return o;
+      });
+    }
+    return anim;
+  }
+
+  function specsFrom(rows, kind) {
+    return (rows || []).filter(function (a) { return a && a.name; }).map(function (a) {
+      var preset = a.preset || presetFor(a.name, kind);
+      var d = Number(a.duration);
+      return { name: String(a.name).trim(), preset: preset, duration: isFinite(d) && d >= 0 ? d : PRESETS[preset] ? PRESETS[preset].duration : 1, loop: !!a.loop, events: typeof a.events === 'string' ? parseEvents(a.events) : (a.events || []) };
+    });
+  }
+
+  function eventNamesOf(animations) {
+    var names = [];
+    Object.keys(animations).forEach(function (k) {
+      (animations[k].events || []).forEach(function (e) { if (names.indexOf(e.name) === -1) names.push(e.name); });
+    });
+    return names;
+  }
+
+  function withEvents(json) {
+    var names = eventNamesOf(json.animations || {});
+    if (!names.length) return json;
+    var out = {};
+    Object.keys(json).forEach(function (k) {
+      if (k === 'animations') { out.events = {}; names.forEach(function (n) { out.events[n] = {}; }); }
+      out[k] = json[k];
+    });
+    return out;
+  }
+
+  function corners(x, y, w, h) { return [[x - w / 2, y - h / 2], [x + w / 2, y + h / 2]]; }
+  function bounds(points) {
+    var xs = points.map(function (p) { return p[0]; });
+    var ys = points.map(function (p) { return p[1]; });
+    var minX = Math.min.apply(null, xs), minY = Math.min.apply(null, ys);
+    return { x: r2(minX), y: r2(minY), width: r2(Math.max.apply(null, xs) - minX), height: r2(Math.max.apply(null, ys) - minY) };
+  }
+  function skeleton(name, tech, points) {
+    var b = bounds(points);
+    return { hash: 'draft-' + name.replace(/^animation_/, ''), spine: tech.spineVersion, x: b.x, y: b.y, width: b.width, height: b.height };
+  }
+
+  function contain(w, h, maxW, maxH) {
+    var s = Math.min(1, maxW / w, maxH / h);
+    return { width: r2(w * s), height: r2(h * s) };
+  }
+
+  function geometry(s) {
+    var C = Math.max(1, Math.round(s.reels)), R = Math.max(1, Math.round(s.rows));
+    var W = Number(s.cell.w), H = Number(s.cell.h);
+    var m = Math.round(0.07 * Math.min(W, H));
+    var b = Math.round(0.16 * Math.min(W, H));
+    var reelX = [], slotY = [];
+    for (var i = 0; i < C; i++) reelX.push(r4((i - (C - 1) / 2) * W));
+    slotY.push(r4(-(R + 1) / 2 * H));
+    for (var j = 1; j <= R; j++) slotY.push(r4(((R + 1) / 2 - j) * H));
+    return { C: C, R: R, W: W, H: H, gridW: C * W, gridH: R * H, margin: m, border: b, reelX: reelX, slotY: slotY };
+  }
+
+  function sideX(slot, halfW) {
+    if (/_left$/.test(slot)) return -halfW;
+    if (/_right$/.test(slot)) return halfW;
+    return 0;
+  }
+  function sideY(slot, halfH) {
+    if (/_top$/.test(slot)) return halfH;
+    if (/_bottom$/.test(slot)) return -halfH;
+    return 0;
+  }
+
+  function rig(o, tech) {
+    var bones = [{ name: 'root' }];
+    var used = { root: true };
+    var add = function (b) { if (!used[b.name]) { used[b.name] = true; bones.push(b); } };
+    var parent = 'root';
+    o.chain.forEach(function (n) { add({ name: n, parent: parent }); parent = n; });
+    (o.extraBones || []).forEach(add);
+    var slots = [{ name: o.slot, bone: parent, attachment: o.region }];
+    var att = {};
+    att[o.slot] = {};
+    var a = {};
+    if (r2(o.att.x || 0)) a.x = r2(o.att.x);
+    if (r2(o.att.y || 0)) a.y = r2(o.att.y);
+    a.width = r2(o.att.width);
+    a.height = r2(o.att.height);
+    att[o.slot][o.region] = a;
+    var pts = corners(o.att.x || 0, o.att.y || 0, o.att.width, o.att.height);
+    (o.spacers || []).forEach(function (sp) {
+      if (att[sp.slot]) return;
+      var bn = used[sp.bone || sp.slot] ? sp.slot + '_bone' : (sp.bone || sp.slot);
+      var b = { name: bn, parent: sp.parent || 'root' };
+      if (r2(sp.x || 0)) b.x = r2(sp.x);
+      if (r2(sp.y || 0)) b.y = r2(sp.y);
+      add(b);
+      slots.push({ name: sp.slot, bone: bn, attachment: tech.spacer });
+      att[sp.slot] = {};
+      att[sp.slot][tech.spacer] = sp.att ? clone(sp.att) : { width: 1, height: 1 };
+      pts = pts.concat(corners(sp.x || 0, sp.y || 0, 1, 1));
+    });
+    var skins = listOf(o.skins);
+    if (!skins.length) skins = ['default'];
+    var skinList = skins.indexOf('default') !== -1
+      ? skins.map(function (s) { return s === 'default' ? { name: 'default', attachments: att } : { name: s }; })
+      : skins.map(function (s) { return { name: s, attachments: clone(att) }; });
+    var json = { skeleton: skeleton(o.name, tech, pts), bones: bones, slots: slots, skins: skinList, animations: {} };
+    o.specs.forEach(function (sp) {
+      if (!sp.name || json.animations[sp.name]) return;
+      json.animations[sp.name] = buildAnimation(sp, o.ctx);
+    });
+    var regions = [{ name: o.region, w: o.px.w, h: o.px.h, src: o.src }];
+    if ((o.spacers || []).length) regions.push({ name: tech.spacer, w: 1, h: 1, src: 'clear' });
+    return { name: o.name, json: withEvents(json), regions: regions, loops: o.specs.filter(function (s) { return s.loop; }).map(function (s) { return s.name; }) };
+  }
+
+  function symbolSpines(comp, s, g, px, tech) {
+    var out = [];
+    var shared = specsFrom(comp.anims, 'symbol');
+    var statics = [];
+    (comp.symbols || []).forEach(function (sym) {
+      var name = slug(sym.name);
+      if (!name) return;
+      var key = 'sym:' + name;
+      var p = px(key) || { w: Math.round(0.86 * g.W), h: Math.round(0.86 * g.H) };
+      var att = contain(p.w, p.h, g.W, g.H);
+      var region = 'art/reels/' + name;
+      statics.push({ name: name, region: region, att: att, px: p, key: key });
+      var spacers = comp.txt ? [{ slot: 'txt_amount', bone: 'txt_multiplier_amount', parent: 'txt', x: 0.34 * g.W, y: 0.42 * g.H, att: { x: 0.5, y: 0.5, width: 1, height: 1 } }] : [];
+      out.push(rig({
+        name: 'animation_symbol_' + name,
+        chain: ['art'],
+        extraBones: comp.txt ? [{ name: 'txt', parent: 'root' }] : [],
+        slot: 'symbol',
+        region: region,
+        att: att,
+        px: p,
+        src: key,
+        spacers: spacers,
+        skins: ['default'],
+        specs: sym.ownAnims ? specsFrom(sym.anims, 'symbol') : shared,
+        ctx: { bone: 'art', slot: 'symbol', w: att.width, h: att.height, cellH: g.H }
+      }, tech));
+    });
+    if (statics.length) {
+      var maxW = Math.max.apply(null, statics.map(function (x) { return x.att.width; }));
+      var maxH = Math.max.apply(null, statics.map(function (x) { return x.att.height; }));
+      var skins = [];
+      var seen = {};
+      statics.forEach(function (x) {
+        [x.name, x.name + '_blur'].forEach(function (sn) {
+          var a = { symbols: { symbols: { name: x.region, width: x.att.width, height: x.att.height } } };
+          skins.push({ name: 'symbol_' + sn, attachments: a });
+        });
+      });
+      var json = {
+        skeleton: skeleton('animation_symbols_static', tech, corners(0, 0, maxW, maxH)),
+        bones: [{ name: 'root' }, { name: 'scale', parent: 'root' }],
+        slots: [{ name: 'symbols', bone: 'scale', attachment: 'symbols' }],
+        skins: skins,
+        animations: {
+          active_state: {},
+          dim_in: { slots: { symbols: { rgb: [{ color: 'ffffff' }, { time: 0.2, color: 'a0a0a0' }] } } },
+          dim_out: { slots: { symbols: { rgb: [{ color: 'a0a0a0' }, { time: 0.2, color: 'ffffff' }] } } },
+          in: { slots: { symbols: { rgba: [{ color: 'ffffffff' }] } }, bones: { scale: { scale: [{}] } } },
+          out: {
+            slots: { symbols: { rgba: [{ time: 0.3, color: 'ffffffff' }, { time: 0.4667, color: 'ffffff00' }] } },
+            bones: { scale: { scale: [{ time: 0.3, curve: [0.367, 0.939, 0.411, 0.786, 0.367, 0.939, 0.411, 0.786] }, { time: 0.4667, x: 0.6, y: 0.6 }] } }
+          }
+        }
+      };
+      var regions = [];
+      statics.forEach(function (x) { if (!seen[x.region]) { seen[x.region] = true; regions.push({ name: x.region, w: x.px.w, h: x.px.h, src: x.key }); } });
+      out.push({ name: 'animation_symbols_static', json: json, regions: regions, loops: [] });
+    }
+    return out;
+  }
+
+  var EPS = 0.0006;
+  var STOP_EASE = [0.12, 0.18, 0.45, 1];
+  var SETTLE_EASE = [0.4, 0, 0.62, 1];
+  var IN_EASE = [0.32, 0.63, 0.41, 1];
+
+  function splitBezier(p0, p1, p2, p3, u) {
+    var lerp = function (a, b) { return [a[0] + (b[0] - a[0]) * u, a[1] + (b[1] - a[1]) * u]; };
+    var a = lerp(p0, p1), b = lerp(p1, p2), c = lerp(p2, p3);
+    var d = lerp(a, b), e = lerp(b, c), f = lerp(d, e);
+    return [[p0, a, d, f], [f, e, c, p3]];
+  }
+  function bezierPoint(p, u) {
+    var m = 1 - u;
+    return [m * m * m * p[0][0] + 3 * m * m * u * p[1][0] + 3 * m * u * u * p[2][0] + u * u * u * p[3][0],
+      m * m * m * p[0][1] + 3 * m * m * u * p[1][1] + 3 * m * u * u * p[2][1] + u * u * u * p[3][1]];
+  }
+  function ctrl(t0, v0, t1, v1, e) { return [[t0, v0], [t0 + (t1 - t0) * e[0], v0 + (v1 - v0) * e[1]], [t0 + (t1 - t0) * e[2], v0 + (v1 - v0) * e[3]], [t1, v1]]; }
+  function curveOf(p) { return [r4(p[1][0]), r4(p[1][1]), r4(p[2][0]), r4(p[2][1])]; }
+  function key(t, y, curve) {
+    var k = {};
+    if (r4(t)) k.time = r4(t);
+    if (r4(y)) k.y = r4(y);
+    if (curve) k.curve = curve;
+    return k;
+  }
+
+  function reelRowsSpine(g, tech) {
+    var R = g.R, H = g.H;
+    var dt = 1 / (tech.fps || 30);
+    var bot = g.slotY[0], top = -bot, P = (R + 1) * H, v = H / dt;
+    var name = 'animation_reel_' + R + '_rows';
+    var bones = [{ name: 'root' }, { name: 'art', parent: 'root' }, { name: 'reel', parent: 'art' }];
+    var slots = [];
+    var att = {};
+    var i;
+    for (i = 0; i <= R; i++) {
+      var b = { name: 'slot_' + i, parent: 'reel' };
+      if (g.slotY[i]) b.y = g.slotY[i];
+      b.transform = 'noRotationOrReflection';
+      bones.push(b);
+      slots.push({ name: 'slot_' + i, bone: 'slot_' + i, attachment: 'spacer' });
+      att['slot_' + i] = { spacer: { path: tech.spacer, width: 1, height: 1 } };
+    }
+    bones.push({ name: 'reel_static', parent: 'art' });
+    for (i = 0; i <= R; i++) {
+      var bs = { name: 'slot_' + i + '_static', parent: 'reel_static' };
+      if (g.slotY[i]) bs.y = g.slotY[i];
+      bs.transform = 'noRotationOrReflection';
+      bones.push(bs);
+      slots.push({ name: 'slot_' + i + '_static', bone: 'slot_' + i + '_static', attachment: 'spacer' });
+      att['slot_' + i + '_static'] = { spacer: { path: tech.spacer, width: 1, height: 1 } };
+    }
+
+    function runKeys(y0, steps, startWrapped) {
+      var keys = [];
+      var abs = y0;
+      if (startWrapped) {
+        keys.push(key(0, 0, 'stepped'));
+        abs = top - v * EPS;
+        keys.push(key(EPS, abs - y0));
+        abs = top;
+      } else keys.push(key(0, 0));
+      for (var k = 1; k <= steps; k++) {
+        abs -= H;
+        var t = k * dt;
+        if (Math.abs(abs - bot) < 0.001 && k < steps) {
+          keys.push(key(t, bot - y0, 'stepped'));
+          keys.push(key(t + EPS, top - v * EPS - y0));
+          abs = top;
+        } else keys.push(key(t, abs - y0));
+      }
+      return { keys: keys, abs: abs };
+    }
+
+    var loop = { bones: {}, events: [] };
+    for (i = 0; i <= R; i++) {
+      loop.bones['slot_' + i] = { translate: runKeys(g.slotY[i], R + 1, i === 0).keys };
+    }
+    for (var k = 1; k <= R + 1; k++) {
+      var ev = { time: r4(k * dt), name: 'onOffScreen' };
+      if (R + 1 - k) ev.int = R + 1 - k;
+      loop.events.push(ev);
+    }
+
+    var tA = R * dt, tB = (R + 4) * dt, tC = (R + 7) * dt, o = r4(0.12 * H);
+    var stop = { bones: {}, events: [{ name: 'onOffScreen' }] };
+    var wrap0 = null;
+    for (i = 0; i <= R; i++) {
+      var y0 = g.slotY[i];
+      var run = runKeys(y0, R, i === 0);
+      var keys = run.keys;
+      var abs = run.abs;
+      if (Math.abs(abs - bot) < 0.001) {
+        keys[keys.length - 1].curve = 'stepped';
+        abs = top;
+        keys.push(key(tA + EPS, top - y0));
+      }
+      var last = keys[keys.length - 1];
+      var startT = last.time || 0;
+      var endAbs = abs - H - o;
+      var p = ctrl(startT, abs, tB, endAbs, STOP_EASE);
+      if (endAbs < bot) {
+        var lo = 0, hi = 1;
+        for (var it = 0; it < 40; it++) { var mid = (lo + hi) / 2; if (bezierPoint(p, mid)[1] > bot) lo = mid; else hi = mid; }
+        var parts = splitBezier(p[0], p[1], p[2], p[3], hi);
+        var tw = parts[0][3][0];
+        last.curve = curveOf(parts[0].map(function (q) { return [q[0], q[1] - y0]; }));
+        keys.push(key(tw, bot - y0, 'stepped'));
+        var second = parts[1].map(function (q) { return [q[0], q[1] + P - y0]; });
+        second[0] = [tw + EPS, second[0][1]];
+        if (second[1][0] < tw + EPS) second[1] = [tw + EPS, second[1][1]];
+        keys.push(key(tw + EPS, second[0][1], curveOf(second)));
+        endAbs += P;
+        wrap0 = r4(tw);
+      } else {
+        last.curve = curveOf(p.map(function (q) { return [q[0], q[1] - y0]; }));
+      }
+      var settle = ctrl(tB, endAbs, tC, endAbs + o, SETTLE_EASE);
+      keys.push(key(tB, endAbs - y0, curveOf(settle.map(function (q) { return [q[0], q[1] - y0]; }))));
+      keys.push(key(tC, endAbs + o - y0));
+      stop.bones['slot_' + i] = { translate: keys };
+    }
+    for (k = 1; k <= R; k++) {
+      var fe = { time: r4(k * dt), name: 'onFinalSymbol', int: R + 1 - k };
+      stop.events.push(fe);
+    }
+    stop.events.push({ time: wrap0 !== null ? wrap0 : r4((R + 2) * dt), name: 'onFinalSymbol' });
+    stop.events.push({ time: r4(tB + 2 * dt), name: 'onStopReelSound' });
+
+    var inAnim = { slots: {} }, outAnim = { slots: {} };
+    for (i = 0; i <= R; i++) {
+      inAnim.slots['slot_' + i] = { rgba: [{ color: 'ffffff00', curve: 'stepped' }, { time: 1, color: 'ffffff00', curve: [1.111, 1, 1.222, 1, 1.111, 1, 1.222, 1, 1.111, 1, 1.222, 1, 1.111, 0, 1.222, 1] }, { time: 1.3333, color: 'ffffffff' }] };
+      outAnim.slots['slot_' + i] = { rgba: [{ color: 'ffffffff' }, { time: 0.1667, color: 'ffffff00' }] };
+    }
+    var json = {
+      skeleton: skeleton(name, tech, corners(0, 0, g.W, (R + 1) * H)),
+      bones: bones,
+      slots: slots,
+      skins: [{ name: 'default', attachments: att }],
+      events: { onFinalSymbol: {}, onOffScreen: {}, onStopReelSound: {} },
+      animations: { in: inAnim, out: outAnim, spin_loop: loop, spin_start: {}, spin_stop: stop }
+    };
+    return { name: name, json: json, regions: [{ name: tech.spacer, w: 1, h: 1, src: 'clear' }], loops: ['spin_loop'] };
+  }
+
+  function reelColumnsSpine(g, tech) {
+    var C = g.C;
+    var name = 'animation_reels_' + C + '_columns';
+    var m = g.margin;
+    var w = g.gridW + 2 * m, h = g.gridH + 2 * m;
+    var bones = [{ name: 'root' }, { name: 'art', parent: 'root' }, { name: 'reel_root', parent: 'art' }, { name: 'reels', parent: 'reel_root' }];
+    var i;
+    for (i = 0; i < C; i++) {
+      var b = { name: 'reel_' + i, parent: 'reels' };
+      if (g.reelX[i]) b.x = g.reelX[i];
+      bones.push(b);
+    }
+    bones.push({ name: 'reels_clipping', parent: 'reel_root' });
+    bones.push({ name: 'dim', parent: 'root', scaleX: r4(w / 10), scaleY: r4(h / 10) });
+    var slots = [{ name: 'reels_clipping', bone: 'reels_clipping', attachment: 'reels_clipping' }];
+    var att = {
+      dim: {},
+      reels_clipping: { reels_clipping: { type: 'clipping', end: 'reels_clipping', vertexCount: 4, vertices: [-w / 2, h / 2, -w / 2, -h / 2, w / 2, -h / 2, w / 2, h / 2].map(r2) } }
+    };
+    att.dim[tech.white] = { width: 10, height: 10 };
+    for (i = C - 1; i >= 0; i--) {
+      slots.push({ name: 'reel_' + i, bone: 'reel_' + i, attachment: tech.spacer });
+      att['reel_' + i] = {};
+      att['reel_' + i][tech.spacer] = { width: 1, height: 1 };
+    }
+    slots.push({ name: 'dim', bone: 'dim', color: '00000000', attachment: tech.white });
+    var ease = function (v0, v1) { return [0.2133, v0 + (v1 - v0) * IN_EASE[1], 0.2733, v0 + (v1 - v0) * IN_EASE[3]].map(r4); };
+    var inAnim = { slots: {}, bones: { reel_root: { scale: [{ x: 1.5, y: 1.5, curve: ease(1.5, 1).concat(ease(1.5, 1)) }, { time: 0.6667 }] } } };
+    for (i = 0; i < C; i++) {
+      inAnim.slots['reel_' + i] = { rgba: [{ color: 'ffffff00', curve: ease(1, 1).concat(ease(1, 1), ease(1, 1), ease(0, 1)) }, { time: 0.6667, color: 'ffffffff' }] };
+    }
+    var json = {
+      skeleton: skeleton(name, tech, corners(0, 0, w, h)),
+      bones: bones,
+      slots: slots,
+      skins: [{ name: 'default', attachments: att }],
+      animations: {
+        dim_in: { slots: { dim: { rgba: [{ color: '00000000' }, { time: 0.2, color: '000000b4' }] } } },
+        dim_out: { slots: { dim: { rgba: [{ color: '000000b4' }, { time: 0.2, color: '00000000' }] } } },
+        in: inAnim,
+        loop_1: {},
+        out: {},
+        pm_mg: {}
+      }
+    };
+    return { name: name, json: json, regions: [{ name: tech.spacer, w: 1, h: 1, src: 'clear' }, { name: tech.white, w: 10, h: 10, src: 'white' }], loops: ['loop_1'] };
+  }
+
+  function frameGeometry(img, win, rect) {
+    var sx = rect.w / (win.right - win.left);
+    var sy = rect.h / (win.bottom - win.top);
+    var left = -rect.w / 2 - win.left * sx;
+    var right = left + img.w * sx;
+    var topY = rect.h / 2 + win.top * sy;
+    var bottom = topY - img.h * sy;
+    return { x: r2((left + right) / 2), y: r2((topY + bottom) / 2), width: r2(right - left), height: r2(topY - bottom) };
+  }
+
+  function frameSpine(comp, g, px, tech) {
+    var above = comp.type === 'frame_above';
+    var name = above ? 'animation_reels_frame_above' : 'animation_reels_frame_under';
+    var key = comp.type;
+    var p = px(key);
+    var m = g.margin, b = g.border;
+    var box = above ? { w: g.gridW + 2 * b, h: g.gridH + 2 * b } : { w: g.gridW + 2 * m, h: g.gridH + 2 * m };
+    var att;
+    if (p && p.win) att = frameGeometry(p, p.win, { w: g.gridW, h: g.gridH });
+    else if (p && p.uploaded) {
+      var s = above ? Math.min(box.w / p.w, box.h / p.h) : Math.max(box.w / p.w, box.h / p.h);
+      att = { width: r2(p.w * s), height: r2(p.h * s) };
+    } else att = { width: box.w, height: box.h };
+    if (!p) p = { w: Math.round(box.w), h: Math.round(box.h) };
+    var halfW = g.gridW / 2 + (above ? b / 2 : m / 2), halfH = g.gridH / 2 + (above ? b / 2 : m / 2);
+    var spacers = listOf(comp.spacers).map(slug).filter(Boolean).map(function (sl) { return { slot: sl, parent: 'reel_frame', x: sideX(sl, halfW), y: sideY(sl, halfH) }; });
+    return rig({
+      name: name,
+      chain: ['art', 'reel_frame'],
+      slot: 'frame',
+      region: 'art/' + name.replace(/^animation_/, ''),
+      att: att,
+      px: p,
+      src: key,
+      spacers: spacers,
+      skins: comp.skins,
+      specs: specsFrom(comp.anims, 'frame'),
+      ctx: { bone: 'reel_frame', slot: 'frame', w: att.width, h: att.height, cellH: g.H }
+    }, tech);
+  }
+
+  function customSpine(comp, g, px, tech) {
+    var name = 'animation_' + (slug(comp.name).replace(/^animation_/, '') || 'element');
+    var key = 'c:' + comp.id;
+    var p = px(key);
+    var w = Number(comp.w) || (p ? p.w : 400), h = Number(comp.h) || (p ? p.h : 400);
+    if (!p) p = { w: Math.round(w), h: Math.round(h) };
+    var att = { x: Number(comp.x) || 0, y: Number(comp.y) || 0, width: w, height: h };
+    var spacers = listOf(comp.spacers).map(slug).filter(Boolean).map(function (sl) { return { slot: sl, x: att.x + sideX(sl, w / 2), y: att.y + sideY(sl, h / 2) }; });
+    return rig({
+      name: name,
+      chain: ['art'],
+      slot: 'art',
+      region: 'art/' + name.replace(/^animation_/, ''),
+      att: att,
+      px: p,
+      src: key,
+      spacers: spacers,
+      skins: comp.skins,
+      specs: specsFrom(comp.anims, 'custom'),
+      ctx: { bone: 'art', slot: 'art', w: w, h: h, cellH: g.H }
+    }, tech);
+  }
+
+  function pot(n) { var p = 16; while (p < n) p *= 2; return p; }
+
+  function pack(regions, padding, maxPage) {
+    var items = regions.slice().sort(function (a, b) { return b.h - a.h || b.w - a.w || (a.name < b.name ? -1 : 1); });
+    var best = null;
+    var widest = Math.max.apply(null, items.map(function (r) { return r.w; }));
+    for (var W = pot(widest + padding); W <= Math.max(maxPage, pot(widest + padding)); W *= 2) {
+      var x = padding, y = padding, rowH = 0, placed = [];
+      items.forEach(function (r) {
+        if (x + r.w + padding > W) { x = padding; y += rowH + padding; rowH = 0; }
+        placed.push({ name: r.name, x: x, y: y, w: r.w, h: r.h, src: r.src });
+        x += r.w + padding;
+        rowH = Math.max(rowH, r.h);
+      });
+      var Hh = pot(y + rowH + padding);
+      var cand = { width: W, height: Hh, placements: placed };
+      if (!best || W * Hh < best.width * best.height || (W * Hh === best.width * best.height && Math.max(W, Hh) < Math.max(best.width, best.height))) best = cand;
+      if (Hh <= W) break;
+    }
+    return best;
+  }
+
+  function atlasText(pageName, page) {
+    var lines = ['', pageName, 'size: ' + page.width + ', ' + page.height, 'format: RGBA8888', 'filter: Linear, Linear', 'repeat: none'];
+    page.placements.slice().sort(function (a, b) { return a.name < b.name ? -1 : a.name > b.name ? 1 : 0; }).forEach(function (p) {
+      lines.push(p.name, '  rotate: false', '  xy: ' + p.x + ', ' + p.y, '  size: ' + p.w + ', ' + p.h, '  orig: ' + p.w + ', ' + p.h, '  offset: 0, 0', '  index: -1');
+    });
+    return lines.join('\n') + '\n';
+  }
+
+  function durationOf(anim) {
+    var max = 0;
+    var walk = function (o) {
+      if (Array.isArray(o)) o.forEach(function (k) { if (k && typeof k === 'object') { if (typeof k.time === 'number' && k.time > max) max = k.time; walk(k); } });
+      else if (isObj(o)) Object.keys(o).forEach(function (k) { if (k !== 'curve') walk(o[k]); });
+    };
+    walk(anim || {});
+    return r4(max);
+  }
+
+  function spacerSlots(json, key) {
+    return (json.slots || []).filter(function (s) { return s.attachment === key; }).map(function (s) { return s.name; }).sort();
+  }
+
+  function contractEntry(spine, tech) {
+    var json = spine.json;
+    return {
+      name: spine.name,
+      skins: (json.skins || []).map(function (s) { return s.name; }),
+      animations: Object.keys(json.animations).map(function (n) {
+        var a = { name: n, duration: durationOf(json.animations[n]) };
+        if (spine.loops.indexOf(n) !== -1) a.loop = true;
+        var ev = (json.animations[n].events || []).map(function (e) { var o = { name: e.name }; if (e.int !== undefined) o.int = e.int; return o; });
+        if (ev.length) a.events = ev;
+        return a;
+      }),
+      decorationSpacers: spacerSlots(json, tech.spacer)
+    };
+  }
+
+  function finalize(spine, tech) {
+    var page = pack(spine.regions, tech.padding, tech.maxPage);
+    var pageName = spine.name + '.png';
+    var importJson = clone(spine.json);
+    importJson.skeleton.images = './images/';
+    var warnings = [];
+    if (page.width > tech.maxPage || page.height > tech.maxPage) warnings.push('Атлас ' + page.width + '×' + page.height + ' більший за ' + tech.maxPage + ' px');
+    return Object.assign({}, spine, {
+      pageName: pageName,
+      page: page,
+      atlasText: atlasText(pageName, page),
+      jsonText: JSON.stringify(spine.json),
+      importJsonText: JSON.stringify(importJson, null, 2),
+      contract: contractEntry(spine, tech),
+      warnings: warnings
+    });
+  }
+
+  function planAll(settings, px) {
+    var tech = Object.assign({}, TECH, settings.tech || {});
+    var g = geometry(settings);
+    var groups = [];
+    (settings.components || []).forEach(function (comp) {
+      if (comp.on === false) return;
+      var list = [];
+      if (comp.type === 'symbols') list = symbolSpines(comp, settings, g, px, tech);
+      else if (comp.type === 'reels') list = [reelColumnsSpine(g, tech), reelRowsSpine(g, tech)];
+      else if (comp.type === 'frame_under' || comp.type === 'frame_above') list = [frameSpine(comp, g, px, tech)];
+      else list = [customSpine(comp, g, px, tech)];
+      groups.push({ id: comp.id, spines: list.map(function (sp) { var f = finalize(sp, tech); f.comp = comp.id; return f; }) });
+    });
+    var seen = {};
+    groups.forEach(function (gr) {
+      gr.spines.forEach(function (sp) {
+        if (seen[sp.name]) sp.warnings.push('Назва ' + sp.name + ' вже є в іншому компоненті');
+        seen[sp.name] = true;
+      });
+    });
+    return { tech: tech, geometry: g, groups: groups, spines: groups.reduce(function (a, gr) { return a.concat(gr.spines); }, []) };
+  }
+
+  function findWindow(alpha, width, height, threshold) {
+    var t = threshold === undefined ? 127 : threshold;
+    var sx = Math.floor(width / 2), sy = Math.floor(height / 2);
+    if (alpha[sy * width + sx] > t) return null;
+    var seen = new Uint8Array(width * height);
+    var queue = new Int32Array(width * height);
+    var head = 0, tail = 0;
+    queue[tail++] = sy * width + sx;
+    seen[sy * width + sx] = 1;
+    var minX = sx, maxX = sx, minY = sy, maxY = sy, touches = false;
+    while (head < tail) {
+      var idx = queue[head++];
+      var x = idx % width, y = (idx - x) / width;
+      if (x < minX) minX = x; if (x > maxX) maxX = x; if (y < minY) minY = y; if (y > maxY) maxY = y;
+      var nb = [[x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]];
+      for (var i = 0; i < 4; i++) {
+        var nx = nb[i][0], ny = nb[i][1];
+        if (nx < 0 || ny < 0 || nx >= width || ny >= height) { touches = true; continue; }
+        var ni = ny * width + nx;
+        if (!seen[ni] && alpha[ni] <= t) { seen[ni] = 1; queue[tail++] = ni; }
+      }
+    }
+    if (touches) return null;
+    return { left: minX, top: minY, right: maxX + 1, bottom: maxY + 1 };
+  }
+
+  function readme(settings, plan) {
+    var t = plan.tech;
+    var lines = [
+      'Spine-чернетки: ' + (settings.game || 'гра') + ', сітка ' + plan.geometry.C + '×' + plan.geometry.R + ', клітинка ' + plan.geometry.W + '×' + plan.geometry.H + ' px',
+      '',
+      t.folder + '   готові .json, .atlas, .png для арт-репо',
+      'spine-editor/<назва>/   те саме для Spine Editor: Import Data, картинки в images/',
+      '',
+      'Не міняйте назви спайнів, скінів, анімацій, слотів і регіонів.',
+      'Експорт: Spine ' + t.spineVersion + ', JSON з атласом, без Nonessential data, useIndexes: false.',
+      '',
+      plan.spines.map(function (s) { return s.name; }).join('\n'),
+      '',
+      'Spine Draft Kit ' + VERSION
+    ];
+    return lines.join('\n') + '\n';
+  }
+
+  function validatorParseAtlas(txt) {
+    var lines = String(txt).split(/\r\n|\r|\n/);
+    var output = {}, child = {}, parent;
+    lines.forEach(function (line) {
+      if (line === '') { child = {}; parent = ''; }
+      else if (!parent) { parent = line.trim(); output[parent] = child; }
+      else if (line.indexOf(':') !== -1) {
+        var parts = line.split(':').map(function (s) { return s.trim(); });
+        child[parts[0]] = parts[1].indexOf(',') !== -1 ? parts[1].split(',').map(function (s) { return s.trim(); }) : parts[1];
+      } else { child = {}; output[parent][line.trim()] = child; }
+    });
+    return output;
+  }
+
+  function isAttachedImage(a) {
+    return Object.keys(a).length > 0 && (a.type === 'mesh' || a.width !== undefined || a.height !== undefined || a.x !== undefined || a.y !== undefined) && !a.name && !a.path && a.type !== 'clipping';
+  }
+  function attachedImageName(a, key) {
+    if (isAttachedImage(a)) return key;
+    if (a.path && typeof a.path === 'string' && !a.attachments) return a.path;
+    if (a.name && !a.attachments && a.type !== 'clipping') return a.name;
+    return undefined;
+  }
+  function validatorAttachments(json) {
+    var skins = json.skins;
+    if (!skins) return [];
+    var list = [];
+    var arr = Array.isArray(skins) ? skins : Object.keys(skins).map(function (k) { return { attachments: skins[k] }; });
+    arr.forEach(function (skin) {
+      var att = skin && skin.attachments;
+      if (!att) return;
+      Object.keys(att).forEach(function (slot) {
+        var cur = att[slot];
+        if (!isObj(cur)) return;
+        Object.keys(cur).forEach(function (child) {
+          if (!isObj(cur[child])) return;
+          var n = attachedImageName(cur[child], child);
+          if (n && list.indexOf(n) === -1) list.push(n);
+        });
+      });
+    });
+    return list;
+  }
+
+  function canon(v) {
+    if (Array.isArray(v)) return '[' + v.map(canon).join(',') + ']';
+    if (isObj(v)) return '{' + Object.keys(v).sort().map(function (k) { return JSON.stringify(k) + ':' + canon(v[k]); }).join(',') + '}';
+    return JSON.stringify(v);
+  }
+  function diff(expected, actual) {
+    return { missing: expected.filter(function (x) { return actual.indexOf(x) === -1; }), extra: actual.filter(function (x) { return expected.indexOf(x) === -1; }) };
+  }
+  function diffText(d) {
+    return [d.missing.length ? 'бракує: ' + d.missing.join(', ') : '', d.extra.length ? 'зайві: ' + d.extra.join(', ') : ''].filter(Boolean).join('; ');
+  }
+  function fmt(v) { return String(roundTo(v, 3)).replace('.', ','); }
+
+  function checkExport(input, contract) {
+    var tech = Object.assign({}, TECH, contract.tech || {});
+    var out = [];
+    var add = function (level, title, detail) { out.push({ level: level, title: title, detail: detail || '' }); };
+    var json;
+    try { json = JSON.parse(input.jsonText); } catch (e) { add('error', 'Файл не читається як JSON', String(e && e.message)); return done(); }
+    if (!isObj(json) || !isObj(json.skeleton)) { add('error', 'Це не файл Spine: немає skeleton'); return done(); }
+    var name = String(input.spineName || '').replace(/\.json$/i, '');
+    var entry = (contract.spines || []).filter(function (s) { return s.name === name; })[0];
+    var sk = json.skeleton;
+    if (sk.spine !== tech.spineVersion) add('error', 'Версія Spine ' + (sk.spine || '—') + ', потрібна ' + tech.spineVersion);
+    if (sk.images || sk.audio) add('error', 'Експортовано з Nonessential data', 'skeleton.' + (sk.images ? 'images' : 'audio'));
+    if (typeof sk.hash === 'string' && sk.hash.indexOf('draft-') === 0) add('info', 'Це ще чернетка', sk.hash);
+    var skins = (Array.isArray(json.skins) ? json.skins.map(function (s) { return s.name; }) : Object.keys(json.skins || {})).sort();
+    var anims = Object.keys(json.animations || {});
+    if (!entry) add('warning', 'Назви ' + (name || '—') + ' немає серед компонентів кита');
+    else {
+      if (canon(entry.skins.slice().sort()) !== canon(skins)) add('error', 'Скіни не ті', diffText(diff(entry.skins, skins)));
+      var exp = entry.animations.map(function (a) { return a.name; });
+      if (canon(exp) !== canon(anims)) {
+        var da = diff(exp, anims);
+        if (!da.missing.length && !da.extra.length) add('error', 'Анімації в іншому порядку', 'треба: ' + exp.join(', '));
+        else add('error', 'Анімації не ті', diffText(da));
+      }
+      var sp = spacerSlots(json, tech.spacer);
+      if (canon(entry.decorationSpacers) !== canon(sp)) add('error', 'Слоти-спейсери не ті', diffText(diff(entry.decorationSpacers, sp)));
+      entry.animations.forEach(function (a) {
+        var got = ((json.animations || {})[a.name] || {}).events || [];
+        var gotN = got.map(function (e) { var o = { name: e.name }; if (e.int !== undefined && e.int !== 0) o.int = e.int; return o; });
+        if (canon(a.events || []) !== canon(gotN)) add('error', 'Події в ' + a.name + ' не ті', 'треба: ' + ((a.events || []).map(function (e) { return e.name + (e.int ? '(' + e.int + ')' : ''); }).join(', ') || 'немає'));
+        var actual = durationOf((json.animations || {})[a.name]);
+        if (a.duration && actual && Math.abs(actual - a.duration) / a.duration > tech.timingTolerance) add('warning', a.name + ': ' + fmt(actual) + ' с замість ' + fmt(a.duration) + ' с');
+      });
+    }
+    var atts = validatorAttachments(json);
+    atts.forEach(function (a) {
+      if (a.indexOf(' ') !== -1) add('error', 'Пробіл у назві вкладення', a);
+      if (a.indexOf('txt/references/') !== -1) add('error', 'Референсна картинка в експорті', a);
+    });
+    if (input.atlasText) {
+      var parsed = {};
+      try { parsed = validatorParseAtlas(input.atlasText); } catch (e) { add('error', 'Атлас не читається'); }
+      var pages = Object.keys(parsed);
+      var regions = [];
+      pages.forEach(function (pg) { Object.keys(parsed[pg]).forEach(function (k) { if (isObj(parsed[pg][k])) regions.push({ page: pg, name: k, r: parsed[pg][k] }); }); });
+      var names = regions.map(function (r) { return r.name; });
+      if (pages.length && pages[0].replace(/\.[^.]+$/, '') !== name) add('error', 'Перша сторінка атласу ' + pages[0] + ', а спайн ' + name);
+      regions.forEach(function (r) {
+        if (r.r.index !== undefined && parseInt(r.r.index, 10) >= 0) add('warning', 'Атлас з індексами: ' + r.name + ' index ' + r.r.index, 'пакуйте з useIndexes: false');
+        if (r.r.rotate !== undefined && ['true', 'false', '0', '90'].indexOf(String(r.r.rotate)) === -1) add('error', 'Регіон ' + r.name + ': rotate ' + r.r.rotate);
+      });
+      atts.forEach(function (a) { if (names.indexOf(a) === -1) add('error', 'Регіону ' + a + ' немає в атласі'); });
+      var pngs = input.pngs || {};
+      if (Object.keys(pngs).length) {
+        pages.forEach(function (pg) {
+          var img = pngs[pg];
+          if (!img) { add('error', 'Немає сторінки ' + pg); return; }
+          var size = parsed[pg].size ? [].concat(parsed[pg].size).join(',').split(',').map(function (x) { return parseInt(x, 10); }) : null;
+          if (size && (size[0] !== img.width || size[1] !== img.height)) add('error', pg + ': в атласі ' + size[0] + '×' + size[1] + ', PNG ' + img.width + '×' + img.height);
+          regions.filter(function (r) { return r.page === pg; }).forEach(function (r) {
+            var xy = [].concat(r.r.xy || []).join(',').split(',').map(function (x) { return parseInt(x, 10); });
+            var sz = [].concat(r.r.size || []).join(',').split(',').map(function (x) { return parseInt(x, 10); });
+            var rot = ['true', '90', '270'].indexOf(String(r.r.rotate)) !== -1;
+            if (xy.length === 2 && sz.length === 2 && (xy[0] + (rot ? sz[1] : sz[0]) > img.width || xy[1] + (rot ? sz[0] : sz[1]) > img.height)) add('error', 'Регіон ' + r.name + ' за межами сторінки');
+          });
+        });
+      } else add('info', 'PNG не додано: розміри сторінок не перевірено');
+    } else add('info', 'Атлас не додано: регіони не перевірено');
+    return done();
+
+    function done() {
+      var order = { error: 0, warning: 1, info: 2 };
+      out.sort(function (a, b) { return order[a.level] - order[b.level]; });
+      var counts = { error: 0, warning: 0, info: 0 };
+      out.forEach(function (f) { counts[f.level]++; });
+      return { name: name, entry: entry || null, findings: out, counts: counts };
+    }
+  }
+
+  function pngSize(bytes) {
+    if (!bytes || bytes.length < 24 || bytes[0] !== 0x89 || bytes[1] !== 0x50) return null;
+    var u32 = function (o) { return ((bytes[o] << 24) >>> 0) + (bytes[o + 1] << 16) + (bytes[o + 2] << 8) + bytes[o + 3]; };
+    return { width: u32(16), height: u32(20) };
+  }
+
+  root.SpineDraftKit = {
+    VERSION: VERSION,
+    TECH: TECH,
+    PRESETS: PRESETS,
+    slug: slug,
+    listOf: listOf,
+    presetFor: presetFor,
+    parseEvents: parseEvents,
+    geometry: geometry,
+    planAll: planAll,
+    bundle: function (name, json, regions, tech) {
+      var t = Object.assign({}, TECH, tech || {});
+      var page = pack(regions, t.padding, t.maxPage);
+      return { name: name, json: json, jsonText: JSON.stringify(json), page: page, pageName: name + '.png', atlasText: atlasText(name + '.png', page) };
+    },
+    contain: contain,
+    findWindow: findWindow,
+    readme: readme,
+    checkExport: checkExport,
+    durationOf: durationOf,
+    pngSize: pngSize,
+    roundTo: roundTo
+  };
+})(typeof window !== 'undefined' ? window : globalThis);
+</script>
+<script>(function (root) {
+  'use strict';
+  var NAME = 'spine-draft-kit';
+  var STORE = 'projects';
+  var memory = {};
+  var dbPromise = null;
+  var persistent = true;
+
+  function open() {
+    if (dbPromise) return dbPromise;
+    dbPromise = new Promise(function (resolve) {
+      var done = false;
+      var finish = function (db) { if (done) return; done = true; if (!db) persistent = false; resolve(db); };
+      setTimeout(function () { finish(null); }, 3000);
+      try {
+        var req = root.indexedDB.open(NAME, 1);
+        req.onupgradeneeded = function () { req.result.createObjectStore(STORE, { keyPath: 'id' }); };
+        req.onsuccess = function () { finish(req.result); };
+        req.onerror = function () { finish(null); };
+        req.onblocked = function () { finish(null); };
+      } catch (e) { finish(null); }
+    });
+    return dbPromise;
+  }
+
+  function run(mode, fn) {
+    return open().then(function (db) {
+      if (!db) return fn(null);
+      return new Promise(function (resolve, reject) {
+        var t;
+        try { t = db.transaction(STORE, mode); } catch (e) { persistent = false; resolve(fn(null)); return; }
+        var req = fn(t.objectStore(STORE));
+        t.oncomplete = function () { resolve(req && 'result' in req ? req.result : undefined); };
+        t.onerror = function () { reject(t.error); };
+        t.onabort = function () { reject(t.error); };
+      });
+    });
+  }
+
+  root.SpineKitStore = {
+    list: function () {
+      return run('readonly', function (st) {
+        if (!st) return { result: Object.keys(memory).map(function (k) { return memory[k]; }) };
+        return st.getAll();
+      }).then(function (all) { return (all || []).slice().sort(function (a, b) { return (b.updated || 0) - (a.updated || 0); }); });
+    },
+    get: function (id) {
+      return run('readonly', function (st) { return st ? st.get(id) : { result: memory[id] }; });
+    },
+    put: function (rec) {
+      memory[rec.id] = rec;
+      return run('readwrite', function (st) { return st ? st.put(rec) : null; }).catch(function () { persistent = false; });
+    },
+    remove: function (id) {
+      delete memory[id];
+      return run('readwrite', function (st) { return st ? st.delete(id) : null; }).catch(function () { persistent = false; });
+    },
+    persistent: function () { return persistent; }
+  };
+})(typeof window !== 'undefined' ? window : globalThis);
+</script>
+<script>(function (root) {
+  'use strict';
+
+  function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+  function svg(w, h, body, label) { return '<svg class="ill" viewBox="0 0 ' + w + ' ' + h + '" role="img" aria-label="' + esc(label || '') + '">' + body + '</svg>'; }
+  function rect(x, y, w, h, cls, r, extra) { return '<rect x="' + x + '" y="' + y + '" width="' + w + '" height="' + h + '" rx="' + (r || 0) + '" class="' + cls + '"' + (extra || '') + '/>'; }
+  function text(x, y, t, cls, anchor) { return '<text x="' + x + '" y="' + y + '" class="' + cls + '" text-anchor="' + (anchor || 'middle') + '">' + esc(t) + '</text>'; }
+  function line(x1, y1, x2, y2, cls) { return '<line x1="' + x1 + '" y1="' + y1 + '" x2="' + x2 + '" y2="' + y2 + '" class="' + cls + '"/>'; }
+  function poly(pts, cls) { return '<polygon points="' + pts.map(function (p) { return p[0].toFixed(1) + ',' + p[1].toFixed(1); }).join(' ') + '" class="' + cls + '"/>'; }
+  function diamond(x, y, r, cls) { return poly([[x, y - r], [x + r, y], [x, y + r], [x - r, y]], cls); }
+  var ARROW = '<defs><marker id="ah" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="ga"/></marker></defs>';
+
+  function gridArt(C, R) {
+    C = Math.min(C, 8); R = Math.min(R, 8);
+    var cs = Math.min(42, 250 / C, 124 / R), w = C * cs, h = R * cs;
+    var x0 = (360 - w) / 2, y0 = 40;
+    var ci = Math.min(1, C - 1), ri = Math.min(1, R - 1);
+    var s = rect(x0 - 5, y0 + ri * cs, w + 10, cs, 'gas', 6);
+    for (var i = 0; i < C; i++) for (var j = 0; j < R; j++) s += rect(x0 + i * cs + 3, y0 + j * cs + 3, cs - 6, cs - 6, 'gc', 5);
+    s += rect(x0 + ci * cs, y0 - 5, cs, h + 10, 'gk', 6);
+    s += text(x0 + ci * cs + cs / 2, y0 - 13, 'барабан', 'gtk');
+    s += text(x0 + w + 12, y0 + ri * cs + cs / 2 + 4, 'ряд', 'gtk', 'start');
+    for (i = 0; i < C; i++) s += text(x0 + i * cs + cs / 2, y0 + h + 18, String(i + 1), 'gm');
+    s += text(180, y0 + h + 40, C + ' × ' + R + ' = барабани × ряди', 'gt');
+    return svg(360, y0 + h + 50, s, 'Сітка ' + C + ' на ' + R);
+  }
+
+  function cellArt(W, H) {
+    var k = 84 / Math.max(W, H), cw = W * k, ch = H * k;
+    var x0 = 70, y0 = 42;
+    var s = ARROW;
+    for (var i = 0; i < 3; i++) for (var j = 0; j < 2; j++) s += rect(x0 + i * cw, y0 + j * ch, cw, ch, 'gl gd', 0);
+    for (i = 0; i < 3; i++) for (j = 0; j < 2; j++) if (i || j) s += rect(x0 + i * cw + cw * 0.14, y0 + j * ch + ch * 0.14, cw * 0.72, ch * 0.72, 'gc', 8);
+    s += rect(x0 + cw * 0.07, y0 + ch * 0.07, cw * 0.86, ch * 0.86, 'gas', 10);
+    s += text(x0 + cw / 2, y0 + ch / 2 + 5, 'символ', 'gt');
+    s += line(x0, y0 - 12, x0 + cw, y0 - 12, 'gk-l');
+    s += line(x0, y0 - 17, x0, y0 - 7, 'gk-l') + line(x0 + cw, y0 - 17, x0 + cw, y0 - 7, 'gk-l');
+    s += text(x0 + cw / 2, y0 - 20, W + ' px', 'gtk');
+    var xr = x0 + 3 * cw + 14;
+    s += line(xr, y0, xr, y0 + ch, 'gk-l') + line(xr - 5, y0, xr + 5, y0, 'gk-l') + line(xr - 5, y0 + ch, xr + 5, y0 + ch, 'gk-l');
+    s += text(xr + 9, y0 + ch / 2 + 4, H + ' px', 'gtk', 'start');
+    var cy = y0 + ch + ch / 2;
+    s += '<circle cx="' + (x0 + cw / 2) + '" cy="' + cy + '" r="3.5" class="ga"/><circle cx="' + (x0 + 1.5 * cw) + '" cy="' + cy + '" r="3.5" class="ga"/>';
+    s += '<line x1="' + (x0 + cw / 2 + 6) + '" y1="' + cy + '" x2="' + (x0 + 1.5 * cw - 6) + '" y2="' + cy + '" class="gk-l" marker-end="url(#ah)" marker-start="url(#ah)"/>';
+    s += text(x0 + cw, cy + 18, 'крок між центрами', 'gm');
+    return svg(360, y0 + 2 * ch + 30, s, 'Клітинка ' + W + ' на ' + H);
+  }
+
+  function reelsArt(C, R) {
+    var Cd = Math.min(C, 7), Rd = Math.min(R, 7);
+    var ch = Math.min(32, 128 / (Rd + 1)), y0 = 46, s = ARROW;
+    var cw = Math.min(24, 150 / Cd - 5), gap = 5, lw = Cd * (cw + gap) - gap, lx = 104 - lw / 2;
+    s += text(104, 18, 'animation_reels_' + C + '_columns', 'gt');
+    for (var i = 0; i < Cd; i++) s += rect(lx + i * (cw + gap), y0, cw, Rd * ch, i === 1 ? 'gas' : 'gc', 5);
+    s += text(lx + cw / 2, y0 + Rd * ch + 16, 'reel_0', 'gm', 'start');
+    s += text(lx + lw, y0 + Rd * ch + 16, 'reel_' + (C - 1), 'gm', 'end');
+    var sx = 262, sw = ch * 1.15;
+    s += text(sx + sw / 2, 18, 'animation_reel_' + R + '_rows', 'gt');
+    var cx = lx + (cw + gap) + cw / 2;
+    s += '<path d="M' + cx + ' ' + (y0 - 3) + ' C ' + cx + ' ' + (y0 - 14) + ', ' + (sx + sw / 2) + ' ' + (y0 - 16) + ', ' + (sx + sw / 2) + ' ' + (y0 - 5) + '" class="gk-l gd" marker-end="url(#ah)"/>';
+    for (var j = 1; j <= Rd; j++) {
+      s += rect(sx + 4, y0 + (j - 1) * ch + 3, sw - 8, ch - 6, 'gas', 5);
+      s += text(sx - 6, y0 + (j - 0.5) * ch + 4, 'slot_' + j, 'gm', 'end');
+    }
+    s += rect(sx, y0, sw, Rd * ch, 'gk', 4);
+    s += rect(sx + 4, y0 + Rd * ch + 6, sw - 8, ch - 6, 'gc gd', 5);
+    s += text(sx - 6, y0 + Rd * ch + 6 + ch / 2, 'slot_0', 'gm', 'end');
+    s += text(sx + sw / 2, y0 + (Rd + 1) * ch + 20, 'за кадром', 'gm');
+    s += '<line x1="' + (sx + sw + 14) + '" y1="' + (y0 + 6) + '" x2="' + (sx + sw + 14) + '" y2="' + (y0 + Rd * ch - 6) + '" class="gk-l" marker-end="url(#ah)"/>';
+    s += text(sx + sw + 22, y0 + Rd * ch / 2 + 4, 'спін', 'gtk', 'start');
+    return svg(360, y0 + (Rd + 1) * ch + 30, s, 'Спайни барабанів');
+  }
+
+  function layersArt(focus) {
+    var s = '';
+    var layers = [['under', 'рамка під'], ['symbols', 'символи'], ['above', 'рамка над']];
+    layers.forEach(function (L, idx) {
+      var y = 168 - idx * 50;
+      var A = [64, y], B = [244, y], D = [112, y - 36];
+      var P = function (u, v) { return [A[0] + u * (B[0] - A[0]) + v * (D[0] - A[0]), A[1] + u * (B[1] - A[1]) + v * (D[1] - A[1])]; };
+      var quad = function (u0, v0, u1, v1) { return [P(u0, v0), P(u1, v0), P(u1, v1), P(u0, v1)]; };
+      var on = focus === L[0] || focus === 'all';
+      if (L[0] === 'under') s += poly(quad(0, 0, 1, 1), on ? 'gas' : 'gc');
+      else if (L[0] === 'symbols') {
+        s += poly(quad(0, 0, 1, 1), 'gl gd');
+        for (var i = 0; i < 5; i++) for (var j = 0; j < 3; j++) s += poly(quad(i / 5 + 0.03, j / 3 + 0.08, (i + 1) / 5 - 0.03, (j + 1) / 3 - 0.08), on ? 'ga-o' : 'gc');
+      } else {
+        var o = quad(0, 0, 1, 1), w = quad(0.08, 0.16, 0.92, 0.84);
+        var d = 'M' + o.map(function (p) { return p[0].toFixed(1) + ' ' + p[1].toFixed(1); }).join(' L') + ' Z M' + w.map(function (p) { return p[0].toFixed(1) + ' ' + p[1].toFixed(1); }).join(' L') + ' Z';
+        s += '<path d="' + d + '" fill-rule="evenodd" class="' + (on ? 'gas' : 'gc') + '"/>';
+      }
+      s += line(252, y - 18, 268, y - 18, 'gl');
+      s += text(274, y - 14, L[1], on ? 'gtk' : 'gm', 'start');
+    });
+    return svg(360, 184, s, 'Шари: рамка під, символи, рамка над');
+  }
+
+  function symbolsArt() {
+    var s = text(92, 18, 'animation_symbols_static', 'gt');
+    [['symbol_high_1', 'gas'], ['symbol_high_1_blur', 'gc'], ['symbol_low_1', 'gc']].forEach(function (k, i) {
+      var y = 34 + i * 34;
+      s += rect(22, y, 140, 28, 'gc', 6) + rect(28, y + 4, 20, 20, k[1], 4) + text(56, y + 18, k[0], 'gm', 'start');
+    });
+    s += text(92, 150, 'скіни: крутяться в барабанах', 'gm');
+    s += text(270, 18, 'animation_symbol_high_1', 'gt');
+    s += rect(236, 30, 68, 68, 'gas', 12) + text(270, 72, 'H1', 'gbig');
+    ['idle', 'stop', 'win', 'win_idle'].forEach(function (a, i) {
+      var x = 196 + (i % 2) * 76, y = 108 + Math.floor(i / 2) * 22;
+      s += rect(x, y, 70, 18, 'gk', 9) + text(x + 35, y + 13, a, 'gt');
+    });
+    s += text(270, 168, 'анімації: стоїть або виграв', 'gm');
+    return svg(360, 178, s, 'Статичні символи і спайни анімацій символів');
+  }
+
+  function animsArt() {
+    var s = '', y = 30;
+    var segs = [['спін', 0, 70, 'gc gd'], ['stop', 72, 40, 'ga-o'], ['win', 114, 80, 'gas'], ['win_idle ∞', 196, 140, 'gk']];
+    segs.forEach(function (g) { s += rect(20 + g[1], y, g[2], 26, g[3], 6) + text(20 + g[1] + g[2] / 2, y + 44, g[0], g[0] === 'спін' ? 'gm' : 'gt'); });
+    s += text(20, 16, 'виграв', 'gm', 'start');
+    y = 104;
+    s += rect(20, y, 316, 26, 'gk', 6) + text(178, y + 17, 'idle ∞', 'gt');
+    s += text(20, y - 12, 'не виграв, гра чекає', 'gm', 'start');
+    return svg(360, 142, s, 'Коли грають анімації символів');
+  }
+
+  function loopArt() {
+    var s = ARROW + rect(30, 56, 300, 22, 'gc', 4);
+    s += diamond(30, 67, 8, 'ga') + diamond(130, 67, 6, 'gm-f') + diamond(230, 67, 6, 'gm-f') + diamond(330, 67, 8, 'ga');
+    s += '<path d="M330 50 C 300 8, 60 8, 32 48" class="gk-l" marker-end="url(#ah)"/>';
+    s += text(180, 22, 'по колу', 'gtk');
+    s += text(30, 100, 'перший кадр', 'gm', 'start') + text(330, 100, '= останній', 'gm', 'end');
+    return svg(360, 110, s, 'Петля без шва');
+  }
+
+  function eventsArt() {
+    var s = rect(20, 50, 320, 20, 'gc', 4);
+    for (var i = 0; i <= 10; i++) s += line(20 + i * 32, 70, 20 + i * 32, i % 5 ? 75 : 79, 'gl');
+    s += text(20, 94, '0', 'gm') + text(180, 94, '0,5 с', 'gm') + text(340, 94, '1 с', 'gm');
+    s += diamond(52, 60, 7, 'ga') + line(52, 50, 52, 30, 'gk-l') + text(58, 28, 'onFinalSymbol(2)@0.1', 'gt', 'start');
+    s += diamond(180, 60, 7, 'ga') + line(180, 50, 180, 14, 'gk-l') + text(186, 14, 'onEvent@0.5', 'gt', 'start');
+    return svg(360, 104, s, 'Події на таймлайні');
+  }
+
+  function skinsArt() {
+    var s = '';
+    [['default', 'gc'], ['maingame', 'gas'], ['freespins', 'gk2']].forEach(function (k, i) {
+      var x = 22 + i * 112;
+      s += rect(x, 24, 96, 66, k[1], 10) + rect(x + 14, 36, 68, 42, 'gbg', 5);
+      for (var c = 0; c < 3; c++) s += rect(x + 19 + c * 21, 46, 16, 22, 'gc', 3);
+      s += text(x + 48, 110, k[0], 'gt');
+    });
+    return svg(360, 120, s, 'Скіни default, maingame, freespins');
+  }
+
+  function spacerArt() {
+    var s = ARROW + rect(40, 24, 110, 110, 'gas', 16) + text(95, 92, 'H1', 'gbig');
+    var px = 95 + 0.34 * 110, py = 79 - 0.42 * 110;
+    s += '<circle cx="' + px + '" cy="' + py + '" r="6" class="gk"/>' + line(px - 11, py, px + 11, py, 'gk-l') + line(px, py - 11, px, py + 11, 'gk-l');
+    s += '<path d="M' + (px + 10) + ' ' + (py - 4) + ' C 190 20, 200 20, 222 30" class="gk-l gd" marker-end="url(#ah)"/>';
+    s += text(230, 36, 'txt_amount', 'gt', 'start') + text(230, 52, 'слот 1×1', 'gm', 'start');
+    s += text(230, 98, '×5', 'gbig', 'start') + text(230, 118, 'гра вставляє свій текст', 'gm', 'start');
+    return svg(360, 150, s, 'Спейсер txt_amount');
+  }
+
+  function placeArt() {
+    var s = ARROW + line(20, 96, 340, 96, 'gl gd') + line(120, 14, 120, 170, 'gl gd');
+    s += '<circle cx="120" cy="96" r="5" class="ga"/>' + text(126, 112, '(0, 0)', 'gtk', 'start');
+    s += rect(176, 26, 130, 76, 'gas', 8) + '<circle cx="241" cy="64" r="3.5" class="ga"/>';
+    s += '<line x1="124" y1="93" x2="236" y2="66" class="gk-l gd" marker-end="url(#ah)"/>';
+    s += text(186, 132, 'центр X, Y', 'gm', 'start');
+    s += line(176, 116, 306, 116, 'gk-l') + text(241, 150, 'розмір, px', 'gm');
+    return svg(360, 176, s, 'Розмір і центр елемента');
+  }
+
+  var DEMOS = ['fade_in', 'fade_out', 'pop_in', 'pop_out', 'pulse', 'breathe', 'land', 'win', 'shake', 'float_up', 'glow', 'flash', 'hold'];
+  function motionArt(presets) {
+    return '<div class="demos">' + DEMOS.map(function (p) {
+      return '<div class="demo"><span class="demo-box"><i class="dm-' + p + '"></i></span><b>' + esc(presets[p] ? presets[p].label : p) + '</b></div>';
+    }).join('') + '</div>';
+  }
+
+  function treeArt(folder) {
+    var rows = [
+      ['d', 0, 'my-slot-spine-drafts/'],
+      ['d', 1, folder, 'в арт-репо'],
+      ['f', 2, 'animation_*.json  .atlas  .png'],
+      ['d', 1, 'spine-editor/<назва>/', 'Import Data'],
+      ['f', 2, '<назва>.json'],
+      ['d', 2, 'images/'],
+      ['f', 1, 'README.txt'],
+      ['f', 1, 'kit-settings.json', 'налаштування']
+    ];
+    return '<ul class="tree">' + rows.map(function (r) {
+      return '<li style="--d:' + r[1] + '"><span class="ti ' + r[0] + '"></span><code>' + esc(r[2]) + '</code>' + (r[3] ? '<em>' + esc(r[3]) + '</em>' : '') + '</li>';
+    }).join('') + '</ul>';
+  }
+
+  function list(items) { return '<ul class="ilist">' + items.map(function (i) { return '<li>' + i + '</li>'; }).join('') + '</ul>'; }
+  function p(t) { return '<p>' + t + '</p>'; }
+  function c(t) { return '<code>' + esc(t) + '</code>'; }
+
+  var INFO = {
+    projects: { t: 'Проекти', x: function () { return p('Проект — налаштування однієї гри разом з картинками. Він зберігається в цьому браузері.') + p('Щоб передати колезі або не загубити, експортуйте проект у .json кнопкою біля назви і відкрийте його через «Імпорт».'); } },
+    game: { t: 'Назва гри', x: function () { return p('Латиницею, як у репо гри, наприклад ' + c('dice-dominium') + '. З неї кіт називає архів.'); } },
+    grid: { t: 'Сітка', a: function (g) { return gridArt(g.C, g.R); }, x: function (g) { return p('Барабан — вертикальна колонка, що крутиться. Ряд — скільки символів видно в одному барабані.') + p('Від сітки залежать назви спайнів барабанів: ' + c('animation_reels_' + g.C + '_columns') + ' і ' + c('animation_reel_' + g.R + '_rows') + '.'); } },
+    cell: { t: 'Клітинка', a: function (g) { return cellArt(g.W, g.H); }, x: function () { return p('Клітинка — крок між центрами сусідніх символів у px гри: по ширині між барабанами, по висоті між рядами.') + p('Символ вписується в клітинку, більша картинка зменшиться. У шаблоні Pandora клітинка 334×334.'); } },
+    tech: { t: 'Технічне', x: function () { return list([c('Версія Spine') + ': валідатор арт-репо перевіряє її до патча.', c('fps') + ': крок кадру для спіну барабанів.', c('Папка') + ': куди в арт-репо класти .json, .atlas і .png.']); } },
+    components: { t: 'Компоненти', a: function () { return layersArt('all'); }, x: function () { return p('Компонент — елемент гри, для якого потрібна чернетка. Кожен дає один або кілька спайнів під фінальними назвами, які шукає гра.') + p('Вимкнений компонент не потрапляє в архів. Інші елементи додайте кнопками «+».'); } },
+    symbols: { t: 'Символи', a: symbolsArt, x: function () { return p(c('animation_symbols_static') + ' містить усі символи як скіни ' + c('symbol_<назва>') + ' і ' + c('symbol_<назва>_blur') + '. Саме вони крутяться в барабанах.') + p(c('animation_symbol_<назва>') + ' — окремий спайн символу з анімаціями. Гра вмикає його, коли символ зупинився або виграв.') + p('Кидайте PNG: назва файлу стає назвою символу, ' + c('high_1.png') + ' → ' + c('high_1') + '.'); } },
+    anims: { t: 'Анімації символів', a: animsArt, x: function () { return list([c('idle') + ' — символ стоїть, гра чекає. Петля.', c('stop') + ' — барабан щойно зупинився.', c('win') + ' — символ у виграшній комбінації.', c('win_idle') + ' — повтор виграшних ліній після показу виграшу. Петля.', c('win_insignificant') + ' — виграш, менший за поріг «незначного».']) + p('Гра просить анімацію за назвою, тому назви не міняйте.'); } },
+    motion: { t: 'Рух', a: function (g, presets) { return motionArt(presets); }, x: function () { return p('Рух — заготовка ключів для чернетки: масштаб, нахил, зсув, прозорість. Тривалість береться з колонки «Сек». Фінальну анімацію робить аніматор.'); } },
+    loop: { t: 'Петля', a: loopArt, x: function () { return p('Позначка, що анімація грає по колу. Перший і останній кадр мають збігатися, інакше на стику буде ривок.') + p('Spine петлю не зберігає, її вмикає гра.'); } },
+    events: { t: 'Події', a: eventsArt, x: function () { return p('Подія — мітка в анімації, на яку реагує код гри: звук, підміна символу, старт іншої анімації.') + p('Формат ' + c('onEvent@0.5') + ': назва і секунда. Число в дужках — int: ' + c('onFinalSymbol(2)@0.1') + '. Кілька подій пишіть через кому.'); } },
+    skins: { t: 'Скіни', a: skinsArt, x: function () { return p('Скін — варіант картинки того самого спайна. Гра вмикає його за назвою, наприклад рамка у фрі-спінах.') + p('Скін без своїх картинок бере їх із ' + c('default') + '. Назви пишіть через кому.'); } },
+    spacers: { t: 'Спейсери', a: spacerArt, x: function () { return p('Спейсер — порожній слот 1×1 з вкладенням ' + c('shapes/spacer') + '. Гра вставляє туди свій текст або об’єкт, наприклад суму виграшу в ' + c('txt_amount') + '.') + p('Назви пишіть через кому. Закінчення ' + c('_left') + ', ' + c('_right') + ', ' + c('_top') + ', ' + c('_bottom') + ' ставить точку біля краю картинки.'); } },
+    reels: { t: 'Барабани', a: function (g) { return reelsArt(g.C, g.R); }, x: function (g) { return p(c('animation_reels_' + g.C + '_columns') + ' тримає точки ' + c('reel_0') + '…' + c('reel_' + (g.C - 1)) + '. У кожну гра вставляє один барабан.') + p(c('animation_reel_' + g.R + '_rows') + ' — сам барабан. ' + c('slot_1') + '…' + c('slot_' + g.R) + ' видно, ' + c('slot_0') + ' ховається за кадром і підвозить наступний символ.') + p(c('spin_loop') + ' крутить, ' + c('spin_stop') + ' зупиняє з відскоком. Події ' + c('onOffScreen') + ' і ' + c('onFinalSymbol') + ' кажуть грі, коли підміняти символ.'); } },
+    frame_under: { t: 'Рамка під барабанами', a: function () { return layersArt('under'); }, x: function () { return p('Малюється за символами: тло барабанів і роздільники колонок. Займає сітку з невеликим полем.') + p('Своя картинка розтягнеться так, щоб закрити сітку.'); } },
+    frame_above: { t: 'Рамка над барабанами', a: function () { return layersArt('above'); }, x: function () { return p('Малюється поверх символів. Дайте PNG з прозорим вікном: кіт знайде вікно і покладе його точно на сітку.') + p('Якщо вікна немає, картинка стане по центру.'); } },
+    custom: { t: 'Свій компонент', a: placeArt, x: function () { return p('Будь-який інший елемент: фон, логотип, попап, панель. Назва спайна має бути фінальною, як її шукатиме гра.') + p('Розмір — скільки px елемент займає в грі. Центр — зсув картинки від точки (0, 0), куди гра ставить спайн.'); } },
+    preview: { t: 'Превʼю', x: function () { return p('Живий рантайм Spine 4.1: так чернетку покаже гра.') + p('У превʼю барабанів кіт тимчасово вставляє символи в слоти й обрізає вікном сітки. У файли це не йде.'); } },
+    download: { t: 'Що в архіві', a: function (g, presets, tech) { return treeArt(tech.folder); }, x: function () { return p('Перша папка лягає в арт-репо як є. Друга — для Spine Editor: Import Data, картинки поруч.'); } },
+    check: { t: 'Перевірка', x: function () { return p('Киньте .json, .atlas і .png зі Spine Editor. Кіт звірить їх із компонентами поточного проекту так само, як валідатор арт-репо:') + list(['версія Spine і експорт без Nonessential data', 'скіни, анімації та їхній порядок', 'спейсери й події', 'тривалість ±10 %', 'регіони атласу, розміри PNG, useIndexes']); } }
+  };
+
+  root.SpineKitInfo = {
+    has: function (key) { return !!INFO[key]; },
+    title: function (key) { return INFO[key] ? INFO[key].t : ''; },
+    render: function (key, ctx) {
+      var it = INFO[key];
+      if (!it) return null;
+      return { title: it.t, art: it.a ? it.a(ctx.geometry, ctx.presets, ctx.tech) : '', html: it.x(ctx.geometry) };
+    },
+    gridArt: gridArt,
+    cellArt: cellArt,
+    miniGrid: function (C, R) {
+      var cs = Math.min(9, 44 / C, 30 / R), w = C * cs, h = R * cs, s = '';
+      for (var i = 0; i < C; i++) for (var j = 0; j < R; j++) s += rect(i * cs + 1, j * cs + 1, cs - 2, cs - 2, 'gc', 1.5);
+      return '<svg class="mini" viewBox="0 0 ' + w + ' ' + h + '" width="' + w + '" height="' + h + '" aria-hidden="true">' + s + '</svg>';
+    },
+    icon: function (kind) {
+      var I = {
+        symbols: rect(3, 3, 8, 8, 'ga', 2) + rect(13, 3, 8, 8, 'gc', 2) + rect(3, 13, 8, 8, 'gc', 2) + rect(13, 13, 8, 8, 'ga', 2),
+        reels: rect(3, 4, 5, 16, 'gc', 1.5) + rect(9.5, 4, 5, 16, 'ga', 1.5) + rect(16, 4, 5, 16, 'gc', 1.5),
+        frame_under: rect(2, 4, 20, 16, 'ga', 3) + rect(5, 7, 14, 10, 'gbg', 1.5),
+        frame_above: '<path d="M2 7 a3 3 0 0 1 3 -3 h14 a3 3 0 0 1 3 3 v10 a3 3 0 0 1 -3 3 h-14 a3 3 0 0 1 -3 -3 z M6 8 v8 h12 v-8 z" fill-rule="evenodd" class="ga"/>',
+        background: rect(2, 4, 20, 16, 'gc', 2) + '<path d="M3 18 l6 -7 l4 4 l3 -3 l5 6 z" class="ga"/>',
+        logo: '<path d="M12 3 l2.6 5.6 6 .7 -4.5 4 1.3 6 -5.4 -3.1 -5.4 3.1 1.3 -6 -4.5 -4 6 -.7 z" class="ga"/>',
+        popup: rect(3, 5, 18, 14, 'gc', 3) + rect(6, 14, 12, 3, 'ga', 1.5) + rect(6, 8, 12, 2, 'gm-f', 1),
+        custom: rect(4, 4, 16, 16, 'gc gd', 3) + '<path d="M12 8 v8 M8 12 h8" class="gk-l"/>'
+      };
+      return '<svg class="icon" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">' + (I[kind] || I.custom) + '</svg>';
+    }
+  };
+})(typeof window !== 'undefined' ? window : globalThis);
+</script>
+<script>(function () {
+  'use strict';
+  var K = window.SpineDraftKit;
+  var Store = window.SpineKitStore;
+  var Info = window.SpineKitInfo;
+  var SPINE_URL = 'https://cdn.jsdelivr.net/npm/@esotericsoftware/spine-player@4.1.55/dist/iife/spine-player.min.js';
+  var ZIP_URL = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
+  var LEGACY = 'spine-draft-kit.v2';
+  var LAST = 'spine-draft-kit.last';
+  var GRIDS = [[3, 3], [5, 3], [5, 4], [6, 4], [6, 5], [7, 7]];
+  var TITLES = { symbols: 'Символи', reels: 'Барабани', frame_under: 'Рамка під барабанами', frame_above: 'Рамка над барабанами' };
+
+  function $(id) { return document.getElementById(id); }
+  function el(tag, attrs, kids) {
+    var n = document.createElement(tag);
+    Object.keys(attrs || {}).forEach(function (k) {
+      var v = attrs[k];
+      if (v === undefined || v === null || v === false) return;
+      if (k === 'class') n.className = v;
+      else if (k === 'text') n.textContent = v;
+      else if (k.indexOf('on') === 0 && typeof v === 'function') n.addEventListener(k.slice(2), v);
+      else if (k === 'value') n.value = v;
+      else if (k === 'checked') n.checked = !!v;
+      else n.setAttribute(k, v === true ? '' : v);
+    });
+    [].concat(kids || []).forEach(function (c) { if (c !== null && c !== undefined && c !== false) n.appendChild(typeof c === 'string' ? document.createTextNode(c) : c); });
+    return n;
+  }
+  function A(name, duration, preset, loop, events) { return { name: name, duration: duration, preset: preset, loop: !!loop, events: events || '' }; }
+  var seq = 0;
+  function newId() { seq += 1; return 'c' + Date.now().toString(36) + seq; }
+
+  function symbolAnims() { return [A('idle', 2, 'breathe', true), A('stop', 0.28, 'land'), A('win', 0.85, 'win'), A('win_idle', 0.85, 'win', true), A('win_insignificant', 0.65, 'pulse')]; }
+  function frameAnims() { return [A('in', 0.5, 'fade_in'), A('loop_1', 2, 'hold', true), A('out', 0.3, 'fade_out')]; }
+  var TEMPLATES = {
+    background: { label: 'Фон', name: 'animation_bg', w: 1920, h: 1080, anims: function () { return [A('in', 1, 'fade_in'), A('loop_1', 4, 'hold', true), A('out', 0.3, 'fade_out')]; } },
+    logo: { label: 'Логотип', name: 'animation_game_logo', w: 640, h: 280, anims: function () { return [A('in', 0.55, 'pop_in'), A('loop_1', 2, 'breathe', true), A('out', 0.3, 'pop_out')]; } },
+    popup: { label: 'Попап', name: 'animation_popup', w: 900, h: 600, anims: function () { return [A('in', 0.55, 'pop_in'), A('loop_1', 1.15, 'glow', true), A('out', 0.3, 'pop_out')]; } },
+    custom: { label: 'Свій', name: 'animation_element', w: 400, h: 400, anims: function () { return [A('in', 0.35, 'fade_in'), A('loop_1', 2, 'breathe', true), A('out', 0.35, 'fade_out')]; } }
+  };
+
+  function defaults() {
+    return {
+      kit: 2,
+      game: '',
+      reels: 5,
+      rows: 3,
+      cell: { w: 334, h: 334 },
+      tech: { spineVersion: K.TECH.spineVersion, fps: K.TECH.fps, folder: K.TECH.folder },
+      components: [
+        { id: 'symbols', type: 'symbols', on: true, txt: true, anims: symbolAnims(), symbols: ['wild_1', 'scatter_1', 'high_1', 'high_2', 'high_3', 'high_4', 'low_1', 'low_2', 'low_3', 'low_4'].map(function (n) { return { name: n }; }) },
+        { id: 'reels', type: 'reels', on: true },
+        { id: 'frame_under', type: 'frame_under', on: true, skins: 'default, freespins, maingame', spacers: '', anims: frameAnims() },
+        { id: 'frame_above', type: 'frame_above', on: true, skins: 'default, freespins, maingame', spacers: '', anims: frameAnims() }
+      ]
+    };
+  }
+
+  function normalize(raw) {
+    var d = defaults();
+    if (!raw || typeof raw !== 'object' || !Array.isArray(raw.components)) return d;
+    var s = {
+      kit: 2,
+      game: typeof raw.game === 'string' ? raw.game : '',
+      reels: Math.min(12, Math.max(1, Number(raw.reels) || d.reels)),
+      rows: Math.min(12, Math.max(1, Number(raw.rows) || d.rows)),
+      cell: { w: Number(raw.cell && raw.cell.w) || d.cell.w, h: Number(raw.cell && raw.cell.h) || d.cell.h },
+      tech: Object.assign({}, d.tech, raw.tech || {}),
+      components: raw.components.filter(function (c) { return c && c.type; }).map(function (c) {
+        var o = JSON.parse(JSON.stringify(c));
+        o.id = o.id || newId();
+        if (o.type === 'symbols') { o.symbols = (o.symbols || []).filter(function (x) { return x && x.name; }); o.anims = o.anims || symbolAnims(); }
+        if (o.type === 'frame_under' || o.type === 'frame_above' || o.type === 'custom') o.anims = o.anims || frameAnims();
+        return o;
+      })
+    };
+    ['symbols', 'reels', 'frame_under', 'frame_above'].forEach(function (id) {
+      if (!s.components.some(function (c) { return c.type === id; })) {
+        var c = d.components.filter(function (x) { return x.type === id; })[0];
+        c.on = false;
+        s.components.push(c);
+      }
+    });
+    return s;
+  }
+
+  var state = {
+    s: defaults(),
+    images: {},
+    open: { symbols: true },
+    sel: null,
+    plan: null,
+    pv: { spine: 'animation_symbol_high_1', anim: 'win', skin: null },
+    lib: { spine: 'loading', zip: 'loading' },
+    player: null,
+    check: { json: null, atlas: null, pngs: {}, list: [] },
+    pid: null,
+    projects: [],
+    blobs: {},
+    wiz: null,
+    confirmDel: null,
+    gameOpen: false
+  };
+
+  function comp(id) { return state.s.components.filter(function (c) { return c.id === id; })[0]; }
+  function symComp() { return state.s.components.filter(function (c) { return c.type === 'symbols'; })[0]; }
+  function geo() { return K.geometry(state.s); }
+
+  function toast(text) {
+    var t = el('div', { class: 'toast', role: 'status', text: text });
+    document.body.appendChild(t);
+    setTimeout(function () { t.remove(); }, 2600);
+  }
+
+  var saveTimer = null;
+  function scheduleSave() { clearTimeout(saveTimer); saveTimer = setTimeout(saveNow, 400); }
+  function saveNow() {
+    clearTimeout(saveTimer);
+    if (!state.pid) return Promise.resolve();
+    var old = state.projects.filter(function (p) { return p.id === state.pid; })[0];
+    var rec = { id: state.pid, created: old ? old.created : Date.now(), updated: Date.now(), settings: JSON.parse(JSON.stringify(state.s)), images: Object.assign({}, state.blobs) };
+    updateMeta(rec);
+    return Store.put(rec);
+  }
+
+  var timer = null;
+  function changed(opts) {
+    opts = opts || {};
+    scheduleSave();
+    if (opts.render) renderComponents();
+    clearTimeout(timer);
+    timer = setTimeout(rebuild, opts.now ? 0 : 140);
+  }
+
+  function fitPx(w, h, max) {
+    var s = Math.min(1, max / Math.max(w, h));
+    return { w: Math.max(1, Math.round(w * s)), h: Math.max(1, Math.round(h * s)) };
+  }
+
+  function px(key) {
+    var im = state.images[key];
+    if (im) return { w: im.w, h: im.h, win: im.win || null, uploaded: true };
+    var g = geo();
+    if (key.indexOf('sym:') === 0) return { w: Math.round(0.86 * g.W), h: Math.round(0.86 * g.H) };
+    if (key === 'frame_under') return fitPx(g.gridW + 2 * g.margin, g.gridH + 2 * g.margin, 2048);
+    if (key === 'frame_above') return fitPx(g.gridW + 2 * g.border, g.gridH + 2 * g.border, 2048);
+    if (key.indexOf('c:') === 0) {
+      var c = comp(key.slice(2));
+      return fitPx(Number(c && c.w) || 400, Number(c && c.h) || 400, 1024);
+    }
+    return null;
+  }
+
+  function rr(ctx, x, y, w, h, r) {
+    r = Math.max(0, Math.min(r, w / 2, h / 2));
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+  function hashHue(s) { var h = 0; for (var i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) % 360; return h; }
+  function symHue(name) {
+    var m = /(high|low|h|l)_?(\d+)/.exec(name);
+    if (/wild/.test(name)) return [44, 92];
+    if (/scatter|free|bonus/.test(name)) return [272, 62];
+    if (/jackpot/.test(name)) return [8, 76];
+    if (m && /^h/.test(m[1])) return [[352, 18, 326, 34, 300][(Number(m[2]) - 1) % 5], 64];
+    if (m) return [[204, 168, 140, 228, 188, 254][(Number(m[2]) - 1) % 6], 52];
+    return [hashHue(name), 40];
+  }
+  function symLabel(name) {
+    var m = /^(high|low)_?(\d+)$/.exec(name);
+    if (m) return (m[1] === 'high' ? 'H' : 'L') + m[2];
+    if (/^wild/.test(name)) return 'W';
+    if (/^scatter/.test(name)) return 'S';
+    if (/^(free|bonus)/.test(name)) return 'B';
+    return name.replace(/_/g, '').slice(0, 3).toUpperCase();
+  }
+  var FONT = 'system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif';
+
+  function drawSymbol(name, w, h) {
+    var c = el('canvas', { width: w, height: h });
+    var x = c.getContext('2d');
+    var hs = symHue(name);
+    var g = x.createLinearGradient(0, 0, w, h);
+    g.addColorStop(0, 'hsl(' + hs[0] + ',' + hs[1] + '%,64%)');
+    g.addColorStop(1, 'hsl(' + hs[0] + ',' + hs[1] + '%,34%)');
+    var r = 0.18 * Math.min(w, h);
+    rr(x, 1, 1, w - 2, h - 2, r);
+    x.fillStyle = g;
+    x.fill();
+    x.lineWidth = Math.max(2, 0.025 * w);
+    x.strokeStyle = 'rgba(255,255,255,0.45)';
+    rr(x, x.lineWidth, x.lineWidth, w - 2 * x.lineWidth, h - 2 * x.lineWidth, r * 0.85);
+    x.stroke();
+    x.fillStyle = '#fff';
+    x.textAlign = 'center';
+    x.textBaseline = 'middle';
+    x.shadowColor = 'rgba(0,0,0,0.35)';
+    x.shadowBlur = 0.04 * h;
+    x.font = '700 ' + Math.round(0.4 * h) + 'px ' + FONT;
+    x.fillText(symLabel(name), w / 2, h * 0.47);
+    x.shadowBlur = 0;
+    x.font = '500 ' + Math.round(0.085 * h) + 'px ' + FONT;
+    x.fillStyle = 'rgba(255,255,255,0.85)';
+    x.fillText(name, w / 2, h * 0.84);
+    return c;
+  }
+
+  function drawFrameUnder(w, h) {
+    var g = geo();
+    var c = el('canvas', { width: w, height: h });
+    var x = c.getContext('2d');
+    var s = w / (g.gridW + 2 * g.margin);
+    var grad = x.createLinearGradient(0, 0, 0, h);
+    grad.addColorStop(0, '#26304f');
+    grad.addColorStop(1, '#151a2c');
+    rr(x, 0, 0, w, h, 0.05 * Math.min(g.W, g.H) * s);
+    x.fillStyle = grad;
+    x.fill();
+    x.fillStyle = 'rgba(255,255,255,0.07)';
+    for (var i = 1; i < g.C; i++) x.fillRect((g.margin + i * g.W) * s - 2 * s, g.margin * s, 4 * s, g.gridH * s);
+    x.strokeStyle = 'rgba(255,255,255,0.12)';
+    x.lineWidth = 2 * s;
+    rr(x, g.margin * s, g.margin * s, g.gridW * s, g.gridH * s, 0.03 * g.W * s);
+    x.stroke();
+    return c;
+  }
+
+  function drawFrameAbove(w, h) {
+    var g = geo();
+    var c = el('canvas', { width: w, height: h });
+    var x = c.getContext('2d');
+    var s = w / (g.gridW + 2 * g.border);
+    var b = g.border * s;
+    var grad = x.createLinearGradient(0, 0, w, h);
+    grad.addColorStop(0, '#f7dc8a');
+    grad.addColorStop(0.45, '#c8922c');
+    grad.addColorStop(1, '#8a5a14');
+    rr(x, 0, 0, w, h, 0.5 * b);
+    x.fillStyle = grad;
+    x.fill();
+    x.globalCompositeOperation = 'destination-out';
+    rr(x, b, b, g.gridW * s, g.gridH * s, 0.18 * b);
+    x.fill();
+    x.globalCompositeOperation = 'source-over';
+    x.lineWidth = Math.max(2, 0.08 * b);
+    x.strokeStyle = 'rgba(80,46,6,0.9)';
+    rr(x, b, b, g.gridW * s, g.gridH * s, 0.18 * b);
+    x.stroke();
+    x.strokeStyle = 'rgba(255,240,200,0.6)';
+    rr(x, x.lineWidth, x.lineWidth, w - 2 * x.lineWidth, h - 2 * x.lineWidth, 0.45 * b);
+    x.stroke();
+    return c;
+  }
+
+  function drawCustom(c, w, h) {
+    var cv = el('canvas', { width: w, height: h });
+    var x = cv.getContext('2d');
+    var name = String(c.name || '').replace(/^animation_/, '');
+    var hue = hashHue(name);
+    var bg = /(^|_)bg$|background/.test(name);
+    var grad = x.createLinearGradient(0, 0, w, h);
+    grad.addColorStop(0, 'hsl(' + hue + ',45%,' + (bg ? 30 : 62) + '%)');
+    grad.addColorStop(1, 'hsl(' + ((hue + 40) % 360) + ',50%,' + (bg ? 14 : 38) + '%)');
+    if (bg) { x.fillStyle = grad; x.fillRect(0, 0, w, h); }
+    else { rr(x, 1, 1, w - 2, h - 2, 0.12 * Math.min(w, h)); x.fillStyle = grad; x.fill(); }
+    x.setLineDash([0.03 * Math.min(w, h), 0.02 * Math.min(w, h)]);
+    x.lineWidth = Math.max(2, 0.012 * Math.min(w, h));
+    x.strokeStyle = 'rgba(255,255,255,0.4)';
+    if (bg) x.strokeRect(0.04 * w, 0.04 * h, 0.92 * w, 0.92 * h);
+    else { rr(x, 0.05 * w, 0.05 * h, 0.9 * w, 0.9 * h, 0.09 * Math.min(w, h)); x.stroke(); }
+    x.fillStyle = '#fff';
+    x.textAlign = 'center';
+    x.textBaseline = 'middle';
+    x.font = '600 ' + Math.round(Math.min(0.12 * h, 1.4 * w / Math.max(4, name.length))) + 'px ' + FONT;
+    x.fillText(name, w / 2, h / 2);
+    return cv;
+  }
+
+  var artCache = {};
+  function art(key) {
+    var im = state.images[key];
+    if (im) return im.canvas;
+    var p = px(key);
+    if (!p) return null;
+    var g = geo();
+    var c = key.indexOf('c:') === 0 ? comp(key.slice(2)) : null;
+    var ck = key + '|' + p.w + 'x' + p.h + '|' + g.C + 'x' + g.R + '|' + g.W + 'x' + g.H + '|' + (c ? c.name : '');
+    if (artCache[ck]) return artCache[ck];
+    var cv;
+    if (key.indexOf('sym:') === 0) cv = drawSymbol(key.slice(4), p.w, p.h);
+    else if (key === 'frame_under') cv = drawFrameUnder(p.w, p.h);
+    else if (key === 'frame_above') cv = drawFrameAbove(p.w, p.h);
+    else cv = drawCustom(c || { name: key }, p.w, p.h);
+    artCache[ck] = cv;
+    return cv;
+  }
+
+  var thumbCache = new WeakMap();
+  function thumb(canvas) {
+    if (!canvas) return '';
+    var t = thumbCache.get(canvas);
+    if (t) return t;
+    var s = Math.min(1, 128 / Math.max(canvas.width, canvas.height));
+    var c = el('canvas', { width: Math.max(1, Math.round(canvas.width * s)), height: Math.max(1, Math.round(canvas.height * s)) });
+    c.getContext('2d').drawImage(canvas, 0, 0, c.width, c.height);
+    t = c.toDataURL('image/png');
+    thumbCache.set(canvas, t);
+    return t;
+  }
+
+  function loadImage(url) {
+    return new Promise(function (resolve, reject) {
+      var img = new Image();
+      img.onload = function () { resolve(img); };
+      img.onerror = function () { reject(new Error('картинка не читається')); };
+      img.src = url;
+    });
+  }
+  function readAsDataUrl(file) {
+    return new Promise(function (resolve, reject) {
+      var r = new FileReader();
+      r.onload = function () { resolve(r.result); };
+      r.onerror = function () { reject(r.error); };
+      r.readAsDataURL(file);
+    });
+  }
+  async function canvasFromUrl(url) {
+    var img = await loadImage(url);
+    var p = fitPx(img.naturalWidth, img.naturalHeight, 4092);
+    var c = el('canvas', { width: p.w, height: p.h });
+    c.getContext('2d').drawImage(img, 0, 0, p.w, p.h);
+    return { canvas: c, natural: { w: img.naturalWidth, h: img.naturalHeight } };
+  }
+  function windowOf(canvas) {
+    var s = Math.min(1, 1024 / Math.max(canvas.width, canvas.height));
+    var w = Math.max(1, Math.round(canvas.width * s)), h = Math.max(1, Math.round(canvas.height * s));
+    var c = el('canvas', { width: w, height: h });
+    var x = c.getContext('2d');
+    x.drawImage(canvas, 0, 0, w, h);
+    var data = x.getImageData(0, 0, w, h).data;
+    var alpha = new Uint8Array(w * h);
+    for (var i = 0; i < w * h; i++) alpha[i] = data[i * 4 + 3];
+    var win = K.findWindow(alpha, w, h);
+    if (!win) return null;
+    return { left: win.left / s, top: win.top / s, right: win.right / s, bottom: win.bottom / s };
+  }
+  function dataUrlBlob(url) {
+    var m = /^data:([^;,]*)(;base64)?,(.*)$/.exec(url);
+    if (!m) throw new Error('не data URL');
+    var raw = m[2] ? atob(m[3]) : decodeURIComponent(m[3]);
+    var bytes = new Uint8Array(raw.length);
+    for (var i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
+    return new Blob([bytes], { type: m[1] || 'image/png' });
+  }
+  async function setImage(key, source, fileName) {
+    var blob = typeof source === 'string' ? dataUrlBlob(source) : source;
+    var url = URL.createObjectURL(blob);
+    var r;
+    try { r = await canvasFromUrl(url); } finally { URL.revokeObjectURL(url); }
+    var im = { canvas: r.canvas, w: r.canvas.width, h: r.canvas.height, fileName: fileName || '' };
+    if (key === 'frame_above') im.win = windowOf(r.canvas);
+    state.images[key] = im;
+    state.blobs[key] = blob;
+    return r.natural;
+  }
+  function forgetImage(key) { delete state.images[key]; delete state.blobs[key]; }
+  function dropImage(key) {
+    forgetImage(key);
+    changed({ render: true, images: true });
+  }
+
+  async function addImageFile(key, file, after) {
+    try {
+      var natural = await setImage(key, file, file.name);
+      if (after) after(natural);
+      changed({ render: true, images: true });
+    } catch (e) { toast('Не вдалося прочитати ' + file.name); }
+  }
+
+  function symbolNameFromFile(n) {
+    return K.slug(n).replace(/^animation_symbol_/, '').replace(/^symbol_/, '').replace(/_blur$/, '');
+  }
+  async function addSymbolFiles(files) {
+    var c = symComp();
+    var added = 0;
+    for (var i = 0; i < files.length; i++) {
+      var f = files[i];
+      if (!/^image\//.test(f.type)) continue;
+      var name = symbolNameFromFile(f.name);
+      if (!name) continue;
+      if (!c.symbols.some(function (s) { return s.name === name; })) c.symbols.push({ name: name });
+      try { await setImage('sym:' + name, f, f.name); added++; } catch (e) { toast('Не вдалося прочитати ' + f.name); }
+    }
+    if (added) {
+      state.sel = symbolNameFromFile(files[files.length - 1].name);
+      changed({ render: true, images: true });
+      if (state.wiz) renderWizard();
+    }
+  }
+
+  function fileButton(label, accept, multiple, onFiles) {
+    var id = 'f' + newId();
+    var input = el('input', { type: 'file', class: 'file', id: id, accept: accept, multiple: multiple || null });
+    input.addEventListener('change', function () { var fs = Array.prototype.slice.call(input.files || []); input.value = ''; if (fs.length) onFiles(fs); });
+    return [input, el('label', { class: 'btn sm', for: id, text: label })];
+  }
+  function dropTarget(node, onFiles) {
+    node.addEventListener('dragover', function (e) { e.preventDefault(); node.classList.add('over'); });
+    node.addEventListener('dragleave', function () { node.classList.remove('over'); });
+    node.addEventListener('drop', function (e) {
+      e.preventDefault();
+      node.classList.remove('over');
+      var fs = Array.prototype.slice.call((e.dataTransfer && e.dataTransfer.files) || []);
+      if (fs.length) onFiles(fs);
+    });
+  }
+
+  function infoBtn(key) { return el('button', { type: 'button', class: 'info', 'data-info': key, 'aria-label': 'Що таке: ' + Info.title(key), text: 'i' }); }
+
+  function animTable(rows) {
+    var wrap = el('div', { class: 'anims' });
+    wrap.appendChild(el('div', { class: 'a-head' }, [el('span', { text: 'Анімація' }), el('span', { text: 'Сек' }), el('span', {}, ['Рух', infoBtn('motion')]), el('span', {}, ['∞', infoBtn('loop')]), el('span', {}, ['Події', infoBtn('events')]), el('span')]));
+    rows.forEach(function (a, i) {
+      var sel = el('select', { 'aria-label': 'Рух ' + a.name, onchange: function () { a.preset = sel.value; changed(); } });
+      Object.keys(K.PRESETS).forEach(function (p) { sel.appendChild(el('option', { value: p, text: K.PRESETS[p].label })); });
+      sel.value = K.PRESETS[a.preset] ? a.preset : K.presetFor(a.name, 'custom');
+      wrap.appendChild(el('div', { class: 'a-row' }, [
+        el('input', { type: 'text', value: a.name, spellcheck: 'false', 'aria-label': 'Назва анімації', oninput: function (e) { a.name = e.target.value.trim(); changed(); } }),
+        el('input', { type: 'number', value: String(a.duration), min: '0', step: '0.01', 'aria-label': 'Тривалість, с', oninput: function (e) { a.duration = Number(e.target.value); changed(); } }),
+        sel,
+        el('input', { type: 'checkbox', checked: a.loop, title: 'Петля', 'aria-label': 'Петля', onchange: function (e) { a.loop = e.target.checked; changed(); } }),
+        el('input', { type: 'text', class: 'ev', value: typeof a.events === 'string' ? a.events : '', placeholder: 'onEvent@0.5', spellcheck: 'false', 'aria-label': 'Події', oninput: function (e) { a.events = e.target.value; changed(); } }),
+        el('button', { type: 'button', class: 'btn ghost icon del', title: 'Прибрати', 'aria-label': 'Прибрати ' + a.name, text: '✕', onclick: function () { rows.splice(i, 1); changed({ render: true }); } })
+      ]));
+    });
+    wrap.appendChild(el('div', {}, [el('button', { type: 'button', class: 'btn ghost sm', text: '+ анімація', onclick: function () { rows.push(A('anim_' + (rows.length + 1), 0.5, 'hold')); changed({ render: true }); } })]));
+    return wrap;
+  }
+
+  function textField(label, value, cls, onInput, placeholder, info) {
+    var id = 'i' + newId();
+    return el('div', { class: 'field' }, [
+      el('span', { class: 'lbl' }, [el('label', { for: id, text: label }), info ? infoBtn(info) : null]),
+      el('input', { type: 'text', id: id, class: cls || null, value: value || '', placeholder: placeholder || null, spellcheck: 'false', autocomplete: 'off', oninput: function (e) { onInput(e.target.value, e.target); } })
+    ]);
+  }
+  function numPair(label, a, b, onA, onB, labels, info) {
+    return el('div', { class: 'field' }, [
+      el('span', { class: 'lbl' }, [label, info ? infoBtn(info) : null]),
+      el('span', { class: 'dims' }, [
+        el('input', { type: 'number', value: String(a), 'aria-label': labels[0], step: 'any', oninput: function (e) { onA(e.target.value); } }),
+        labels[2] || '×',
+        el('input', { type: 'number', value: String(b), 'aria-label': labels[1], step: 'any', oninput: function (e) { onB(e.target.value); } })
+      ])
+    ]);
+  }
+
+  function imageRow(key, note, after) {
+    var im = state.images[key];
+    var row = el('div', { class: 'img-row' }, [
+      el('div', { class: 'prev' }, [el('img', { alt: '', src: thumb(art(key)) })])
+    ].concat(fileButton(im ? 'Замінити' : 'Картинка', 'image/png,image/webp,image/jpeg', false, function (fs) { addImageFile(key, fs[0], after); }))
+      .concat([im ? el('button', { type: 'button', class: 'btn ghost sm', text: 'Прибрати', onclick: function () { dropImage(key); } }) : null, el('span', { class: 'note', text: note || (im ? im.fileName : 'заглушка') })]));
+    dropTarget(row, function (fs) { addImageFile(key, fs[0], after); });
+    return row;
+  }
+
+  function symbolsBody(c) {
+    var body = el('div', { class: 'comp-body' });
+    var tiles = el('div', { class: 'tiles' });
+    c.symbols.forEach(function (s) {
+      tiles.appendChild(el('button', { type: 'button', class: 'tile', 'aria-pressed': String(state.sel === s.name), title: s.name, onclick: function () { state.sel = state.sel === s.name ? null : s.name; renderComponents(); } }, [
+        el('img', { alt: '', src: thumb(art('sym:' + s.name)) }),
+        el('span', {}, [s.name, s.ownAnims ? el('b', { class: 'own', text: ' •' }) : null])
+      ]));
+    });
+    tiles.appendChild(el('button', { type: 'button', class: 'tile add', title: 'Додати символ', 'aria-label': 'Додати символ', text: '+', onclick: function () {
+      var n = 1;
+      while (c.symbols.some(function (s) { return s.name === 'symbol_' + n; })) n++;
+      c.symbols.push({ name: 'symbol_' + n });
+      state.sel = 'symbol_' + n;
+      changed({ render: true });
+    } }));
+    dropTarget(tiles, addSymbolFiles);
+    body.appendChild(el('div', { class: 'sub', text: 'Символи' }));
+    body.appendChild(tiles);
+    body.appendChild(el('div', { class: 'img-row' }, fileButton('Додати PNG', 'image/png,image/webp,image/jpeg', true, addSymbolFiles).concat([el('span', { class: 'note', text: 'назва файлу = назва символу' })])));
+    var s = c.symbols.filter(function (x) { return x.name === state.sel; })[0];
+    if (s) {
+      var key = 'sym:' + s.name;
+      var nameInput = el('input', { type: 'text', value: s.name, spellcheck: 'false', 'aria-label': 'Назва символу', class: 'w-name' });
+      nameInput.addEventListener('change', function () {
+        var n = K.slug(nameInput.value);
+        if (!n || (n !== s.name && c.symbols.some(function (x) { return x.name === n; }))) { nameInput.value = s.name; toast(n ? 'Символ ' + n + ' вже є' : 'Порожня назва'); return; }
+        if (state.images[key]) { state.images['sym:' + n] = state.images[key]; state.blobs['sym:' + n] = state.blobs[key]; forgetImage(key); }
+        s.name = n;
+        state.sel = n;
+        changed({ render: true, images: true });
+      });
+      var edit = el('div', { class: 'sym-edit' }, [
+        el('img', { alt: '', src: thumb(art(key)) }),
+        el('div', { class: 'grid' }, [
+          el('div', { class: 'row' }, [el('div', { class: 'field' }, [el('span', { class: 'lbl', text: 'Назва' }), nameInput])]),
+          el('div', { class: 'img-row' }, fileButton(state.images[key] ? 'Замінити картинку' : 'Картинка', 'image/png,image/webp,image/jpeg', false, function (fs) { addImageFile(key, fs[0]); }).concat([
+            state.images[key] ? el('button', { type: 'button', class: 'btn ghost sm', text: 'Прибрати картинку', onclick: function () { dropImage(key); } }) : null,
+            el('button', { type: 'button', class: 'btn ghost sm', text: 'Видалити символ', onclick: function () {
+              c.symbols = c.symbols.filter(function (x) { return x !== s; });
+              forgetImage(key);
+              state.sel = null;
+              changed({ render: true, images: true });
+            } })
+          ])),
+          el('label', { class: 'switch' }, [el('input', { type: 'checkbox', checked: !!s.ownAnims, onchange: function (e) {
+            s.ownAnims = e.target.checked;
+            if (s.ownAnims && !s.anims) s.anims = JSON.parse(JSON.stringify(c.anims));
+            changed({ render: true });
+          } }), 'Свої анімації']),
+          s.ownAnims ? animTable(s.anims) : null
+        ])
+      ]);
+      body.appendChild(edit);
+    }
+    body.appendChild(el('div', { class: 'sub' }, ['Анімації символів', infoBtn('anims')]));
+    body.appendChild(animTable(c.anims));
+    body.appendChild(el('div', { class: 'row', style: 'align-items: center; gap: 4px;' }, [el('label', { class: 'switch' }, [el('input', { type: 'checkbox', checked: !!c.txt, onchange: function (e) { c.txt = e.target.checked; changed(); } }), 'Слот txt_amount для суми виграшу']), infoBtn('spacers')]));
+    return body;
+  }
+
+  function reelsBody() {
+    var g = geo();
+    var cols = 'animation_reels_' + g.C + '_columns', rows = 'animation_reel_' + g.R + '_rows';
+    var sp = state.plan ? state.plan.spines.filter(function (x) { return x.name === rows; })[0] : null;
+    var dur = function (n) { var a = sp && sp.contract.animations.filter(function (x) { return x.name === n; })[0]; return a ? String(a.duration).replace('.', ',') + ' с' : ''; };
+    return el('div', { class: 'comp-body' }, [el('dl', { class: 'facts' }, [
+      el('dt', { text: cols }), el('dd', { text: 'reel_0 … reel_' + (g.C - 1) + ' · крок ' + g.W + ' px' }),
+      el('dt', { text: rows }), el('dd', { text: 'slot_1 … slot_' + g.R + ' видно, slot_0 за кадром · крок ' + g.H + ' px' }),
+      el('dt', { text: 'Спін' }), el('dd', { text: 'spin_loop ' + dur('spin_loop') + ' · spin_stop ' + dur('spin_stop') }),
+      el('dt', { text: 'Події' }), el('dd', { text: 'onOffScreen, onFinalSymbol, onStopReelSound' })
+    ])]);
+  }
+
+  function frameBody(c) {
+    var key = c.type;
+    var im = state.images[key];
+    var note = null;
+    if (key === 'frame_above') note = !im ? 'заглушка' : im.win ? 'вікно ' + Math.round(im.win.right - im.win.left) + '×' + Math.round(im.win.bottom - im.win.top) + ' px → сітка' : 'вікна немає: по центру';
+    return el('div', { class: 'comp-body' }, [
+      el('div', { class: 'sub', text: 'Картинка' }),
+      imageRow(key, note),
+      el('div', { class: 'row' }, [
+        textField('Скіни', c.skins, null, function (v) { c.skins = v; changed(); }, null, 'skins'),
+        textField('Спейсери', c.spacers, null, function (v) { c.spacers = v; changed(); }, key === 'frame_above' ? 'txt_pays_left, txt_pays_right' : '', 'spacers')
+      ]),
+      el('div', { class: 'sub', text: 'Анімації' }),
+      animTable(c.anims)
+    ]);
+  }
+
+  function customBody(c) {
+    var key = 'c:' + c.id;
+    return el('div', { class: 'comp-body' }, [
+      el('div', { class: 'row', style: 'padding-top: 10px;' }, [
+        textField('Назва спайна', c.name, 'w-name', function (v) { c.name = v; changed(); }),
+        textField('Скіни', c.skins, null, function (v) { c.skins = v; changed(); }, null, 'skins'),
+        textField('Спейсери', c.spacers, null, function (v) { c.spacers = v; changed(); }, 'txt_amount', 'spacers')
+      ]),
+      imageRow(key, null, function (natural) { c.w = natural.w; c.h = natural.h; }),
+      el('div', { class: 'row' }, [
+        numPair('Розмір у грі, px', c.w, c.h, function (v) { c.w = Number(v); changed(); }, function (v) { c.h = Number(v); changed(); }, ['Ширина', 'Висота'], 'custom'),
+        numPair('Центр X, Y', c.x || 0, c.y || 0, function (v) { c.x = Number(v); changed(); }, function (v) { c.y = Number(v); changed(); }, ['X', 'Y', ','])
+      ]),
+      el('div', { class: 'sub', text: 'Анімації' }),
+      animTable(c.anims)
+    ]);
+  }
+
+  function compSpines(id) { return state.plan ? state.plan.spines.filter(function (s) { return s.comp === id; }) : []; }
+  function compNames(c) {
+    var g = geo();
+    if (c.type === 'symbols') return 'animation_symbol_* ×' + c.symbols.length + ' · animation_symbols_static';
+    if (c.type === 'reels') return 'animation_reels_' + g.C + '_columns · animation_reel_' + g.R + '_rows';
+    if (c.type === 'frame_under') return 'animation_reels_frame_under';
+    if (c.type === 'frame_above') return 'animation_reels_frame_above';
+    return 'animation_' + (K.slug(c.name).replace(/^animation_/, '') || 'element');
+  }
+  function compThumb(c) {
+    if (c.type === 'symbols') return c.symbols.length ? art('sym:' + c.symbols[0].name) : null;
+    if (c.type === 'reels') return reelsIcon();
+    if (c.type === 'frame_under' || c.type === 'frame_above') return art(c.type);
+    return art('c:' + c.id);
+  }
+  var reelsIconCache = {};
+  function reelsIcon() {
+    var g = geo();
+    var k = g.C + 'x' + g.R;
+    if (reelsIconCache[k]) return reelsIconCache[k];
+    var cs = Math.max(3, Math.floor(60 / Math.max(g.C, g.R)));
+    var c = el('canvas', { width: g.C * cs + 2, height: g.R * cs + 2 });
+    var x = c.getContext('2d');
+    for (var i = 0; i < g.C; i++) for (var j = 0; j < g.R; j++) { x.fillStyle = (i + j) % 2 ? '#8e8e93' : '#0a84ff'; x.fillRect(1 + i * cs + 1, 1 + j * cs + 1, cs - 2, cs - 2); }
+    reelsIconCache[k] = c;
+    return c;
+  }
+
+  function card(c) {
+    var open = !!state.open[c.id];
+    var spines = compSpines(c.id);
+    var selected = spines.some(function (s) { return s.name === state.pv.spine; });
+    var title = TITLES[c.type] || c.label || 'Компонент';
+    var bodyId = 'body-' + c.id;
+    var head = el('div', { class: 'comp-head' }, [
+      el('button', { type: 'button', class: 'comp-open', 'aria-expanded': String(open), 'aria-controls': bodyId, onclick: function () { state.open[c.id] = !open; renderComponents(); } }, [
+        el('span', { class: 'chev', 'aria-hidden': 'true' }),
+        el('span', { class: 'comp-thumb', 'aria-hidden': 'true' }, [el('img', { alt: '', src: thumb(compThumb(c)) })]),
+        el('span', { class: 'comp-t' }, [el('b', { text: title }), el('code', { 'data-names': c.id, text: compNames(c) })])
+      ]),
+      infoBtn(c.type === 'custom' ? 'custom' : c.type),
+      el('div', { class: 'comp-act' }, [
+        el('button', { type: 'button', class: 'btn ghost sm', text: '▶', title: 'Показати в превʼю', 'aria-label': 'Показати ' + title + ' в превʼю', disabled: c.on === false || !spines.length, onclick: function () { showInPreview(c); } }),
+        el('button', { type: 'button', class: 'btn ghost sm', text: '.zip', title: 'Завантажити цей компонент', disabled: c.on === false || !spines.length, onclick: function () { downloadZip(compSpines(c.id), (K.slug(state.s.game) || 'slot') + '-' + (c.type === 'custom' ? K.slug(c.name) : c.type) + '.zip'); } }),
+        c.type === 'custom'
+          ? el('button', { type: 'button', class: 'btn ghost icon', text: '✕', title: 'Прибрати компонент', 'aria-label': 'Прибрати ' + title, onclick: function () { state.s.components = state.s.components.filter(function (x) { return x !== c; }); forgetImage('c:' + c.id); changed({ render: true, images: true }); } })
+          : el('label', { class: 'switch', title: 'Генерувати' }, [el('input', { type: 'checkbox', checked: c.on !== false, 'aria-label': 'Генерувати ' + title, onchange: function (e) { c.on = e.target.checked; changed({ render: true }); } })])
+      ])
+    ]);
+    var body = null;
+    if (open) {
+      if (c.type === 'symbols') body = symbolsBody(c);
+      else if (c.type === 'reels') body = reelsBody();
+      else if (c.type === 'frame_under' || c.type === 'frame_above') body = frameBody(c);
+      else body = customBody(c);
+      body.id = bodyId;
+    }
+    return el('article', { class: 'comp' + (c.on === false ? ' off' : '') + (selected ? ' sel' : ''), 'data-id': c.id }, [head, body]);
+  }
+
+  function renderComponents() {
+    var list = $('c-list');
+    var y = window.scrollY;
+    var active = document.activeElement && document.activeElement.getAttribute('aria-label');
+    list.textContent = '';
+    state.s.components.forEach(function (c) { list.appendChild(card(c)); });
+    window.scrollTo(0, y);
+    if (active) {
+      var again = list.querySelector('[aria-label="' + active.replace(/"/g, '\\"') + '"]');
+      if (again) again.focus({ preventScroll: true });
+    }
+  }
+
+  function showInPreview(c) {
+    var sp = compSpines(c.id);
+    if (!sp.length) return;
+    var pick = sp[0];
+    if (c.type === 'symbols' && state.sel) pick = sp.filter(function (s) { return s.name === 'animation_symbol_' + state.sel; })[0] || pick;
+    if (c.type === 'reels') pick = sp[1] || pick;
+    state.pv.spine = pick.name;
+    state.pv.anim = null;
+    state.pv.skin = null;
+    renderPreview();
+    renderComponents();
+    if (window.matchMedia('(max-width: 980px)').matches) $('stage').scrollIntoView({ block: 'center' });
+  }
+
+  function cssVar(n) { return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); }
+
+  function attOf(name, slot) {
+    var sp = state.plan && state.plan.spines.filter(function (s) { return s.name === name; })[0];
+    if (!sp) return null;
+    var skin = sp.json.skins.filter(function (s) { return s.attachments && s.attachments[slot]; })[0];
+    if (!skin) return null;
+    var a = skin.attachments[slot];
+    return a[Object.keys(a)[0]];
+  }
+
+  function drawGrid() {
+    var g = state.plan.geometry;
+    var cv = $('grid-canvas');
+    var pad = 0.22 * Math.min(g.W, g.H);
+    var ww = g.gridW + 2 * g.border + 2 * pad, wh = g.gridH + 2 * g.border + 2 * pad;
+    var W = 760, H = Math.round(Math.min(900, Math.max(220, W * wh / ww)));
+    if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; }
+    var x = cv.getContext('2d');
+    x.setTransform(1, 0, 0, 1, 0, 0);
+    x.clearRect(0, 0, W, H);
+    var s = Math.min(W / ww, H / wh);
+    x.setTransform(s, 0, 0, s, W / 2, H / 2);
+    var put = function (canvas, a) { if (canvas && a) x.drawImage(canvas, (a.x || 0) - a.width / 2, -(a.y || 0) - a.height / 2, a.width, a.height); };
+    var on = function (t) { var c = state.s.components.filter(function (k) { return k.type === t; })[0]; return c && c.on !== false; };
+    if (on('frame_under')) put(art('frame_under'), attOf('animation_reels_frame_under', 'frame'));
+    else {
+      x.strokeStyle = cssVar('--line');
+      x.lineWidth = 2 / s;
+      for (var i = 0; i < g.C; i++) for (var j = 1; j <= g.R; j++) x.strokeRect(g.reelX[i] - g.W / 2, -g.slotY[j] - g.H / 2, g.W, g.H);
+    }
+    var sc = symComp();
+    if (sc && sc.on !== false && sc.symbols.length) {
+      var n = sc.symbols.length;
+      for (var c = 0; c < g.C; c++) {
+        for (var r = 1; r <= g.R; r++) {
+          var sym = sc.symbols[(c * 3 + r * 7 + c * r) % n].name;
+          var a = attOf('animation_symbol_' + sym, 'symbol');
+          if (a) put(art('sym:' + sym), { x: g.reelX[c], y: g.slotY[r], width: a.width, height: a.height });
+        }
+      }
+    }
+    if (on('frame_above')) put(art('frame_above'), attOf('animation_reels_frame_above', 'frame'));
+    $('grid-label').textContent = g.C + ' × ' + g.R + ' · ' + g.W + ' × ' + g.H + ' px';
+  }
+
+  var downloadsReady = null;
+  function initDownloads() {
+    try {
+      downloadsReady = window.claude && typeof window.claude.use === 'function' ? Promise.resolve(window.claude.use('downloads')).catch(function () { return null; }) : Promise.resolve(null);
+    } catch (e) { downloadsReady = Promise.resolve(null); }
+  }
+  async function saveFile(name, blob) {
+    var d = null;
+    try { d = await downloadsReady; } catch (e) { d = null; }
+    if (d && typeof d.save === 'function') {
+      try { await d.save({ filename: name, data: blob }); toast('Збережено: ' + name); return; }
+      catch (e) {
+        var code = e && e.code;
+        if (code === 'declined') return;
+        if (code === 'rate_limited') { toast('Зачекайте кілька секунд і спробуйте ще раз'); return; }
+        if (code && code !== 'unavailable' && code !== 'not_granted') { toast('Не вдалося зберегти: ' + ((e && e.message) || code)); return; }
+      }
+    }
+    try {
+      var url = URL.createObjectURL(blob);
+      var a = el('a', { href: url, download: name });
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(function () { URL.revokeObjectURL(url); a.remove(); }, 4000);
+    } catch (e) { toast('Браузер не дав зберегти файл'); }
+  }
+  function canvasBlob(c) { return new Promise(function (res, rej) { c.toBlob(function (b) { if (b) res(b); else rej(new Error('PNG не створено')); }, 'image/png'); }); }
+
+  function regionCanvas(src, w, h) {
+    var c = el('canvas', { width: w, height: h });
+    var x = c.getContext('2d');
+    if (src === 'white') { x.fillStyle = '#fff'; x.fillRect(0, 0, w, h); }
+    else if (src && src !== 'clear') { var a = typeof src === 'string' ? art(src) : src; if (a) x.drawImage(a, 0, 0, w, h); }
+    return c;
+  }
+  function pageCanvas(page) {
+    var c = el('canvas', { width: page.width, height: page.height });
+    var x = c.getContext('2d');
+    page.placements.forEach(function (p) {
+      if (p.src === 'white') { x.fillStyle = '#fff'; x.fillRect(p.x, p.y, p.w, p.h); }
+      else if (p.src && p.src !== 'clear') { var a = typeof p.src === 'string' ? art(p.src) : p.src; if (a) x.drawImage(a, p.x, p.y, p.w, p.h); }
+    });
+    return c;
+  }
+
+  async function downloadZip(spines, fileName) {
+    if (!spines.length) return;
+    if (!window.JSZip) { toast(state.lib.zip === 'fail' ? 'JSZip не завантажився з cdnjs.cloudflare.com' : 'Ще завантажую JSZip, спробуйте за мить'); return; }
+    var btn = $('dl-all');
+    btn.disabled = true;
+    try {
+      var zip = new window.JSZip();
+      var root = (K.slug(state.s.game) || 'slot') + '-spine-drafts/';
+      var folder = String(state.plan.tech.folder || '').replace(/^\/+/, '').replace(/\/?$/, '/');
+      for (var i = 0; i < spines.length; i++) {
+        var sp = spines[i];
+        zip.file(root + folder + sp.name + '.json', sp.jsonText);
+        zip.file(root + folder + sp.name + '.atlas', sp.atlasText);
+        zip.file(root + folder + sp.pageName, await canvasBlob(pageCanvas(sp.page)));
+        var ed = root + 'spine-editor/' + sp.name + '/';
+        zip.file(ed + sp.name + '.json', sp.importJsonText);
+        for (var j = 0; j < sp.regions.length; j++) {
+          var r = sp.regions[j];
+          zip.file(ed + 'images/' + r.name + '.png', await canvasBlob(regionCanvas(r.src, r.w, r.h)));
+        }
+      }
+      zip.file(root + 'README.txt', K.readme(state.s, { tech: state.plan.tech, geometry: state.plan.geometry, spines: spines }));
+      zip.file(root + 'kit-settings.json', JSON.stringify(state.s, null, 1));
+      var blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
+      await saveFile(fileName, blob);
+    } catch (e) {
+      toast('Архів не зібрався: ' + e.message);
+    } finally { btn.disabled = false; }
+  }
+
+  function b64(text) { return btoa(unescape(encodeURIComponent(text))); }
+  function loadScript(src) {
+    return new Promise(function (resolve, reject) {
+      var s = document.createElement('script');
+      s.src = src;
+      s.async = true;
+      s.onload = function () { resolve(); };
+      s.onerror = function () { reject(new Error(src)); };
+      document.head.appendChild(s);
+    });
+  }
+
+  function previewBundle(sp) {
+    var g = state.plan.geometry;
+    var sc = symComp();
+    var syms = sc && sc.on !== false && sc.symbols.length ? sc.symbols.map(function (s) { return s.name; }) : ['high_1', 'low_1', 'wild_1'];
+    var symAtt = function (n) { var p = px('sym:' + n); return K.contain(p.w, p.h, g.W, g.H); };
+    var json, regions;
+    if (/^animation_reel_\d+_rows$/.test(sp.name)) {
+      json = JSON.parse(sp.jsonText);
+      regions = [];
+      var seen = {};
+      var att = json.skins[0].attachments;
+      for (var i = 0; i <= g.R; i++) {
+        var n = syms[i % syms.length];
+        var region = 'art/reels/' + n;
+        var a = symAtt(n);
+        att['slot_' + i] = {};
+        att['slot_' + i][region] = { width: a.width, height: a.height };
+        json.slots.filter(function (s) { return s.name === 'slot_' + i; })[0].attachment = region;
+        if (!seen[region]) { seen[region] = true; var p = px('sym:' + n); regions.push({ name: region, w: p.w, h: p.h, src: 'sym:' + n }); }
+      }
+      json.slots.unshift({ name: 'preview_clip', bone: 'reel', attachment: 'preview_clip' });
+      var hw = g.W / 2, hh = g.gridH / 2;
+      att.preview_clip = { preview_clip: { type: 'clipping', end: 'slot_' + g.R, vertexCount: 4, vertices: [-hw, hh, -hw, -hh, hw, -hh, hw, hh] } };
+      regions.push({ name: state.plan.tech.spacer, w: 1, h: 1, src: 'clear' });
+      return K.bundle(sp.name, json, regions, state.plan.tech);
+    }
+    if (/^animation_reels_\d+_columns$/.test(sp.name)) {
+      json = JSON.parse(sp.jsonText);
+      regions = [{ name: state.plan.tech.spacer, w: 1, h: 1, src: 'clear' }, { name: state.plan.tech.white, w: 10, h: 10, src: 'white' }];
+      var colPx = fitPx(g.W, g.gridH, 1024);
+      var at = json.skins[0].attachments;
+      for (var c = 0; c < g.C; c++) {
+        var cv = el('canvas', { width: colPx.w, height: colPx.h });
+        var x = cv.getContext('2d');
+        var k = colPx.w / g.W;
+        for (var r = 0; r < g.R; r++) {
+          var nm = syms[(c * 3 + (r + 1) * 7 + c * (r + 1)) % syms.length];
+          var aa = symAtt(nm);
+          x.drawImage(art('sym:' + nm), (g.W - aa.width) / 2 * k, (r * g.H + (g.H - aa.height) / 2) * k, aa.width * k, aa.height * k);
+        }
+        var rg = 'preview/column_' + c;
+        at['reel_' + c] = {};
+        at['reel_' + c][rg] = { width: g.W, height: g.gridH };
+        json.slots.filter(function (s) { return s.name === 'reel_' + c; })[0].attachment = rg;
+        regions.push({ name: rg, w: colPx.w, h: colPx.h, src: cv });
+      }
+      return K.bundle(sp.name, json, regions, state.plan.tech);
+    }
+    return sp;
+  }
+
+  function disposePlayer() {
+    if (state.player && state.player.player) { try { state.player.player.dispose(); } catch (e) { /* already gone */ } }
+    state.player = null;
+    $('stage').textContent = '';
+  }
+  function stageMsg(text) { disposePlayer(); $('stage').appendChild(el('div', { class: 'stage-msg', text: text })); }
+
+  function viewportFor(sp) {
+    var vp = { padLeft: '12%', padRight: '12%', padTop: '12%', padBottom: '12%', transitionTime: 0 };
+    var g = state.plan.geometry;
+    var w = 0, h = 0;
+    if (/^animation_reel_\d+_rows$/.test(sp.name)) { w = g.W; h = g.gridH; }
+    else if (/^animation_reels_\d+_columns$/.test(sp.name)) { w = g.gridW + 2 * g.margin; h = g.gridH + 2 * g.margin; }
+    if (!w) return vp;
+    return { x: -w / 2, y: -h / 2, width: w, height: h, padLeft: '6%', padRight: '6%', padTop: '6%', padBottom: '6%', transitionTime: 0 };
+  }
+
+  function mountPlayer() {
+    var sp = state.plan && state.plan.spines.filter(function (s) { return s.name === state.pv.spine; })[0];
+    if (!sp) { stageMsg('Немає спайнів: увімкніть компонент.'); return; }
+    var anims = Object.keys(sp.json.animations);
+    if (!anims.length) { stageMsg('У спайні немає анімацій.'); return; }
+    if (anims.indexOf(state.pv.anim) === -1) state.pv.anim = ['win', 'spin_loop', 'idle', 'in', 'loop_1'].filter(function (n) { return anims.indexOf(n) !== -1; })[0] || anims[0];
+    var skins = sp.json.skins.map(function (s) { return s.name; });
+    if (skins.indexOf(state.pv.skin) === -1) state.pv.skin = skins.indexOf('default') !== -1 ? 'default' : skins[0];
+    var key = sp.name + '|' + sp.jsonText.length + '|' + sp.atlasText + '|' + state.pv.skin + '|' + Object.keys(state.images).join(',') + '|' + JSON.stringify(px('sym:' + ((symComp() || {}).symbols || [{ name: '' }])[0].name));
+    var rec = state.player;
+    if (rec && rec.key === key && rec.jsonText === sp.jsonText) {
+      if (rec.ready && rec.anim !== state.pv.anim) { try { rec.player.setAnimation(state.pv.anim, true); rec.anim = state.pv.anim; } catch (e) { /* keep */ } }
+      return;
+    }
+    if (state.lib.spine !== 'ok') { stageMsg(state.lib.spine === 'fail' ? 'Рантайм Spine не завантажився з cdn.jsdelivr.net. Файли генеруються і без превʼю.' : 'Завантажую рантайм Spine…'); return; }
+    disposePlayer();
+    var b = previewBundle(sp);
+    var raw = {};
+    raw[b.name + '.json'] = 'data:application/json;base64,' + b64(b.jsonText);
+    raw[b.name + '.atlas'] = 'data:text/plain;base64,' + b64(b.atlasText);
+    raw[b.pageName] = pageCanvas(b.page).toDataURL('image/png');
+    var div = el('div', { class: 'pc' });
+    $('stage').appendChild(div);
+    var anim = state.pv.anim;
+    var cfg = {
+      jsonUrl: b.name + '.json',
+      atlasUrl: b.name + '.atlas',
+      rawDataURIs: raw,
+      animation: anim,
+      skin: state.pv.skin,
+      showControls: false,
+      showLoading: false,
+      alpha: true,
+      backgroundColor: '00000000',
+      premultipliedAlpha: false,
+      viewport: viewportFor(sp),
+      success: function (p) {
+        var rec = state.player;
+        if (!rec || rec.player !== p) return;
+        rec.ready = true;
+        if (rec.anim !== state.pv.anim) { try { p.setAnimation(state.pv.anim, true); rec.anim = state.pv.anim; } catch (e) { /* keep */ } }
+      },
+      error: function (p, msg) { if (state.player && state.player.player === p) stageMsg('Превʼю не запустилося: ' + msg); }
+    };
+    try {
+      var player = new window.spine.SpinePlayer(div, cfg);
+      state.player = { player: player, key: key, jsonText: sp.jsonText, anim: anim, ready: false };
+    } catch (e) { stageMsg('Превʼю не запустилося: ' + e.message); }
+  }
+
+  function renderPreview() {
+    var spines = state.plan ? state.plan.spines : [];
+    var sel = $('pv-spine');
+    sel.textContent = '';
+    spines.forEach(function (s) { sel.appendChild(el('option', { value: s.name, text: s.name })); });
+    if (!spines.some(function (s) { return s.name === state.pv.spine; })) { state.pv.spine = spines.length ? spines[0].name : null; state.pv.anim = null; }
+    if (state.pv.spine) sel.value = state.pv.spine;
+    var sp = spines.filter(function (s) { return s.name === state.pv.spine; })[0];
+    var skinSel = $('pv-skin');
+    skinSel.textContent = '';
+    var skins = sp ? sp.json.skins.map(function (s) { return s.name; }) : [];
+    skins.forEach(function (n) { skinSel.appendChild(el('option', { value: n, text: n })); });
+    skinSel.hidden = skins.length < 2;
+    mountPlayer();
+    if (state.pv.skin) skinSel.value = state.pv.skin;
+    var chips = $('pv-anims');
+    chips.textContent = '';
+    if (sp) Object.keys(sp.json.animations).forEach(function (n) {
+      chips.appendChild(el('button', { type: 'button', class: 'chip', 'aria-pressed': String(n === state.pv.anim), text: n, onclick: function () { state.pv.anim = n; renderPreview(); } }));
+    });
+  }
+
+  function renderSide() {
+    var p = state.plan;
+    var n = p.spines.length;
+    $('dl-meta').textContent = n + ' ' + plural(n, 'спайн', 'спайни', 'спайнів') + ' · .json, .atlas, .png і файли для Spine Editor';
+    $('dl-all').disabled = !n;
+    var w = $('warns');
+    w.textContent = '';
+    p.spines.forEach(function (s) { s.warnings.forEach(function (t) { w.appendChild(el('li', { text: s.name + ': ' + t })); }); });
+    $('c-count').textContent = state.s.components.filter(function (c) { return c.on !== false; }).length + ' / ' + state.s.components.length;
+    state.s.components.forEach(function (c) {
+      var code = document.querySelector('[data-names="' + c.id + '"]');
+      if (code) code.textContent = compNames(c);
+    });
+  }
+  function plural(n, one, few, many) {
+    var m10 = n % 10, m100 = n % 100;
+    if (m10 === 1 && m100 !== 11) return one;
+    if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return few;
+    return many;
+  }
+
+  function renderGame() {
+    var s = state.s;
+    $('g-name').value = s.game;
+    $('crumb').textContent = s.game || 'Без назви';
+    $('g-reels').value = s.reels;
+    $('g-rows').value = s.rows;
+    $('g-cw').value = s.cell.w;
+    $('g-ch').value = s.cell.h;
+    $('t-ver').value = s.tech.spineVersion;
+    $('t-fps').value = s.tech.fps;
+    $('t-folder').value = s.tech.folder;
+    renderPresets();
+  }
+  function renderPresets() {
+    var box = $('g-presets');
+    box.textContent = '';
+    GRIDS.forEach(function (g) {
+      box.appendChild(el('button', { type: 'button', class: 'preset', 'aria-pressed': String(state.s.reels === g[0] && state.s.rows === g[1]), text: g[0] + '×' + g[1], onclick: function () {
+        state.s.reels = g[0];
+        state.s.rows = g[1];
+        $('g-reels').value = g[0];
+        $('g-rows').value = g[1];
+        renderPresets();
+        changed({ render: true });
+      } }));
+    });
+    $('tech-sum').textContent = 'Spine ' + state.s.tech.spineVersion + ' · ' + state.s.tech.fps + ' fps · ' + state.s.tech.folder;
+  }
+
+  function rebuild() {
+    try { state.plan = K.planAll(state.s, px); }
+    catch (e) { toast('Не вдалося зібрати: ' + e.message); return; }
+    drawGrid();
+    renderSide();
+    renderPreview();
+    renderCheckAs();
+    if (state.open.reels) {
+      var art_ = document.querySelector('[data-id="reels"] .comp-body');
+      if (art_) art_.replaceWith(Object.assign(reelsBody(), { id: 'body-reels' }));
+    }
+  }
+
+  function bindGame() {
+    var num = function (id, fn) { $(id).addEventListener('input', function (e) { var v = Number(e.target.value); if (isFinite(v) && v > 0) { fn(v); renderPresets(); changed({ render: true }); } }); };
+    $('g-name').addEventListener('input', function (e) { state.s.game = e.target.value; $('crumb').textContent = state.s.game || 'Без назви'; changed(); });
+    num('g-reels', function (v) { state.s.reels = Math.min(12, Math.round(v)); });
+    num('g-rows', function (v) { state.s.rows = Math.min(12, Math.round(v)); });
+    num('g-cw', function (v) { state.s.cell.w = Math.min(2000, Math.max(16, Math.round(v))); });
+    num('g-ch', function (v) { state.s.cell.h = Math.min(2000, Math.max(16, Math.round(v))); });
+    $('t-ver').addEventListener('input', function (e) { state.s.tech.spineVersion = e.target.value.trim(); renderPresets(); changed(); });
+    num('t-fps', function (v) { state.s.tech.fps = Math.round(v); });
+    $('t-folder').addEventListener('input', function (e) { state.s.tech.folder = e.target.value.trim(); renderPresets(); changed(); });
+    document.querySelectorAll('[data-add]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var t = TEMPLATES[b.getAttribute('data-add')];
+        var names = state.s.components.map(function (c) { return c.type === 'custom' ? 'animation_' + K.slug(c.name).replace(/^animation_/, '') : ''; });
+        var name = t.name, n = 2;
+        while (names.indexOf(name) !== -1) name = t.name + '_' + n++;
+        var c = { id: newId(), type: 'custom', label: t.label, on: true, name: name, w: t.w, h: t.h, x: 0, y: 0, skins: 'default', spacers: '', anims: t.anims() };
+        state.s.components.push(c);
+        state.open[c.id] = true;
+        state.pv.spine = name;
+        state.pv.anim = null;
+        changed({ render: true, now: true });
+      });
+    });
+    $('pv-spine').addEventListener('change', function (e) { state.pv.spine = e.target.value; state.pv.anim = null; state.pv.skin = null; renderPreview(); renderComponents(); });
+    $('pv-skin').addEventListener('change', function (e) { state.pv.skin = e.target.value; renderPreview(); });
+    $('dl-all').addEventListener('click', function () { downloadZip(state.plan.spines, (K.slug(state.s.game) || 'slot') + '-spine-drafts.zip'); });
+  }
+
+  function showView(v) {
+    ['drafts', 'check'].forEach(function (n) {
+      $('view-' + n).hidden = n !== v;
+      $('tab-' + n).setAttribute('aria-selected', String(n === v));
+    });
+    if (v !== 'drafts') disposePlayer();
+    else if (state.plan) { state.player = null; renderPreview(); }
+  }
+
+  function renderCheckAs() {
+    var sel = $('ck-as');
+    var cur = sel.value;
+    sel.textContent = '';
+    (state.plan ? state.plan.spines : []).forEach(function (s) { sel.appendChild(el('option', { value: s.name, text: s.name })); });
+    var want = state.check.json ? state.check.json.name.replace(/\.json$/i, '') : cur;
+    if (want && state.plan && state.plan.spines.some(function (s) { return s.name === want; })) sel.value = want;
+    else if (cur) sel.value = cur;
+  }
+
+  async function addCheckFiles(files) {
+    for (var i = 0; i < files.length; i++) {
+      var f = files[i];
+      var n = f.name;
+      if (/\.json$/i.test(n)) state.check.json = { name: n, text: await f.text() };
+      else if (/\.atlas(\.txt)?$/i.test(n)) state.check.atlas = { name: n, text: await f.text() };
+      else if (/\.png$/i.test(n)) { var size = K.pngSize(new Uint8Array(await f.slice(0, 32).arrayBuffer())); if (size) state.check.pngs[n] = size; }
+    }
+    renderCheckAs();
+    runCheck();
+  }
+
+  function runCheck() {
+    var ck = state.check;
+    var list = $('ck-list');
+    list.textContent = '';
+    [ck.json && ck.json.name, ck.atlas && ck.atlas.name].concat(Object.keys(ck.pngs)).filter(Boolean).forEach(function (n) { list.appendChild(el('li', { text: n })); });
+    var v = $('ck-verdict'), out = $('ck-findings');
+    out.textContent = '';
+    if (!ck.json) { v.textContent = ''; v.appendChild(el('span', { class: 'lbl', text: 'Додайте .json, щоб почати.' })); return; }
+    var r = K.checkExport({ spineName: $('ck-as').value || ck.json.name, jsonText: ck.json.text, atlasText: ck.atlas && ck.atlas.text, pngs: ck.pngs }, { tech: state.plan.tech, spines: state.plan.spines.map(function (s) { return s.contract; }) });
+    v.textContent = '';
+    var pill = r.counts.error ? el('span', { class: 'pill error', text: r.counts.error + ' ' + plural(r.counts.error, 'помилка', 'помилки', 'помилок') })
+      : r.counts.warning ? el('span', { class: 'pill warning', text: r.counts.warning + ' ' + plural(r.counts.warning, 'зауваження', 'зауваження', 'зауважень') })
+        : el('span', { class: 'pill ok', text: 'Готово' });
+    v.appendChild(el('b', { text: r.name || ck.json.name }));
+    v.appendChild(pill);
+    r.findings.forEach(function (f) { out.appendChild(el('li', { class: 'finding ' + f.level }, [el('b', { text: f.title }), f.detail ? el('span', { text: f.detail }) : null])); });
+  }
+
+  function bindCheck() {
+    var drop = $('ck-drop');
+    dropTarget(drop, addCheckFiles);
+    $('ck-files').addEventListener('change', function (e) { var fs = Array.prototype.slice.call(e.target.files || []); e.target.value = ''; addCheckFiles(fs); });
+    $('ck-as').addEventListener('change', runCheck);
+    document.querySelectorAll('.tab').forEach(function (t) { t.addEventListener('click', function () { showView(t.getAttribute('data-view')); if (t.getAttribute('data-view') === 'check') runCheck(); }); });
+  }
+
+  function projectMeta(rec) {
+    var s = rec.settings || {};
+    return { id: rec.id, created: rec.created || rec.updated || 0, name: s.game || 'Без назви', reels: s.reels || 5, rows: s.rows || 3, n: (s.components || []).filter(function (c) { return c.on !== false; }).length };
+  }
+  function updateMeta(rec) {
+    var m = projectMeta(rec);
+    var i = state.projects.map(function (p) { return p.id; }).indexOf(rec.id);
+    if (i === -1) state.projects.unshift(m);
+    else state.projects[i] = m;
+    renderProjects();
+  }
+  function rememberLast(id) { try { localStorage.setItem(LAST, id); } catch (e) { return; } }
+  function readLast() { try { return localStorage.getItem(LAST); } catch (e) { return null; } }
+
+  async function openProject(id) {
+    if (state.pid && state.pid !== id) await saveNow();
+    var rec = await Store.get(id);
+    if (!rec) return;
+    disposePlayer();
+    state.pid = id;
+    state.s = normalize(rec.settings);
+    state.images = {};
+    state.blobs = {};
+    state.sel = null;
+    state.open = { symbols: true };
+    state.pv = { spine: null, anim: null, skin: null };
+    state.confirmDel = null;
+    var keys = Object.keys(rec.images || {});
+    for (var i = 0; i < keys.length; i++) { try { await setImage(keys[i], rec.images[keys[i]]); } catch (e) { /* skip a broken image */ } }
+    rememberLast(id);
+    renderGame();
+    renderProjects();
+    rebuild();
+    renderComponents();
+    if (!state.wiz) drawer(false);
+  }
+
+  async function createProject(settings, images) {
+    var now = Date.now();
+    var rec = { id: newId(), created: now, updated: now, settings: settings, images: images || {} };
+    await Store.put(rec);
+    state.projects.unshift(projectMeta(rec));
+    await openProject(rec.id);
+    return rec.id;
+  }
+
+  function createExample() {
+    var s = defaults();
+    s.game = 'example-slot';
+    return createProject(s);
+  }
+
+  async function removeProject(id, next) {
+    await Store.remove(id);
+    state.projects = state.projects.filter(function (p) { return p.id !== id; });
+    if (id !== state.pid) { renderProjects(); return; }
+    state.pid = null;
+    var target = next && state.projects.some(function (p) { return p.id === next; }) ? next : state.projects.length ? state.projects[0].id : null;
+    if (target) await openProject(target);
+    else await createExample();
+  }
+
+  async function duplicateProject() {
+    await saveNow();
+    var s = JSON.parse(JSON.stringify(state.s));
+    s.game = (s.game || 'slot') + '-copy';
+    await createProject(s, Object.assign({}, state.blobs));
+    toast('Створено копію');
+  }
+
+  async function exportProject() {
+    await saveNow();
+    var imgs = {};
+    var keys = Object.keys(state.blobs);
+    for (var i = 0; i < keys.length; i++) imgs[keys[i]] = await readAsDataUrl(state.blobs[keys[i]]);
+    saveFile((K.slug(state.s.game) || 'slot') + '.spine-kit.json', new Blob([JSON.stringify({ kit: 'spine-draft-kit@2', settings: state.s, images: imgs })], { type: 'application/json' }));
+  }
+
+  async function importFile(f) {
+    try {
+      var data = JSON.parse(await f.text());
+      var settings = normalize(data.settings || data);
+      var blobs = {};
+      Object.keys(data.images || {}).forEach(function (k) { try { blobs[k] = dataUrlBlob(data.images[k]); } catch (e) { /* skip */ } });
+      await createProject(settings, blobs);
+      toast('Імпортовано: ' + f.name);
+    } catch (e) { toast('Це не файл проекту кита'); }
+  }
+
+  function migrateLegacy() {
+    var saved = null, imgs = {};
+    try { saved = JSON.parse(localStorage.getItem(LEGACY) || 'null'); imgs = JSON.parse(localStorage.getItem(LEGACY + '.img') || '{}') || {}; } catch (e) { return null; }
+    if (!saved) return null;
+    var blobs = {};
+    Object.keys(imgs).forEach(function (k) { try { blobs[k] = dataUrlBlob(imgs[k]); } catch (e) { /* skip */ } });
+    var s = normalize(saved);
+    if (!s.game) s.game = 'my-slot';
+    return { settings: s, images: blobs };
+  }
+
+  var ICONS = {
+    gear: '<path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/>',
+    copy: '<rect x="9" y="9" width="12" height="12" rx="2.5"/><path d="M5 15H4.5A1.5 1.5 0 0 1 3 13.5v-9A1.5 1.5 0 0 1 4.5 3h9A1.5 1.5 0 0 1 15 4.5V5"/>',
+    trash: '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/>'
+  };
+  function iconBtn(cls, label, paths, onclick, pressed) {
+    var b = el('button', { type: 'button', class: 'btn icon ' + cls, title: label, 'aria-label': label, 'aria-pressed': pressed === undefined ? null : String(pressed), onclick: onclick });
+    b.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + paths + '</svg>';
+    return b;
+  }
+
+  function showGame(open) {
+    state.gameOpen = open;
+    $('game').hidden = !open;
+    $('view-drafts').classList.toggle('no-game', !open);
+    renderProjects();
+    if (!open) return;
+    drawer(false);
+    $('game').scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }
+
+  function renderProjects() {
+    var ul = $('plist');
+    ul.textContent = '';
+    state.projects.forEach(function (p) {
+      var active = p.id === state.pid;
+      var ico = el('span', { class: 'p-ico', 'aria-hidden': 'true' });
+      ico.innerHTML = Info.miniGrid(p.reels, p.rows);
+      var li = el('li', { class: 'pitem' + (active ? ' active' : '') }, [
+        el('button', { type: 'button', class: 'p-open', 'aria-current': active ? 'true' : null, onclick: function () { if (!active) openProject(p.id); else drawer(false); } }, [
+          ico,
+          el('span', { class: 'p-txt' }, [el('span', { class: 'p-name', text: p.name }), el('span', { class: 'p-meta', text: p.reels + '×' + p.rows + ' · ' + p.n + ' ' + plural(p.n, 'компонент', 'компоненти', 'компонентів') })])
+        ])
+      ]);
+      if (active && state.confirmDel === p.id) {
+        li.appendChild(el('div', { class: 'p-confirm' }, [
+          'Видалити проект?',
+          el('button', { type: 'button', class: 'btn sm', text: 'Так', onclick: function () { state.confirmDel = null; removeProject(p.id); } }),
+          el('button', { type: 'button', class: 'btn ghost sm', text: 'Ні', onclick: function () { state.confirmDel = null; renderProjects(); } })
+        ]));
+      } else if (active) {
+        li.appendChild(el('div', { class: 'p-act' }, [
+          el('button', { type: 'button', class: 'btn ghost sm', text: 'Експорт', title: 'Зберегти проект у .json', onclick: exportProject }),
+          iconBtn('p-set', 'Налаштування гри', ICONS.gear, function () { showGame(!state.gameOpen); }, state.gameOpen),
+          iconBtn('p-copy', 'Копія', ICONS.copy, duplicateProject),
+          iconBtn('p-del', 'Видалити', ICONS.trash, function () { state.confirmDel = p.id; renderProjects(); })
+        ]));
+      }
+      ul.appendChild(li);
+    });
+  }
+
+  function drawer(open) {
+    $('sidebar').classList.toggle('open', open);
+    $('scrim').hidden = !open;
+    $('menu-btn').setAttribute('aria-expanded', String(open));
+  }
+
+  var WZ = [['Назва', 'game'], ['Сітка', 'grid'], ['Клітинка', 'cell'], ['Символи', 'symbols'], ['Компоненти', 'components']];
+  var CELLS = [[334, 334, 'шаблон'], [300, 300, ''], [256, 256, ''], [400, 400, ''], [300, 240, '']];
+  var KINDS = ['wild', 'scatter', 'high', 'low'];
+
+  function namesFrom(c) {
+    var out = [];
+    KINDS.forEach(function (k) { for (var i = 1; i <= c[k]; i++) out.push(k + '_' + i); });
+    K.listOf(c.extra).map(K.slug).filter(Boolean).forEach(function (n) { if (out.indexOf(n) === -1) out.push(n); });
+    return out;
+  }
+  function applyCounts() {
+    var sc = symComp();
+    var names = namesFrom(state.wiz.counts);
+    var keep = sc.symbols.filter(function (s) { return state.images['sym:' + s.name] && names.indexOf(s.name) === -1; });
+    sc.symbols = names.map(function (n) { return sc.symbols.filter(function (s) { return s.name === n; })[0] || { name: n }; }).concat(keep);
+    changed({ render: true });
+  }
+
+  async function startWizard() {
+    var prev = state.pid;
+    var s = defaults();
+    var counts = { wild: 1, scatter: 1, high: 4, low: 5, extra: '' };
+    s.components[0].symbols = namesFrom(counts).map(function (n) { return { name: n }; });
+    state.wiz = { step: 0, prev: prev, counts: counts, extras: { background: false, logo: false, popup: false } };
+    await createProject(s);
+    renderWizard();
+  }
+
+  async function cancelWizard() {
+    var prev = state.wiz.prev;
+    state.wiz = null;
+    renderWizard();
+    await removeProject(state.pid, prev);
+  }
+
+  function finishWizard() {
+    if (!state.s.game.trim()) { state.wiz.step = 0; renderWizard(); toast('Дайте проекту назву'); return; }
+    Object.keys(state.wiz.extras).forEach(function (k) {
+      if (!state.wiz.extras[k]) return;
+      var t = TEMPLATES[k];
+      state.s.components.push({ id: newId(), type: 'custom', label: t.label, on: true, name: t.name, w: t.w, h: t.h, x: 0, y: 0, skins: 'default', spacers: '', anims: t.anims() });
+    });
+    state.wiz = null;
+    state.open = { symbols: true };
+    renderWizard();
+    renderGame();
+    changed({ render: true, now: true });
+    drawer(false);
+    toast('Проект створено');
+  }
+
+  function wizardBody(step) {
+    var g = geo();
+    var s = state.s;
+    var body = el('div', { class: 'wz-body' });
+    if (step === 0) {
+      var input = el('input', { type: 'text', id: 'wz-name', value: s.game, placeholder: 'my-slot', spellcheck: 'false', autocomplete: 'off', 'aria-label': 'Назва гри', oninput: function (e) {
+        s.game = e.target.value;
+        $('g-name').value = s.game;
+        $('crumb').textContent = s.game || 'Без назви';
+        $('wz-next').disabled = !s.game.trim();
+        changed();
+      } });
+      input.addEventListener('keydown', function (e) { if (e.key === 'Enter' && s.game.trim()) { state.wiz.step = 1; renderWizard(); } });
+      body.appendChild(input);
+      body.appendChild(el('span', { class: 'lbl', text: 'Латиницею, як у репо гри' }));
+    } else if (step === 1) {
+      var tiles = el('div', { class: 'gtiles' });
+      GRIDS.forEach(function (gr) {
+        var b = el('button', { type: 'button', class: 'gtile', 'aria-pressed': String(s.reels === gr[0] && s.rows === gr[1]), onclick: function () {
+          s.reels = gr[0];
+          s.rows = gr[1];
+          renderGame();
+          changed({ render: true });
+          renderWizard();
+        } });
+        b.innerHTML = Info.miniGrid(gr[0], gr[1]);
+        b.appendChild(document.createTextNode(gr[0] + '×' + gr[1]));
+        tiles.appendChild(b);
+      });
+      body.appendChild(tiles);
+      body.appendChild(numPair('Свої: барабани × ряди', s.reels, s.rows, function (v) { if (Number(v) > 0) { s.reels = Math.min(12, Math.round(Number(v))); renderGame(); changed({ render: true }); } }, function (v) { if (Number(v) > 0) { s.rows = Math.min(12, Math.round(Number(v))); renderGame(); changed({ render: true }); } }, ['Барабани', 'Ряди']));
+    } else if (step === 2) {
+      var ct = el('div', { class: 'gtiles' });
+      CELLS.forEach(function (c) {
+        ct.appendChild(el('button', { type: 'button', class: 'gtile', 'aria-pressed': String(s.cell.w === c[0] && s.cell.h === c[1]), onclick: function () {
+          s.cell = { w: c[0], h: c[1] };
+          renderGame();
+          changed({ render: true });
+          renderWizard();
+        } }, [c[0] + '×' + c[1], c[2] ? el('small', { text: c[2] }) : null]));
+      });
+      body.appendChild(ct);
+      body.appendChild(numPair('Свій розмір, px', s.cell.w, s.cell.h, function (v) { if (Number(v) >= 16) { s.cell.w = Math.round(Number(v)); renderGame(); changed({ render: true }); } }, function (v) { if (Number(v) >= 16) { s.cell.h = Math.round(Number(v)); renderGame(); changed({ render: true }); } }, ['Ширина', 'Висота']));
+      var art = el('div', { class: 'wz-art' });
+      art.innerHTML = Info.cellArt(g.W, g.H);
+      body.appendChild(art);
+    } else if (step === 3) {
+      var c = state.wiz.counts;
+      var st = el('div', { class: 'steppers' });
+      KINDS.forEach(function (k) {
+        var out = el('output', { text: String(c[k]) });
+        var set = function (d) { c[k] = Math.max(0, Math.min(12, c[k] + d)); applyCounts(); renderWizard(); };
+        st.appendChild(el('div', { class: 'stepper' }, [
+          el('span', {}, [k[0].toUpperCase() + k.slice(1) + ' ', el('code', { text: k + '_1' })]),
+          el('button', { type: 'button', class: 'btn icon sm', text: '−', 'aria-label': 'Менше ' + k, onclick: function () { set(-1); } }),
+          out,
+          el('button', { type: 'button', class: 'btn icon sm', text: '+', 'aria-label': 'Більше ' + k, onclick: function () { set(1); } })
+        ]));
+      });
+      body.appendChild(st);
+      body.appendChild(textField('Інші через кому', c.extra, null, function (v) { c.extra = v; applyCounts(); var box = $('wz-names'); if (box) { box.textContent = ''; symComp().symbols.forEach(function (x) { box.appendChild(el('span', { text: x.name })); }); } }, 'bonus, jackpot'));
+      var names = el('div', { class: 'wz-names', id: 'wz-names' });
+      symComp().symbols.forEach(function (x) { names.appendChild(el('span', { text: x.name })); });
+      body.appendChild(names);
+      var drop = el('div', { class: 'wz-drop' }, ['Або киньте PNG: назва файлу стане назвою символу'].concat(fileButton('Вибрати PNG', 'image/png,image/webp,image/jpeg', true, addSymbolFiles)));
+      dropTarget(drop, addSymbolFiles);
+      body.appendChild(drop);
+    } else {
+      var list = el('div', { class: 'wz-comps' });
+      var row = function (kind, title, sub, checked, onChange, disabled) {
+        var ic = el('span');
+        ic.innerHTML = Info.icon(kind);
+        list.appendChild(el('label', { class: 'wz-comp' }, [
+          el('input', { type: 'checkbox', checked: checked, disabled: disabled || null, onchange: function (e) { onChange(e.target.checked); } }),
+          ic,
+          el('span', {}, [el('b', { text: title }), el('small', { text: sub })])
+        ]));
+      };
+      row('symbols', 'Символи', symComp().symbols.length + ' × animation_symbol_*', true, function () {}, true);
+      ['reels', 'frame_under', 'frame_above'].forEach(function (t) {
+        var cc = state.s.components.filter(function (x) { return x.type === t; })[0];
+        row(t, TITLES[t], compNames(cc), cc.on !== false, function (v) { cc.on = v; changed({ render: true }); });
+      });
+      ['background', 'logo', 'popup'].forEach(function (k) {
+        row(k, TEMPLATES[k].label, TEMPLATES[k].name, state.wiz.extras[k], function (v) { state.wiz.extras[k] = v; });
+      });
+      body.appendChild(list);
+      body.appendChild(el('span', { class: 'lbl', text: 'Інші компоненти додасте пізніше кнопками «+».' }));
+    }
+    return body;
+  }
+
+  function renderWizard() {
+    var w = $('wizard');
+    var on = !!state.wiz;
+    w.hidden = !on;
+    $('sb-projects').hidden = on;
+    w.textContent = '';
+    if (!on) return;
+    var step = state.wiz.step;
+    var last = step === WZ.length - 1;
+    w.appendChild(el('div', { class: 'wz-head' }, [el('b', { text: 'Новий проект' }), el('button', { type: 'button', class: 'btn ghost sm', text: 'Скасувати', onclick: cancelWizard })]));
+    w.appendChild(el('ol', { class: 'wz-steps', 'aria-label': 'Кроки' }, WZ.map(function (x, i) {
+      return el('li', { class: i < step ? 'done' : i === step ? 'cur' : null, 'aria-current': i === step ? 'step' : null, title: x[0], 'aria-label': (i + 1) + '. ' + x[0], text: String(i + 1) });
+    })));
+    w.appendChild(el('div', { class: 'wz-title' }, [el('h3', { text: (step + 1) + '. ' + WZ[step][0] }), infoBtn(WZ[step][1])]));
+    w.appendChild(wizardBody(step));
+    w.appendChild(el('div', { class: 'wz-nav' }, [
+      el('button', { type: 'button', class: 'btn', text: 'Назад', disabled: step === 0, onclick: function () { state.wiz.step -= 1; renderWizard(); } }),
+      el('button', { type: 'button', class: 'btn primary', id: 'wz-next', text: last ? 'Створити' : 'Далі', disabled: step === 0 && !state.s.game.trim(), onclick: function () { if (last) finishWizard(); else { state.wiz.step += 1; renderWizard(); } } })
+    ]));
+    if (step === 0) { var n = $('wz-name'); if (n) n.focus({ preventScroll: true }); }
+  }
+
+  function openInfo(key) {
+    var r = Info.render(key, { geometry: geo(), presets: K.PRESETS, tech: Object.assign({}, K.TECH, state.s.tech) });
+    if (!r) return;
+    $('dlg-title').textContent = r.title;
+    $('dlg-art').innerHTML = r.art || '';
+    $('dlg-text').innerHTML = r.html;
+    var d = $('info-dlg');
+    if (typeof d.showModal === 'function') { if (!d.open) d.showModal(); }
+    else d.setAttribute('open', '');
+    $('dlg-close').focus({ preventScroll: true });
+  }
+
+  function bindShell() {
+    document.addEventListener('click', function (e) {
+      var b = e.target && e.target.closest ? e.target.closest('[data-info]') : null;
+      if (!b) return;
+      e.preventDefault();
+      openInfo(b.getAttribute('data-info'));
+    });
+    var d = $('info-dlg');
+    var close = function () { if (typeof d.close === 'function') d.close(); else d.removeAttribute('open'); };
+    $('dlg-close').addEventListener('click', close);
+    d.addEventListener('click', function (e) { if (e.target === d) close(); });
+    $('new-project').addEventListener('click', startWizard);
+    $('import-file').addEventListener('change', function (e) { var f = e.target.files && e.target.files[0]; e.target.value = ''; if (f) importFile(f); });
+    $('menu-btn').addEventListener('click', function () { drawer(!$('sidebar').classList.contains('open')); });
+    $('scrim').addEventListener('click', function () { drawer(false); });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && $('sidebar').classList.contains('open') && !$('info-dlg').open) drawer(false); });
+    window.addEventListener('pagehide', function () { saveNow(); });
+  }
+
+  async function init() {
+    initDownloads();
+    bindShell();
+    bindGame();
+    bindCheck();
+    var recs = await Store.list();
+    if (!Store.persistent()) $('store-note').hidden = false;
+    state.projects = recs.map(projectMeta).sort(function (a, b) { return b.created - a.created; });
+    if (!recs.length) {
+      var legacy = migrateLegacy();
+      if (legacy) await createProject(legacy.settings, legacy.images);
+      else await createExample();
+    } else {
+      var last = readLast();
+      await openProject(state.projects.some(function (p) { return p.id === last; }) ? last : state.projects[0].id);
+    }
+    if ((location.hash || '').replace('#', '') === 'check') showView('check');
+    loadScript(SPINE_URL).then(function () { state.lib.spine = window.spine && window.spine.SpinePlayer ? 'ok' : 'fail'; state.player = null; renderPreview(); }, function () { state.lib.spine = 'fail'; renderPreview(); });
+    loadScript(ZIP_URL).then(function () { state.lib.zip = window.JSZip ? 'ok' : 'fail'; }, function () { state.lib.zip = 'fail'; });
+    var mq = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+    if (mq && mq.addEventListener) mq.addEventListener('change', function () { if (state.plan) drawGrid(); });
+  }
+
+  init();
+})();
+</script>

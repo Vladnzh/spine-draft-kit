@@ -1,0 +1,245 @@
+(function (root) {
+  'use strict';
+
+  function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+  function svg(w, h, body, label) { return '<svg class="ill" viewBox="0 0 ' + w + ' ' + h + '" role="img" aria-label="' + esc(label || '') + '">' + body + '</svg>'; }
+  function rect(x, y, w, h, cls, r, extra) { return '<rect x="' + x + '" y="' + y + '" width="' + w + '" height="' + h + '" rx="' + (r || 0) + '" class="' + cls + '"' + (extra || '') + '/>'; }
+  function text(x, y, t, cls, anchor) { return '<text x="' + x + '" y="' + y + '" class="' + cls + '" text-anchor="' + (anchor || 'middle') + '">' + esc(t) + '</text>'; }
+  function line(x1, y1, x2, y2, cls) { return '<line x1="' + x1 + '" y1="' + y1 + '" x2="' + x2 + '" y2="' + y2 + '" class="' + cls + '"/>'; }
+  function poly(pts, cls) { return '<polygon points="' + pts.map(function (p) { return p[0].toFixed(1) + ',' + p[1].toFixed(1); }).join(' ') + '" class="' + cls + '"/>'; }
+  function diamond(x, y, r, cls) { return poly([[x, y - r], [x + r, y], [x, y + r], [x - r, y]], cls); }
+  var ARROW = '<defs><marker id="ah" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="ga"/></marker></defs>';
+
+  function gridArt(C, R) {
+    C = Math.min(C, 8); R = Math.min(R, 8);
+    var cs = Math.min(42, 250 / C, 124 / R), w = C * cs, h = R * cs;
+    var x0 = (360 - w) / 2, y0 = 40;
+    var ci = Math.min(1, C - 1), ri = Math.min(1, R - 1);
+    var s = rect(x0 - 5, y0 + ri * cs, w + 10, cs, 'gas', 6);
+    for (var i = 0; i < C; i++) for (var j = 0; j < R; j++) s += rect(x0 + i * cs + 3, y0 + j * cs + 3, cs - 6, cs - 6, 'gc', 5);
+    s += rect(x0 + ci * cs, y0 - 5, cs, h + 10, 'gk', 6);
+    s += text(x0 + ci * cs + cs / 2, y0 - 13, 'барабан', 'gtk');
+    s += text(x0 + w + 12, y0 + ri * cs + cs / 2 + 4, 'ряд', 'gtk', 'start');
+    for (i = 0; i < C; i++) s += text(x0 + i * cs + cs / 2, y0 + h + 18, String(i + 1), 'gm');
+    s += text(180, y0 + h + 40, C + ' × ' + R + ' = барабани × ряди', 'gt');
+    return svg(360, y0 + h + 50, s, 'Сітка ' + C + ' на ' + R);
+  }
+
+  function cellArt(W, H) {
+    var k = 84 / Math.max(W, H), cw = W * k, ch = H * k;
+    var x0 = 70, y0 = 42;
+    var s = ARROW;
+    for (var i = 0; i < 3; i++) for (var j = 0; j < 2; j++) s += rect(x0 + i * cw, y0 + j * ch, cw, ch, 'gl gd', 0);
+    for (i = 0; i < 3; i++) for (j = 0; j < 2; j++) if (i || j) s += rect(x0 + i * cw + cw * 0.14, y0 + j * ch + ch * 0.14, cw * 0.72, ch * 0.72, 'gc', 8);
+    s += rect(x0 + cw * 0.07, y0 + ch * 0.07, cw * 0.86, ch * 0.86, 'gas', 10);
+    s += text(x0 + cw / 2, y0 + ch / 2 + 5, 'символ', 'gt');
+    s += line(x0, y0 - 12, x0 + cw, y0 - 12, 'gk-l');
+    s += line(x0, y0 - 17, x0, y0 - 7, 'gk-l') + line(x0 + cw, y0 - 17, x0 + cw, y0 - 7, 'gk-l');
+    s += text(x0 + cw / 2, y0 - 20, W + ' px', 'gtk');
+    var xr = x0 + 3 * cw + 14;
+    s += line(xr, y0, xr, y0 + ch, 'gk-l') + line(xr - 5, y0, xr + 5, y0, 'gk-l') + line(xr - 5, y0 + ch, xr + 5, y0 + ch, 'gk-l');
+    s += text(xr + 9, y0 + ch / 2 + 4, H + ' px', 'gtk', 'start');
+    var cy = y0 + ch + ch / 2;
+    s += '<circle cx="' + (x0 + cw / 2) + '" cy="' + cy + '" r="3.5" class="ga"/><circle cx="' + (x0 + 1.5 * cw) + '" cy="' + cy + '" r="3.5" class="ga"/>';
+    s += '<line x1="' + (x0 + cw / 2 + 6) + '" y1="' + cy + '" x2="' + (x0 + 1.5 * cw - 6) + '" y2="' + cy + '" class="gk-l" marker-end="url(#ah)" marker-start="url(#ah)"/>';
+    s += text(x0 + cw, cy + 18, 'крок між центрами', 'gm');
+    return svg(360, y0 + 2 * ch + 30, s, 'Клітинка ' + W + ' на ' + H);
+  }
+
+  function reelsArt(C, R) {
+    var Cd = Math.min(C, 7), Rd = Math.min(R, 7);
+    var ch = Math.min(32, 128 / (Rd + 1)), y0 = 46, s = ARROW;
+    var cw = Math.min(24, 150 / Cd - 5), gap = 5, lw = Cd * (cw + gap) - gap, lx = 104 - lw / 2;
+    s += text(104, 18, 'animation_reels_' + C + '_columns', 'gt');
+    for (var i = 0; i < Cd; i++) s += rect(lx + i * (cw + gap), y0, cw, Rd * ch, i === 1 ? 'gas' : 'gc', 5);
+    s += text(lx + cw / 2, y0 + Rd * ch + 16, 'reel_0', 'gm', 'start');
+    s += text(lx + lw, y0 + Rd * ch + 16, 'reel_' + (C - 1), 'gm', 'end');
+    var sx = 262, sw = ch * 1.15;
+    s += text(sx + sw / 2, 18, 'animation_reel_' + R + '_rows', 'gt');
+    var cx = lx + (cw + gap) + cw / 2;
+    s += '<path d="M' + cx + ' ' + (y0 - 3) + ' C ' + cx + ' ' + (y0 - 14) + ', ' + (sx + sw / 2) + ' ' + (y0 - 16) + ', ' + (sx + sw / 2) + ' ' + (y0 - 5) + '" class="gk-l gd" marker-end="url(#ah)"/>';
+    for (var j = 1; j <= Rd; j++) {
+      s += rect(sx + 4, y0 + (j - 1) * ch + 3, sw - 8, ch - 6, 'gas', 5);
+      s += text(sx - 6, y0 + (j - 0.5) * ch + 4, 'slot_' + j, 'gm', 'end');
+    }
+    s += rect(sx, y0, sw, Rd * ch, 'gk', 4);
+    s += rect(sx + 4, y0 + Rd * ch + 6, sw - 8, ch - 6, 'gc gd', 5);
+    s += text(sx - 6, y0 + Rd * ch + 6 + ch / 2, 'slot_0', 'gm', 'end');
+    s += text(sx + sw / 2, y0 + (Rd + 1) * ch + 20, 'за кадром', 'gm');
+    s += '<line x1="' + (sx + sw + 14) + '" y1="' + (y0 + 6) + '" x2="' + (sx + sw + 14) + '" y2="' + (y0 + Rd * ch - 6) + '" class="gk-l" marker-end="url(#ah)"/>';
+    s += text(sx + sw + 22, y0 + Rd * ch / 2 + 4, 'спін', 'gtk', 'start');
+    return svg(360, y0 + (Rd + 1) * ch + 30, s, 'Спайни барабанів');
+  }
+
+  function layersArt(focus) {
+    var s = '';
+    var layers = [['under', 'рамка під'], ['symbols', 'символи'], ['above', 'рамка над']];
+    layers.forEach(function (L, idx) {
+      var y = 168 - idx * 50;
+      var A = [64, y], B = [244, y], D = [112, y - 36];
+      var P = function (u, v) { return [A[0] + u * (B[0] - A[0]) + v * (D[0] - A[0]), A[1] + u * (B[1] - A[1]) + v * (D[1] - A[1])]; };
+      var quad = function (u0, v0, u1, v1) { return [P(u0, v0), P(u1, v0), P(u1, v1), P(u0, v1)]; };
+      var on = focus === L[0] || focus === 'all';
+      if (L[0] === 'under') s += poly(quad(0, 0, 1, 1), on ? 'gas' : 'gc');
+      else if (L[0] === 'symbols') {
+        s += poly(quad(0, 0, 1, 1), 'gl gd');
+        for (var i = 0; i < 5; i++) for (var j = 0; j < 3; j++) s += poly(quad(i / 5 + 0.03, j / 3 + 0.08, (i + 1) / 5 - 0.03, (j + 1) / 3 - 0.08), on ? 'ga-o' : 'gc');
+      } else {
+        var o = quad(0, 0, 1, 1), w = quad(0.08, 0.16, 0.92, 0.84);
+        var d = 'M' + o.map(function (p) { return p[0].toFixed(1) + ' ' + p[1].toFixed(1); }).join(' L') + ' Z M' + w.map(function (p) { return p[0].toFixed(1) + ' ' + p[1].toFixed(1); }).join(' L') + ' Z';
+        s += '<path d="' + d + '" fill-rule="evenodd" class="' + (on ? 'gas' : 'gc') + '"/>';
+      }
+      s += line(252, y - 18, 268, y - 18, 'gl');
+      s += text(274, y - 14, L[1], on ? 'gtk' : 'gm', 'start');
+    });
+    return svg(360, 184, s, 'Шари: рамка під, символи, рамка над');
+  }
+
+  function symbolsArt() {
+    var s = text(92, 18, 'animation_symbols_static', 'gt');
+    [['symbol_high_1', 'gas'], ['symbol_high_1_blur', 'gc'], ['symbol_low_1', 'gc']].forEach(function (k, i) {
+      var y = 34 + i * 34;
+      s += rect(22, y, 140, 28, 'gc', 6) + rect(28, y + 4, 20, 20, k[1], 4) + text(56, y + 18, k[0], 'gm', 'start');
+    });
+    s += text(92, 150, 'скіни: крутяться в барабанах', 'gm');
+    s += text(270, 18, 'animation_symbol_high_1', 'gt');
+    s += rect(236, 30, 68, 68, 'gas', 12) + text(270, 72, 'H1', 'gbig');
+    ['idle', 'stop', 'win', 'win_idle'].forEach(function (a, i) {
+      var x = 196 + (i % 2) * 76, y = 108 + Math.floor(i / 2) * 22;
+      s += rect(x, y, 70, 18, 'gk', 9) + text(x + 35, y + 13, a, 'gt');
+    });
+    s += text(270, 168, 'анімації: стоїть або виграв', 'gm');
+    return svg(360, 178, s, 'Статичні символи і спайни анімацій символів');
+  }
+
+  function animsArt() {
+    var s = '', y = 30;
+    var segs = [['спін', 0, 70, 'gc gd'], ['stop', 72, 40, 'ga-o'], ['win', 114, 80, 'gas'], ['win_idle ∞', 196, 140, 'gk']];
+    segs.forEach(function (g) { s += rect(20 + g[1], y, g[2], 26, g[3], 6) + text(20 + g[1] + g[2] / 2, y + 44, g[0], g[0] === 'спін' ? 'gm' : 'gt'); });
+    s += text(20, 16, 'виграв', 'gm', 'start');
+    y = 104;
+    s += rect(20, y, 316, 26, 'gk', 6) + text(178, y + 17, 'idle ∞', 'gt');
+    s += text(20, y - 12, 'не виграв, гра чекає', 'gm', 'start');
+    return svg(360, 142, s, 'Коли грають анімації символів');
+  }
+
+  function eventsArt() {
+    var s = rect(20, 50, 320, 20, 'gc', 4);
+    for (var i = 0; i <= 10; i++) s += line(20 + i * 32, 70, 20 + i * 32, i % 5 ? 75 : 79, 'gl');
+    s += text(20, 94, '0', 'gm') + text(180, 94, '0,5 с', 'gm') + text(340, 94, '1 с', 'gm');
+    s += diamond(52, 60, 7, 'ga') + line(52, 50, 52, 30, 'gk-l') + text(58, 28, 'onFinalSymbol(2)@0.1', 'gt', 'start');
+    s += diamond(180, 60, 7, 'ga') + line(180, 50, 180, 14, 'gk-l') + text(186, 14, 'onEvent@0.5', 'gt', 'start');
+    return svg(360, 104, s, 'Події на таймлайні');
+  }
+
+  function skinsArt() {
+    var s = '';
+    [['default', 'gc'], ['maingame', 'gas'], ['freespins', 'gk2']].forEach(function (k, i) {
+      var x = 22 + i * 112;
+      s += rect(x, 24, 96, 66, k[1], 10) + rect(x + 14, 36, 68, 42, 'gbg', 5);
+      for (var c = 0; c < 3; c++) s += rect(x + 19 + c * 21, 46, 16, 22, 'gc', 3);
+      s += text(x + 48, 110, k[0], 'gt');
+    });
+    return svg(360, 120, s, 'Скіни default, maingame, freespins');
+  }
+
+  function spacerArt() {
+    var s = ARROW + rect(40, 24, 110, 110, 'gas', 16) + text(95, 92, 'H1', 'gbig');
+    var px = 95 + 0.34 * 110, py = 79 - 0.42 * 110;
+    s += '<circle cx="' + px + '" cy="' + py + '" r="6" class="gk"/>' + line(px - 11, py, px + 11, py, 'gk-l') + line(px, py - 11, px, py + 11, 'gk-l');
+    s += '<path d="M' + (px + 10) + ' ' + (py - 4) + ' C 190 20, 200 20, 222 30" class="gk-l gd" marker-end="url(#ah)"/>';
+    s += text(230, 36, 'txt_amount', 'gt', 'start') + text(230, 52, 'слот 1×1', 'gm', 'start');
+    s += text(230, 98, '×5', 'gbig', 'start') + text(230, 118, 'гра вставляє свій текст', 'gm', 'start');
+    return svg(360, 150, s, 'Спейсер txt_amount');
+  }
+
+  function placeArt() {
+    var s = ARROW + line(20, 96, 340, 96, 'gl gd') + line(120, 14, 120, 170, 'gl gd');
+    s += '<circle cx="120" cy="96" r="5" class="ga"/>' + text(126, 112, '(0, 0)', 'gtk', 'start');
+    s += rect(176, 26, 130, 76, 'gas', 8) + '<circle cx="241" cy="64" r="3.5" class="ga"/>';
+    s += '<line x1="124" y1="93" x2="236" y2="66" class="gk-l gd" marker-end="url(#ah)"/>';
+    s += text(186, 132, 'центр X, Y', 'gm', 'start');
+    s += line(176, 116, 306, 116, 'gk-l') + text(241, 150, 'розмір, px', 'gm');
+    return svg(360, 176, s, 'Розмір і центр елемента');
+  }
+
+  var DEMOS = ['fade_in', 'fade_out', 'pop_in', 'pop_out', 'pulse', 'breathe', 'land', 'win', 'shake', 'float_up', 'glow', 'flash', 'hold'];
+  function motionArt(presets) {
+    return '<div class="demos">' + DEMOS.map(function (p) {
+      return '<div class="demo"><span class="demo-box"><i class="dm-' + p + '"></i></span><b>' + esc(presets[p] ? presets[p].label : p) + '</b></div>';
+    }).join('') + '</div>';
+  }
+
+  function treeArt(folder) {
+    var rows = [
+      ['d', 0, 'my-slot-spine-drafts/'],
+      ['d', 1, folder, 'в арт-репо'],
+      ['f', 2, 'animation_*.json  .atlas  .png'],
+      ['d', 1, 'spine-editor/<назва>/', 'Import Data'],
+      ['f', 2, '<назва>.json'],
+      ['d', 2, 'images/'],
+      ['f', 1, 'README.txt'],
+      ['f', 1, 'kit-settings.json', 'налаштування']
+    ];
+    return '<ul class="tree">' + rows.map(function (r) {
+      return '<li style="--d:' + r[1] + '"><span class="ti ' + r[0] + '"></span><code>' + esc(r[2]) + '</code>' + (r[3] ? '<em>' + esc(r[3]) + '</em>' : '') + '</li>';
+    }).join('') + '</ul>';
+  }
+
+  function list(items) { return '<ul class="ilist">' + items.map(function (i) { return '<li>' + i + '</li>'; }).join('') + '</ul>'; }
+  function p(t) { return '<p>' + t + '</p>'; }
+  function c(t) { return '<code>' + esc(t) + '</code>'; }
+
+  var INFO = {
+    projects: { t: 'Проекти', x: function () { return p('Проект — налаштування однієї гри разом з картинками. Він зберігається в цьому браузері.') + p('Щоб передати колезі або не загубити, експортуйте проект у .json кнопкою біля назви і відкрийте його через «Імпорт».'); } },
+    game: { t: 'Назва гри', x: function () { return p('Латиницею, як у репо гри, наприклад ' + c('dice-dominium') + '. З неї кіт називає архів.'); } },
+    grid: { t: 'Сітка', a: function (g) { return gridArt(g.C, g.R); }, x: function (g) { return p('Барабан — вертикальна колонка, що крутиться. Ряд — скільки символів видно в одному барабані.') + p('Від сітки залежать назви спайнів барабанів: ' + c('animation_reels_' + g.C + '_columns') + ' і ' + c('animation_reel_' + g.R + '_rows') + '.'); } },
+    cell: { t: 'Клітинка', a: function (g) { return cellArt(g.W, g.H); }, x: function () { return p('Клітинка — крок між центрами сусідніх символів у px гри: по ширині між барабанами, по висоті між рядами.') + p('Символ вписується в клітинку, більша картинка зменшиться. У шаблоні Pandora клітинка 334×334.'); } },
+    tech: { t: 'Технічне', x: function () { return list([c('Версія Spine') + ': валідатор арт-репо перевіряє її до патча.', c('fps') + ': крок кадру для спіну барабанів.', c('Папка') + ': куди в арт-репо класти .json, .atlas і .png.']); } },
+    components: { t: 'Компоненти', a: function () { return layersArt('all'); }, x: function () { return p('Компонент — елемент гри, для якого потрібна чернетка. Кожен дає один або кілька спайнів під фінальними назвами, які шукає гра.') + p('Вимкнений компонент не потрапляє в архів. Інші елементи додайте кнопками «+».'); } },
+    symbols: { t: 'Символи', a: symbolsArt, x: function () { return p(c('animation_symbols_static') + ' містить усі символи як скіни ' + c('symbol_<назва>') + ' і ' + c('symbol_<назва>_blur') + '. Саме вони крутяться в барабанах.') + p(c('animation_symbol_<назва>') + ' — окремий спайн символу з анімаціями. Гра вмикає його, коли символ зупинився або виграв.') + p('Кидайте PNG: назва файлу стає назвою символу, ' + c('high_1.png') + ' → ' + c('high_1') + '.'); } },
+    anims: { t: 'Анімації символів', a: animsArt, x: function () { return list([c('idle') + ' — символ стоїть, гра чекає. Петля.', c('stop') + ' — барабан щойно зупинився.', c('win') + ' — символ у виграшній комбінації.', c('win_idle') + ' — повтор виграшних ліній після показу виграшу. Петля.', c('win_insignificant') + ' — виграш, менший за поріг «незначного».']) + p('Гра просить анімацію за назвою, тому назви не міняйте.'); } },
+    motion: { t: 'Рух', a: function (g, presets) { return motionArt(presets); }, x: function () { return p('Рух — заготовка ключів для чернетки: масштаб, нахил, зсув, прозорість. Тривалість береться з колонки «Сек». Фінальну анімацію робить аніматор.'); } },
+    events: { t: 'Події', a: eventsArt, x: function () { return p('Подія — мітка в анімації, на яку реагує код гри: звук, підміна символу, старт іншої анімації.') + p('Формат ' + c('onEvent@0.5') + ': назва і секунда. Число в дужках — int: ' + c('onFinalSymbol(2)@0.1') + '. Кілька подій пишіть через кому.'); } },
+    skins: { t: 'Скіни', a: skinsArt, x: function () { return p('Скін — варіант картинки того самого спайна. Гра вмикає його за назвою, наприклад рамка у фрі-спінах.') + p('Скін без своїх картинок бере їх із ' + c('default') + '. Назви пишіть через кому.'); } },
+    spacers: { t: 'Спейсери', a: spacerArt, x: function () { return p('Спейсер — порожній слот 1×1 з вкладенням ' + c('shapes/spacer') + '. Гра вставляє туди свій текст або об’єкт, наприклад суму виграшу в ' + c('txt_amount') + '.') + p('Назви пишіть через кому. Закінчення ' + c('_left') + ', ' + c('_right') + ', ' + c('_top') + ', ' + c('_bottom') + ' ставить точку біля краю картинки.'); } },
+    reels: { t: 'Барабани', a: function (g) { return reelsArt(g.C, g.R); }, x: function (g) { return p(c('animation_reels_' + g.C + '_columns') + ' тримає точки ' + c('reel_0') + '…' + c('reel_' + (g.C - 1)) + '. У кожну гра вставляє один барабан.') + p(c('animation_reel_' + g.R + '_rows') + ' — сам барабан. ' + c('slot_1') + '…' + c('slot_' + g.R) + ' видно, ' + c('slot_0') + ' ховається за кадром і підвозить наступний символ.') + p(c('spin_loop') + ' крутить, ' + c('spin_stop') + ' зупиняє з відскоком. Події ' + c('onOffScreen') + ' і ' + c('onFinalSymbol') + ' кажуть грі, коли підміняти символ.'); } },
+    frame_under: { t: 'Рамка під барабанами', a: function () { return layersArt('under'); }, x: function () { return p('Малюється за символами: тло барабанів і роздільники колонок. Займає сітку з невеликим полем.') + p('Своя картинка розтягнеться так, щоб закрити сітку.'); } },
+    frame_above: { t: 'Рамка над барабанами', a: function () { return layersArt('above'); }, x: function () { return p('Малюється поверх символів. Дайте PNG з прозорим вікном: кіт знайде вікно і покладе його точно на сітку.') + p('Якщо вікна немає, картинка стане по центру.'); } },
+    custom: { t: 'Свій компонент', a: placeArt, x: function () { return p('Будь-який інший елемент: фон, логотип, попап, панель. Назва спайна має бути фінальною, як її шукатиме гра.') + p('Розмір — скільки px елемент займає в грі. Центр — зсув картинки від точки (0, 0), куди гра ставить спайн.'); } },
+    preview: { t: 'Превʼю', x: function () { return p('Живий рантайм Spine 4.1: так чернетку покаже гра.') + p('У превʼю барабанів кіт тимчасово вставляє символи в слоти й обрізає вікном сітки. У файли це не йде.'); } },
+    spin: { t: 'Спін', x: function () { return p('Справжній спін, як у грі на Pandora: кожен барабан стартує на 66.6 мс пізніше, крутить ' + c('spin_loop') + ' кілька кіл і зупиняється через ' + c('spin_stop') + '.') + p('Символи міняють події спайна: ' + c('onOffScreen') + ' ставить випадковий розмитий, ' + c('onFinalSymbol') + ' — фінальний, і на ньому грає ' + c('stop') + '.') + p('«Виграш» збирає лінію в середньому ряду й грає ' + c('win') + ' → ' + c('win_idle') + '. Блискавка — турбо: одне коло і швидкість 1.5, діє з наступного спіну.') + p('Кнопка спіну як у слоті: під час обертання показує стоп і зупиняє барабани на найближчому колі, поки вони зупиняються — неактивна, під час виграшу одразу запускає новий спін.'); } },
+    download: { t: 'Що в архіві', a: function (g, presets, tech) { return treeArt(tech.folder); }, x: function () { return p('Перша папка лягає в арт-репо як є. Друга — для Spine Editor: Import Data, картинки поруч.'); } },
+    check: { t: 'Перевірка', x: function () { return p('Киньте .json, .atlas і .png зі Spine Editor. Кіт звірить їх із компонентами поточного проекту так само, як валідатор арт-репо:') + list(['версія Spine і експорт без Nonessential data', 'скіни, анімації та їхній порядок', 'спейсери й події', 'тривалість ±10 %', 'регіони атласу, розміри PNG, useIndexes']); } }
+  };
+
+  root.SpineKitInfo = {
+    has: function (key) { return !!INFO[key]; },
+    title: function (key) { return INFO[key] ? INFO[key].t : ''; },
+    render: function (key, ctx) {
+      var it = INFO[key];
+      if (!it) return null;
+      return { title: it.t, art: it.a ? it.a(ctx.geometry, ctx.presets, ctx.tech) : '', html: it.x(ctx.geometry) };
+    },
+    gridArt: gridArt,
+    cellArt: cellArt,
+    miniGrid: function (C, R) {
+      var cs = Math.min(9, 44 / C, 30 / R), w = C * cs, h = R * cs, s = '';
+      for (var i = 0; i < C; i++) for (var j = 0; j < R; j++) s += rect(i * cs + 1, j * cs + 1, cs - 2, cs - 2, 'gc', 1.5);
+      return '<svg class="mini" viewBox="0 0 ' + w + ' ' + h + '" width="' + w + '" height="' + h + '" aria-hidden="true">' + s + '</svg>';
+    },
+    icon: function (kind) {
+      var I = {
+        symbols: rect(3, 3, 8, 8, 'ga', 2) + rect(13, 3, 8, 8, 'gc', 2) + rect(3, 13, 8, 8, 'gc', 2) + rect(13, 13, 8, 8, 'ga', 2),
+        reels: rect(3, 4, 5, 16, 'gc', 1.5) + rect(9.5, 4, 5, 16, 'ga', 1.5) + rect(16, 4, 5, 16, 'gc', 1.5),
+        frame_under: rect(2, 4, 20, 16, 'ga', 3) + rect(5, 7, 14, 10, 'gbg', 1.5),
+        frame_above: '<path d="M2 7 a3 3 0 0 1 3 -3 h14 a3 3 0 0 1 3 3 v10 a3 3 0 0 1 -3 3 h-14 a3 3 0 0 1 -3 -3 z M6 8 v8 h12 v-8 z" fill-rule="evenodd" class="ga"/>',
+        background: rect(2, 4, 20, 16, 'gc', 2) + '<path d="M3 18 l6 -7 l4 4 l3 -3 l5 6 z" class="ga"/>',
+        logo: '<path d="M12 3 l2.6 5.6 6 .7 -4.5 4 1.3 6 -5.4 -3.1 -5.4 3.1 1.3 -6 -4.5 -4 6 -.7 z" class="ga"/>',
+        popup: rect(3, 5, 18, 14, 'gc', 3) + rect(6, 14, 12, 3, 'ga', 1.5) + rect(6, 8, 12, 2, 'gm-f', 1),
+        custom: rect(4, 4, 16, 16, 'gc gd', 3) + '<path d="M12 8 v8 M8 12 h8" class="gk-l"/>'
+      };
+      return '<svg class="icon" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">' + (I[kind] || I.custom) + '</svg>';
+    }
+  };
+})(typeof window !== 'undefined' ? window : globalThis);

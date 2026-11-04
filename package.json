@@ -1,0 +1,10 @@
+{
+  "name": "spine-draft-kit",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node dev.mjs",
+    "build": "node build.mjs",
+    "check": "node check/check-core.mjs"
+  }
+}
