@@ -1,4 +1,6 @@
 projects/
+dist/
+v2-backup-before-spin-1805/
 node_modules/
 .idea/
 .DS_Store
