@@ -2,8 +2,8 @@
   'use strict';
 
   var MODES = {
-    normal: { delay: 0.0666, loop: 6, loopExtra: 2, speed: 1 },
-    quick: { delay: 0, loop: 1, loopExtra: 0, speed: 1.5 }
+    normal: { delay: 0.0666, loop: 6, loopExtra: 2, speed: 1, quickStopSpeed: 1 },
+    quick: { delay: 0.0666, loop: 1, loopExtra: 0, speed: 1.5, quickStopSpeed: 1 }
   };
   var WIN_LOOPS = 2;
 
@@ -102,6 +102,7 @@
           var n = entry.animation.name;
           if (n === 'spin_loop') {
             reel.loops += 1;
+            if (slam) reel.st.timeScale = mode.quickStopSpeed;
             if (reel.loops > reel.seq) {
               reel.stopping = true;
               reel.st.setAnimation(0, 'spin_stop', false).trackTime = entry.trackTime % entry.animation.duration;
@@ -112,20 +113,11 @@
     }
 
     function quickStop() {
-      var live = reels.filter(function (reel) { return !reel.stopping; });
-      if (!live.length) return;
+      if (slam || reels.every(function (reel) { return reel.stopping; })) return;
       slam = true;
+      var most = Math.max.apply(null, reels.map(function (reel) { return reel.loops; }));
+      reels.forEach(function (reel) { reel.seq = (most || 1) + reel.c; });
       notify();
-      var lead = live[0];
-      var cur = lead.started ? lead.st.tracks[0] : null;
-      var at = cur && cur.animation.name === 'spin_loop' ? cur.trackTime % cur.animation.duration : 0;
-      live.forEach(function (reel) {
-        reel.seq = lead.loops;
-        if (reel === lead && cur) return;
-        reel.started = true;
-        reel.loops = lead.loops;
-        reel.st.setAnimation(0, 'spin_loop', true).trackTime = at;
-      });
     }
 
     var t = 0, last = 0, raf = 0, stopped = false, phase = 'spin', slam = false, shown = 'spin';

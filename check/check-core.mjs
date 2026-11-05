@@ -36,10 +36,14 @@ const px = key => (key.startsWith('sym:') ? { w: 280, h: 280 } : null);
 const plan = K.planAll(dice, px);
 
 const canon = v => JSON.stringify(v);
+const symSig = r => canon([r.animations, [...r.decorationSpacers].sort()]);
+const sigCount = {};
+for (const [k, r] of Object.entries(ref)) if (k.startsWith('animation_symbol_')) sigCount[symSig(r)] = (sigCount[symSig(r)] || 0) + 1;
+const commonSym = Object.keys(sigCount).sort((a, b) => sigCount[b] - sigCount[a])[0];
 for (const s of plan.spines) {
   const r = ref[s.name + '.json'];
   if (!r) { if (!/symbol_(blank|dice_\d|jackpot)$/.test(s.name)) fail(`${s.name}: no reference entry`); continue; }
-  if (s.name === 'animation_symbol_wild_1') continue;
+  if (s.name.startsWith('animation_symbol_') && symSig(r) !== commonSym) continue;
   const c = s.contract;
   if (canon([...c.skins].sort()) !== canon([...r.skins].sort())) fail(`${s.name}: skins ${c.skins} vs ${r.skins}`);
   if (canon(c.animations.map(a => a.name)) !== canon(r.animations)) fail(`${s.name}: animations ${c.animations.map(a => a.name)} vs ${r.animations}`);

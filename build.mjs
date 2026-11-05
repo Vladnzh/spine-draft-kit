@@ -12,9 +12,11 @@ const fill = (s, token, code, name) => {
 let page = src('page.html');
 page = fill(page, '/*@CORE@*/', src('core.js'), 'core');
 page = fill(page, '/*@STORE@*/', src('store.js'), 'store');
+page = fill(page, '/*@SYNC@*/', src('patch.js') + '\n' + src('sync.js'), 'sync');
 page = fill(page, '/*@INFO@*/', src('info.js'), 'info');
 page = fill(page, '/*@SPIN@*/', src('spin.js'), 'spin');
 page = fill(page, '/*@LINK@*/', src('link.js'), 'link');
+page = fill(page, '/*@LAYOUTS@*/', src('layouts.js'), 'layouts');
 page = fill(page, '/*@UI@*/', src('ui.js'), 'ui');
 if (!page.startsWith('<title>Draft Kit</title>')) throw new Error('page must start with the title');
 mkdirSync(join(HERE, 'dist'), { recursive: true });

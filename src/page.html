@@ -62,13 +62,12 @@ button:disabled, input:disabled { cursor: default; }
 [hidden] { display: none !important; }
 .num { font-family: var(--f-num); font-variant-numeric: tabular-nums; }
 
-.app { display: grid; grid-template-columns: 264px minmax(0, 1fr); align-items: start; min-height: 100dvh; }
+.app { display: grid; grid-template-columns: minmax(0, 1fr); align-items: start; min-height: 100dvh; }
 .main-col { min-width: 0; }
 .bar { position: sticky; top: 0; z-index: 20; background: var(--paper); padding-top: env(safe-area-inset-top, 0px); }
 .bar-in { display: flex; align-items: center; gap: 12px; min-height: 64px; padding-left: max(var(--gutter), env(safe-area-inset-left, 0px)); padding-right: max(var(--gutter), env(safe-area-inset-right, 0px)); }
 .crumb { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 700 20px/1.2 var(--f-head); letter-spacing: -0.02em; }
-.menu-btn { display: none; }
-.bar-in:has(> .tabs) { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); }
+.bar-in:has(> .tabs) { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(max-content, 1fr); }
 .bar-start { flex: 1 1 auto; display: flex; align-items: center; gap: 12px; min-width: 0; }
 .bar-end { flex: none; display: flex; align-items: center; gap: 8px; }
 .bar-in > .tabs { grid-column: 2; }
@@ -91,8 +90,14 @@ button:disabled, input:disabled { cursor: default; }
 .btn.icon { width: 36px; height: 36px; padding: 0; flex: none; font-size: 16px; }
 .btn.icon:active:not(:disabled) { transform: scale(0.95); }
 .btn:disabled { opacity: 0.6; }
-.menu-btn.btn { display: none; width: 44px; height: 44px; background: none; border: 1px solid rgb(var(--ink-rgb) / 0.1); }
+.menu-btn.btn { display: inline-flex; width: 44px; height: 44px; background: none; border: 1px solid rgb(var(--ink-rgb) / 0.1); }
 .menu-btn svg { opacity: 0.5; }
+.menu-btn.btn { position: relative; }
+.menu-btn .mb-dot { position: absolute; top: 4px; right: 4px; width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--paper); background: rgb(var(--ink-rgb) / 0.3); }
+.menu-btn[data-state="wait"] .mb-dot { background: var(--warning); }
+.menu-btn[data-state="on"] .mb-dot { background: var(--success); }
+.menu-btn[data-state="busy"] .mb-dot { background: var(--brand); animation: linkPulse 1s ease-in-out infinite; }
+.menu-btn[data-state="none"] .mb-dot { display: none; }
 @media (hover: hover) {
   .tab:not([aria-selected="true"]):hover, .preset:not([aria-pressed="true"]):hover { color: var(--ink); }
   .btn:hover:not(:disabled) { background: rgb(var(--ink-rgb) / 0.1); }
@@ -102,7 +107,10 @@ button:disabled, input:disabled { cursor: default; }
 }
 .file { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
-.sidebar { min-width: 0; position: sticky; top: 0; height: 100dvh; overflow-y: auto; display: flex; flex-direction: column; background: var(--card); border-right: 1px solid rgb(var(--ink-rgb) / 0.08); padding: env(safe-area-inset-top, 0px) 12px 20px max(12px, env(safe-area-inset-left, 0px)); }
+.sidebar { min-width: 0; position: fixed; z-index: 40; top: 0; left: 0; bottom: 0; width: min(320px, 88vw); overflow-y: auto; display: flex; flex-direction: column; background: var(--card); border-right: 1px solid rgb(var(--ink-rgb) / 0.08); padding: env(safe-area-inset-top, 0px) 12px calc(env(safe-area-inset-bottom, 0px) + 20px) max(12px, env(safe-area-inset-left, 0px)); box-shadow: var(--float-shadow); transform: translateX(-104%); visibility: hidden; transition: transform 240ms cubic-bezier(0.2, 0.7, 0.2, 1), visibility 0s 240ms; }
+.sidebar.open { transform: none; visibility: visible; transition: transform 240ms cubic-bezier(0.2, 0.7, 0.2, 1); }
+.sb-edge { display: none; }
+@media (hover: hover) and (pointer: fine) { .sb-edge { display: block; position: fixed; z-index: 39; top: 0; bottom: 0; left: 0; width: 8px; } }
 .sb-brand { display: flex; align-items: center; gap: 8px; min-height: 64px; padding: 0 12px; }
 .link-btn { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px; border: 0; border-radius: 9999px; background: rgb(var(--ink-rgb) / 0.06); color: rgb(var(--ink-rgb) / 0.7); font: 600 13px/1 var(--f-text); white-space: nowrap; transition: background-color 150ms var(--ease), color 150ms var(--ease); }
 .link-btn i, .lk-status i { flex: none; width: 8px; height: 8px; border-radius: 50%; background: rgb(var(--ink-rgb) / 0.3); }
@@ -404,6 +412,19 @@ details.tech[open] > summary { margin-bottom: 12px; }
 .a-row .dd-btn { padding-right: 12px; }
 .a-row .del { justify-self: center; width: 36px; }
 .a-row input.ev { font-family: var(--f-mono); font-size: 13px; }
+.anims.keyed .a-head, .anims.keyed .a-row { grid-template-columns: minmax(110px, 1.2fr) 80px minmax(120px, 1fr) minmax(110px, 1fr) 40px 36px; }
+.a-head .a-keys { justify-content: center; }
+.a-row .btn.keys { justify-self: center; width: 40px; height: 40px; }
+.a-row .btn.keys svg { width: 18px; height: 18px; }
+.a-row .btn.keys[aria-pressed="true"] { background: color-mix(in srgb, var(--brand) 16%, transparent); color: var(--brand); }
+.a-row .btn.keys[aria-pressed="true"] svg { fill: currentColor; }
+@media (hover: hover) { .a-row .btn.keys[aria-pressed="true"]:hover:not(:disabled) { background: color-mix(in srgb, var(--brand) 24%, transparent); color: var(--brand); } }
+.field.pick .dd { width: 180px; }
+.part-edit .lbl .hint { font-weight: 400; color: rgb(var(--ink-rgb) / 0.45); }
+.part-edit .dims input[type="color"] { width: 56px; height: 48px; padding: 4px; border: 1px solid rgb(var(--ink-rgb) / 0.12); border-radius: 12px; background: var(--field); cursor: pointer; }
+.part-edit input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
+.part-edit input[type="color"]::-webkit-color-swatch { border: 0; border-radius: 8px; }
+.part-edit input[type="color"]::-moz-color-swatch { border: 0; border-radius: 8px; }
 .facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 6px 16px; margin: 0; font-size: 15px; padding-top: 8px; }
 .facts dt { color: rgb(var(--ink-rgb) / 0.6); }
 .facts dd { margin: 0; font-family: var(--f-mono); font-size: 13px; overflow-wrap: anywhere; align-self: center; }
@@ -422,6 +443,22 @@ details.tech[open] > summary { margin-bottom: 12px; }
 .add-item b { font: 500 16px/1.3 var(--f-text); }
 .add-item small { font-size: 13px; line-height: 1.4; color: rgb(var(--ink-rgb) / 0.6); }
 .add-item code { font-size: 12px; color: rgb(var(--ink-rgb) / 0.5); overflow-wrap: anywhere; }
+.add-pic svg { width: 28px; height: 28px; color: rgb(var(--ink-rgb) / 0.6); }
+.keys-dlg { width: min(680px, calc(100% - 32px)); }
+.keys-body { display: grid; gap: 12px; padding: 16px 24px 4px; }
+.keys-hint, .keys-fmt { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0; font-size: 14px; line-height: 1.45; color: rgb(var(--ink-rgb) / 0.6); }
+.keys-fmt { display: block; font-size: 13px; }
+.keys-fmt code { color: var(--ink); }
+.keys-tg { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.keys-tg > span { font-size: 13px; color: rgb(var(--ink-rgb) / 0.6); margin-right: 2px; }
+.keys-tg code { padding: 3px 10px; border-radius: 9999px; background: rgb(var(--ink-rgb) / 0.06); font-size: 12px; line-height: 1.4; color: var(--ink); }
+.keys-text { display: block; width: 100%; min-height: 260px; padding: 12px 14px; border: 1px solid rgb(var(--ink-rgb) / 0.12); border-radius: 12px; background-color: var(--field); color: var(--ink); font: 400 13px/1.55 var(--f-mono); tab-size: 2; resize: vertical; transition: border-color 150ms var(--ease); }
+.keys-text:focus { border-color: var(--ink); outline: none; }
+@media (hover: hover) { .keys-text:hover:not(:focus) { border-color: rgb(var(--ink-rgb) / 0.2); } }
+.keys-errs { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font: 400 13px/1.45 var(--f-mono); color: var(--destructive); overflow-wrap: anywhere; }
+.keys-errs:empty { display: none; }
+.keys-errs .warn { color: var(--warning); }
+@media (min-width: 640px) { .keys-body { padding: 16px 32px 4px; } }
 
 .window { padding: 8px; display: grid; gap: 8px; }
 .win-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; min-height: 28px; padding: 6px 4px 0 8px; font: 500 14px/1.3 var(--f-text); color: rgb(var(--ink-rgb) / 0.6); }
@@ -475,11 +512,122 @@ details.tech[open] > summary { margin-bottom: 12px; }
 .chip[aria-pressed="true"] { color: var(--ink); box-shadow: inset 0 0 0 2px var(--brand); background: none; }
 @media (hover: hover) { .chip:hover { color: var(--ink); } }
 .ex-list { padding: 20px 24px 0; }
-.ex-list .comp-thumb img { max-width: 100%; max-height: 100%; }.ex-foot { position: sticky; bottom: 0; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 24px 24px; background: var(--paper); }
+.ex-list .comp-thumb img { max-width: 100%; max-height: 100%; }
+.ex-to { width: max-content; margin: 20px 24px 0; }
+.ex-repo { display: grid; gap: 10px; margin: 16px 24px 0; padding: 14px 16px; border-radius: 16px; background: var(--card); box-shadow: inset 0 0 0 1px rgb(var(--ink-rgb) / 0.08); }
+.ex-dir { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; min-width: 0; }
+.ex-dir svg { flex: none; color: var(--brand); }
+.ex-dir span { flex: 1 1 160px; min-width: 0; }
+.ex-dir b { display: block; font-weight: 600; overflow-wrap: anywhere; }
+.ex-dir small, .ex-plan { display: block; font: 400 12px/1.35 var(--f-mono); color: rgb(var(--ink-rgb) / 0.5); overflow-wrap: anywhere; }
+.ex-plan { font: 400 14px/1.4 var(--f-text); color: rgb(var(--ink-rgb) / 0.7); }
+.ex-plan.bad { color: var(--destructive); }
+.ex-plan.ok { color: var(--success); }
+.ex-files > summary { font-size: 13px; color: rgb(var(--ink-rgb) / 0.6); width: max-content; }
+.ex-files p { margin: 8px 0 0; font: 400 12px/1.45 var(--f-mono); color: rgb(var(--ink-rgb) / 0.6); overflow-wrap: anywhere; }
+.ex-files p b { display: block; font: 600 12px/1.4 var(--f-text); color: var(--ink); }.ex-foot { position: sticky; bottom: 0; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 24px 24px; background: var(--paper); }
 .dl-n { padding: 3px 7px; border-radius: 9999px; background: rgb(255 255 255 / 0.2); font: 500 13px/1 var(--f-num); font-variant-numeric: tabular-nums; }
-.dl-meta { font: 400 14px/1 var(--f-num); font-variant-numeric: tabular-nums; color: rgb(var(--ink-rgb) / 0.6); white-space: nowrap; }
+.hist-btn.btn { position: relative; width: 44px; height: 44px; padding: 0; flex: none; background: #ffcc00; color: #1c1c1e; }
+.hist-btn .sv-dot { display: none; position: absolute; top: -4px; right: -4px; width: 16px; height: 16px; border-radius: 50%; border: 3px solid var(--paper); background: var(--destructive); }
+.hist-btn.dirty { box-shadow: 0 0 0 2px var(--paper), 0 0 0 4px var(--destructive); }
+.hist-btn.dirty .sv-dot { display: block; }
+@media (hover: hover) { .hist-btn.btn:hover:not(:disabled) { background: #f0bf00; } }
+.dlg.side-dlg { margin: 0 0 0 auto; width: min(440px, calc(100% - 24px)); max-width: 100%; height: 100dvh; max-height: 100dvh; border-radius: 24px 0 0 24px; border-right: 0; border-bottom: 0; padding-bottom: env(safe-area-inset-bottom, 0px); }
+.dlg.side-dlg[open] { display: flex; flex-direction: column; }
+.side-dlg .hist-list { flex: 1 0 auto; align-content: start; }
+:root .dlg.side-dlg::backdrop { background: rgb(0 0 0 / 0.2); backdrop-filter: none; -webkit-backdrop-filter: none; }
+@media (prefers-reduced-motion: no-preference) { .dlg.side-dlg[open] { animation: sideIn 280ms cubic-bezier(0.2, 0.7, 0.2, 1); } }
+@keyframes sideIn { from { transform: translateX(100%); } }
+.hist-top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 20px 24px 0; }
+.hist-list { list-style: none; margin: 0; padding: 12px 24px 24px; display: grid; gap: 2px; }
+.hist-it { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 12px; width: 100%; min-height: 48px; padding: 6px 6px 6px 14px; border: 0; border-radius: 16px; background: none; text-align: left; transition: opacity 150ms var(--ease), background-color 150ms var(--ease); }
+.hist-it.now { background: var(--card); box-shadow: inset 0 0 0 1px rgb(var(--ink-rgb) / 0.08); cursor: default; }
+.hist-it.undone { opacity: 0.38; }
+.hist-t { display: inline-flex; align-items: center; gap: 6px; font: 400 13px/1 var(--f-num); font-variant-numeric: tabular-nums; color: rgb(var(--ink-rgb) / 0.6); white-space: nowrap; }
+.hist-it.unsaved .hist-t::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--brand); }
+.hist-l { font-size: 15px; line-height: 1.35; overflow-wrap: anywhere; }
+.hist-l small { margin-left: 8px; font-size: 13px; color: var(--success); }
+.hist-tag { padding: 0 14px; font-size: 13px; font-weight: 600; color: var(--brand); }
+.hist-note { font-size: 13px; color: rgb(var(--ink-rgb) / 0.6); }
+.ask-dlg { width: min(480px, calc(100% - 32px)); }
+.ask-dlg .ex-foot { flex-wrap: wrap; }
+.ask-btns { display: flex; flex-wrap: wrap; gap: 8px; margin-left: auto; }
+@media (hover: hover) { .hist-it:not(.now):hover { background: rgb(var(--ink-rgb) / 0.06); } .hist-it.undone:hover { opacity: 0.7; } }
+@media (min-width: 640px) { .hist-top { padding: 20px 32px 0; } .hist-list { padding: 12px 32px 32px; } }
 .warns { list-style: none; margin: 0; padding: 12px 16px; display: grid; gap: 4px; font-size: 14px; color: var(--warning); }
 .warns:empty { display: none; }
+
+.lay { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; }
+.lay > * { min-width: 0; }
+.lay-win { gap: 10px; }
+.lay-top { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 2px 2px 0; }
+#lay-size { margin-left: auto; font: 600 14px/1 var(--f-num); font-variant-numeric: tabular-nums; }
+.lay-top .switch { padding: 0; gap: 8px; font-size: 14px; }
+.lay-top .switch input[type="checkbox"] { width: 40px; height: 24px; background-size: 24px 24px; }
+.lay-top .switch input[type="checkbox"]:checked { background-position: 16px 0; }
+.lay-scr { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 0 2px; font-size: 13px; color: rgb(var(--ink-rgb) / 0.6); }
+.lay-scr > span { margin-right: 2px; }
+.lay-scr .chip { height: 28px; padding: 0 10px; font-family: var(--f-num); }
+.lay-stage { display: grid; place-items: center; min-height: 260px; padding: 8px; border-radius: 16px; background: rgb(var(--ink-rgb) / 0.04); transition: background-color 150ms var(--ease), box-shadow 150ms var(--ease); }
+.lay-stage.over { background: var(--brand-soft); box-shadow: inset 0 0 0 2px var(--brand); }
+#lay-canvas { display: block; max-width: 100%; /* touch-action: none; */ border-radius: 6px; }
+.lay-side { display: grid; gap: 16px; }
+.lay-card { padding: 16px; display: grid; gap: 12px; }
+.lay-h { display: flex; align-items: center; gap: 8px; min-height: 32px; }
+.lay-h h2 { font-size: 17px; }
+.lay-h .mono { color: rgb(var(--ink-rgb) / 0.5); font: 400 14px/1 var(--f-num); font-variant-numeric: tabular-nums; }
+.lay-h .btn { margin-left: auto; }
+.lay-tog { display: inline-flex; align-items: center; gap: 6px; margin-left: -6px; padding: 4px 10px 4px 4px; border: 0; border-radius: 10px; background: none; text-align: left; transition: opacity 150ms var(--ease), background-color 150ms var(--ease); }
+.lay-tog:active { opacity: 0.6; }
+.lay-tog[aria-expanded="true"] .chev { transform: rotate(90deg); }
+.lay-card.shut > :not(.lay-h), .lay-card.shut .lay-h .btn { display: none; }
+@media (hover: hover) { .lay-tog:hover { background: rgb(var(--ink-rgb) / 0.05); } }
+.lay-rows { display: grid; gap: 10px; }
+.lay-rows > .note { margin: 0; font-size: 14px; color: rgb(var(--ink-rgb) / 0.6); }
+.lay-comp { display: grid; grid-template-columns: 36px minmax(0, 1fr) 36px; gap: 6px 10px; align-items: center; }
+.lay-comp > .dd { grid-column: 2; grid-row: 2; }
+.lay-comp > .lay-eye { grid-column: 3; grid-row: 1; }
+.lay-comp.off .comp-thumb, .lay-comp.off .comp-t { opacity: 0.45; }
+.lay-comp .dd-btn { height: 40px; }
+.lay-comp .comp-t code { font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lay-warn { font-size: 12px; line-height: 1.3; color: var(--warning); }
+.btn.lay-eye { width: 36px; height: 36px; padding: 0; }
+.lay-eye svg { width: 18px; height: 18px; }
+.lay-comp > .lay-dims { grid-column: 2; grid-row: 3; gap: 10px 16px; }
+.lay-dims .lbl { font-size: 13px; }
+.lay-dims .dims input { width: 80px; height: 40px; }
+.lay-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.lay-bone { border-radius: 14px; }
+.lay-bone.sel { background: rgb(var(--ink-rgb) / 0.05); }
+.lb-open { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 8px; width: 100%; min-height: 40px; padding: 6px 10px; border: 0; border-radius: 14px; background: none; color: var(--ink); text-align: left; }
+.lb-dot { flex: none; width: 10px; height: 10px; border-radius: 50%; box-shadow: inset 0 0 0 1.5px rgb(var(--ink-rgb) / 0.35); }
+.lb-dot.has { background: rgb(var(--ink-rgb) / 0.8); box-shadow: none; }
+.lay-bone.sel .lb-dot { background: var(--brand); box-shadow: none; }
+.lb-name { font-size: 13px; overflow-wrap: anywhere; }
+.lb-chip { font: 500 12px/20px var(--f-text); padding: 0 8px; border-radius: 9999px; background: var(--brand-soft); color: var(--brand); }
+.lb-meta { margin-left: auto; font: 400 12px/1.2 var(--f-num); font-variant-numeric: tabular-nums; color: rgb(var(--ink-rgb) / 0.5); }
+.lay-bone.bad .lb-meta, .lb-edit .note { color: var(--warning); }
+.lb-edit { display: flex; flex-wrap: wrap; align-items: end; gap: 10px 12px; padding: 2px 10px 12px 28px; }
+.lb-edit input[type="number"] { width: 112px; height: 40px; }
+.lb-edit .lb-parent .dd { width: 190px; }
+.lb-edit .dd-btn { height: 40px; }
+.lb-edit .lb-wide input { width: 240px; height: 40px; }
+.lb-edit .note { flex-basis: 100%; margin: 0; font-size: 13px; }
+.btn.lb-del { background: color-mix(in srgb, var(--destructive) 16%, transparent); color: var(--destructive); }
+.lay-acts { align-items: center; }
+.lay-acts .note { font-size: 13px; color: rgb(var(--ink-rgb) / 0.5); }
+.bar-in:has(> .tabs) > .bar-end { justify-self: end; }
+@media (hover: hover) { .lb-open:hover { background: rgb(var(--ink-rgb) / 0.05); } }
+@container (min-width: 980px) {
+  .lay { grid-template-columns: minmax(0, 1.65fr) minmax(340px, 1fr); }
+  .lay-win { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 64px + 16px); }
+}
+@media (max-width: 639px) {
+  .lay-comp > .dd, .lay-comp > .lay-dims { grid-column: 1 / -1; }
+  .lb-edit { padding-left: 10px; }
+  .bar-in:has(> .tabs) { grid-template-columns: minmax(0, 1fr) auto; }
+  .bar-in > .tabs { grid-column: 1 / -1; grid-row: 2; justify-self: center; margin-bottom: 8px; }
+}
 
 .check { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 24px; align-items: start; }
 .check > * { min-width: 0; }
@@ -525,11 +673,7 @@ details.tech[open] > summary { margin-bottom: 12px; }
 @container (max-width: 860px) {
   .check { grid-template-columns: minmax(0, 1fr); }
 }
-@media (max-width: 860px) {
-  .app { grid-template-columns: minmax(0, 1fr); }
-  .menu-btn.btn { display: inline-flex; }
-  .sidebar { position: fixed; z-index: 40; top: 0; left: 0; bottom: 0; height: auto; width: min(320px, 88vw); transform: translateX(-104%); transition: transform 240ms cubic-bezier(0.2, 0.7, 0.2, 1); padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 16px); box-shadow: var(--float-shadow); }
-  .sidebar.open { transform: none; }
+@media (hover: none), (pointer: coarse) {
   .scrim:not([hidden]) { display: block; position: fixed; inset: 0; z-index: 35; background: rgb(0 0 0 / 0.5); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); }
 }
 @media (max-width: 639px) {
@@ -539,13 +683,16 @@ details.tech[open] > summary { margin-bottom: 12px; }
   .crumb { font-size: 17px; }
   #dl-all { padding: 0 14px; }
   #dl-all .dl-txt { display: none; }
-  .bar-end .dl-meta { display: none; }
   .a-head { display: none; }
   .a-row { grid-template-columns: minmax(0, 1fr) 80px 36px; padding: 8px; border-radius: 16px; background: rgb(var(--ink-rgb) / 0.04); }
   .a-row .dd, .a-row input.ev { grid-column: 1 / -1; }
   .a-row .del { grid-column: 3; grid-row: 1; }
+  .anims.keyed .a-row { grid-template-columns: minmax(0, 1fr) 80px 40px; }
+  .anims.keyed .a-row input.ev { grid-column: 1 / 3; grid-row: 3; }
+  .anims.keyed .a-row .btn.keys { grid-column: 3; grid-row: 3; }
   .row .field input[type="text"], .row .field input.w-name { width: 100%; }
   .row .field { flex: 1 1 100%; }
+  .field.pick .dd { width: 100%; }
   .sym-edit { grid-template-columns: minmax(0, 1fr); }
   .stage { height: 240px; }
   .game, .comp-body { padding-left: 16px; padding-right: 16px; }
@@ -559,9 +706,9 @@ details.tech[open] > summary { margin-bottom: 12px; }
   .dlg-text { padding: 12px 32px 32px; }
   .add-list { padding: 20px 32px 32px; }
   .ex-list { padding: 20px 32px 0; }
+  .ex-to, .ex-repo { margin-left: 32px; margin-right: 32px; }
   .ex-foot { padding: 16px 32px 32px; }
 }
-@media (min-width: 1120px) { .app { grid-template-columns: 280px minmax(0, 1fr); } }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
 </style>
 
@@ -584,25 +731,25 @@ details.tech[open] > summary { margin-bottom: 12px; }
     <div class="wizard" id="wizard" hidden></div>
   </aside>
   <div class="scrim" id="scrim" hidden></div>
+  <div class="sb-edge" id="sb-edge" aria-hidden="true"></div>
 
   <div class="main-col">
   <header class="bar">
     <div class="bar-in">
       <div class="bar-start">
-        <button class="btn ghost icon menu-btn" type="button" id="menu-btn" aria-label="Проекти" aria-controls="sidebar" aria-expanded="false"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
+        <button class="btn ghost icon menu-btn" type="button" id="menu-btn" aria-label="Проекти" aria-controls="sidebar" aria-expanded="false" data-state="none"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><i class="mb-dot" aria-hidden="true"></i></button>
         <span class="crumb" id="crumb"></span>
       </div>
-      <div class="bar-end">
-        <span class="dl-meta" id="dl-meta"></span>
-        <button class="info" type="button" data-info="download" aria-label="Що в архіві">i</button>
-        <button class="btn primary" type="button" id="dl-all" aria-label="Експорт драфту" aria-haspopup="dialog"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 4v11M7.5 10.5 12 15l4.5-4.5M5 19h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="dl-txt">Експорт драфту</span><span class="dl-n" id="dl-n"></span></button>
-      </div>
-      <!--
       <nav class="tabs" role="tablist" aria-label="Розділи">
         <button class="tab" role="tab" id="tab-drafts" data-view="drafts" aria-selected="true">Чернетки</button>
-        <button class="tab" role="tab" id="tab-check" data-view="check" aria-selected="false">Перевірка</button>
+        <button class="tab" role="tab" id="tab-layouts" data-view="layouts" aria-selected="false">Лейаути</button>
       </nav>
-      -->
+      <div class="bar-end">
+        <button class="info" type="button" data-info="download" aria-label="Що в архіві">i</button>
+        <button class="btn primary" type="button" id="dl-all" aria-label="Експорт" aria-haspopup="dialog"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 4v11M7.5 10.5 12 15l4.5-4.5M5 19h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="dl-txt">Експорт</span><span class="dl-n" id="dl-n"></span></button>
+        <button class="btn hist-btn" type="button" id="hist-btn" aria-label="Історія змін" title="Історія змін" aria-haspopup="dialog"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8 M3 3v5h5 M12 7v5l3 2" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg><i class="sv-dot" aria-hidden="true"></i></button>
+      </div>
+      <!-- <button class="tab" role="tab" id="tab-check" data-view="check" aria-selected="false">Перевірка</button> -->
     </div>
   </header>
 
@@ -676,6 +823,49 @@ details.tech[open] > summary { margin-bottom: 12px; }
         <ul class="findings" id="ck-findings"></ul>
       </div>
     </section>
+
+    <section id="view-layouts" class="lay" role="tabpanel" aria-labelledby="tab-layouts" hidden>
+      <div class="card window lay-win">
+        <div class="lay-top">
+          <div class="presets" id="lay-tabs" role="group" aria-label="Лейаути"></div>
+          <b id="lay-size"></b>
+          <label class="switch"><input type="checkbox" id="lay-marks" checked>Кістки</label>
+          <button class="info" type="button" data-info="layouts" aria-label="Що таке лейаути">i</button>
+        </div>
+        <div class="lay-scr" id="lay-scr" role="group" aria-label="Пропорція екрана"></div>
+        <div class="lay-stage" id="lay-stage"><canvas id="lay-canvas" width="760" height="460" tabindex="0" role="img" aria-label="Лейаут з компонентами на кістках"></canvas></div>
+        <div class="spin-row">
+          <div class="spin-pill">
+          <label class="turbo" title="Турбо"><input type="checkbox" id="lay-spin-quick" aria-label="Турбо"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13.2 2.5 5 13.6h6.1l-1 7.9 8.2-11.1h-6.1l1-7.9Z" fill="currentColor" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg></label>
+          <button class="spin-btn" type="button" id="lay-spin-go" data-state="idle" aria-label="Спін" disabled>
+            <svg viewBox="0 0 48 48" aria-hidden="true">
+              <g class="spin-arcs">
+                <path d="M28.79 10.84A14 14 0 0 1 31 36.12M19.21 37.16A14 14 0 0 1 17 11.88" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>
+                <path d="M33 39.58 29 32.66 26.67 38.62ZM15 8.42 19 15.34 21.33 9.38Z" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+              </g>
+              <rect class="spin-stop" x="15" y="15" width="18" height="18" rx="4" fill="currentColor"/>
+            </svg>
+          </button>
+          </div>
+          <label class="win-tog" title="Виграш"><input type="checkbox" id="lay-spin-win" checked aria-label="Виграш"><span aria-hidden="true">Win</span></label>
+          <button class="info" type="button" data-info="spin" aria-label="Як працює спін">i</button>
+        </div>
+      </div>
+      <div class="lay-side">
+        <section class="card lay-card" aria-labelledby="h-lay-comps">
+          <div class="lay-h"><h2 id="h-lay-comps"><button class="lay-tog" type="button" aria-expanded="true" aria-controls="lay-comps"><span class="chev" aria-hidden="true"></span>Компоненти</button></h2><button class="info" type="button" data-info="layout_comps" aria-label="Який компонент на якій кістці">i</button></div>
+          <div class="lay-rows" id="lay-comps"></div>
+        </section>
+        <section class="card lay-card" aria-labelledby="h-lay-bones">
+          <div class="lay-h"><h2 id="h-lay-bones"><button class="lay-tog" type="button" aria-expanded="true" aria-controls="lay-bones"><span class="chev" aria-hidden="true"></span>Кістки</button></h2><span class="mono" id="lay-bn"></span><button class="info" type="button" data-info="layout_bones" aria-label="Як гра читає кістки">i</button><button class="btn sm" type="button" id="lay-add">+ Кістка</button></div>
+          <ul class="lay-list" id="lay-bones"></ul>
+        </section>
+        <section class="card lay-card" aria-labelledby="h-lay-file">
+          <div class="lay-h"><h2 id="h-lay-file"><button class="lay-tog" type="button" aria-expanded="true" aria-controls="lay-meta"><span class="chev" aria-hidden="true"></span>Файл лейаута</button></h2></div>
+          <div class="lay-rows" id="lay-meta"></div>
+        </section>
+      </div>
+    </section>
   </main>
   </div>
 </div>
@@ -729,10 +919,39 @@ details.tech[open] > summary { margin-bottom: 12px; }
   <div class="dlg-head"><h3 id="h-add">Додати компонент</h3><button class="btn ghost icon" type="button" id="add-close" aria-label="Закрити">✕</button></div>
   <div class="add-list" id="add-list"></div>
 </dialog>
+<dialog class="dlg keys-dlg" id="keys-dlg" aria-labelledby="h-keys">
+  <div class="dlg-head"><h3 id="h-keys">Ключі</h3><button class="btn ghost icon" type="button" id="keys-close" aria-label="Закрити">✕</button></div>
+  <div class="keys-body">
+    <p class="keys-hint" id="keys-hint"></p>
+    <div class="keys-tg" id="keys-tg"></div>
+    <textarea class="keys-text" id="keys-text" rows="14" spellcheck="false" autocomplete="off" autocapitalize="off" autocorrect="off" aria-label="Ключі, JSON"></textarea>
+    <ul class="keys-errs" id="keys-errs" aria-live="polite"></ul>
+    <p class="keys-fmt"><code>t</code> — секунди; <code>x</code>, <code>y</code> — зсув, y угору; <code>scale</code> / <code>sx</code> / <code>sy</code>; <code>rotate</code> — градуси проти годинникової; <code>alpha</code> 0–1; <code>color</code> "ffcc00"; <code>ease</code> до наступного ключа: linear, ease-in, ease-out, ease-in-out, back, soft, shake, stepped.</p>
+  </div>
+  <div class="ex-foot"><button class="btn ghost" type="button" id="keys-cancel">Скасувати</button><button class="btn primary" type="button" id="keys-save">Зберегти</button></div>
+</dialog>
 <dialog class="dlg" id="ex-dlg" aria-labelledby="h-ex">
   <div class="dlg-head"><h3 id="h-ex">Експорт драфту</h3><button class="btn ghost icon" type="button" id="ex-close" aria-label="Закрити">✕</button></div>
+  <div class="presets ex-to" id="ex-to" role="group" aria-label="Куди експортувати" hidden><button class="preset" type="button" data-to="zip" aria-pressed="true">Zip-архів</button><button class="preset" type="button" data-to="repo" aria-pressed="false">В арт-репо</button></div>
+  <div class="ex-repo" id="ex-repo" hidden></div>
   <div class="wz-comps ex-list" id="ex-list"></div>
   <div class="ex-foot"><button class="btn" type="button" id="ex-all"></button><button class="btn primary" type="button" id="ex-go"></button></div>
+</dialog>
+<dialog class="dlg side-dlg" id="hist-dlg" aria-labelledby="h-hist">
+  <div class="dlg-head"><h3 id="h-hist">Історія змін</h3><button class="btn ghost icon" type="button" id="hist-close" aria-label="Закрити">✕</button></div>
+  <div class="hist-top">
+    <div class="presets" id="hist-tabs" role="group" aria-label="Розділ"><button class="preset" type="button" data-scope="drafts" aria-pressed="true">Чернетки</button><button class="preset" type="button" data-scope="layouts" aria-pressed="false">Лейаути</button></div>
+    <label class="switch"><input type="checkbox" id="hist-auto" checked>Автозбереження</label>
+  </div>
+  <ol class="hist-list" id="hist-list"></ol>
+  <div class="ex-foot" id="hist-foot" hidden><span class="hist-note" id="hist-note"></span><button class="btn primary" type="button" id="hist-save">Зберегти</button></div>
+</dialog>
+<dialog class="dlg ask-dlg" id="unsaved-dlg" aria-labelledby="h-unsaved">
+  <form method="dialog">
+    <div class="dlg-head"><h3 id="h-unsaved">Незбережені зміни</h3></div>
+    <div class="dlg-text"><p id="unsaved-txt"></p></div>
+    <div class="ex-foot"><button class="btn ghost" value="">Скасувати</button><span class="ask-btns"><button class="btn" value="drop">Не зберігати</button><button class="btn primary" value="save" autofocus>Зберегти</button></span></div>
+  </form>
 </dialog>
 <dialog class="dlg" id="link-dlg" aria-labelledby="link-title">
   <div class="dlg-head"><h3 id="link-title">Claude · MCP</h3><button class="btn ghost icon" type="button" id="link-close" aria-label="Закрити">✕</button></div>
@@ -746,7 +965,9 @@ details.tech[open] > summary { margin-bottom: 12px; }
 
 <script>/*@CORE@*/</script>
 <script>/*@STORE@*/</script>
+<script>/*@SYNC@*/</script>
 <script>/*@INFO@*/</script>
 <script>/*@SPIN@*/</script>
 <script>/*@LINK@*/</script>
+<script>/*@LAYOUTS@*/</script>
 <script>/*@UI@*/</script>

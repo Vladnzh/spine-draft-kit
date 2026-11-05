@@ -5,6 +5,9 @@
   "scripts": {
     "dev": "node dev.mjs",
     "build": "node build.mjs",
-    "check": "node check/check-core.mjs"
+    "check": "node check/check-core.mjs",
+    "start": "node serve.mjs",
+    "serve:dev": "node serve.mjs --dev",
+    "vendor": "node vendor.mjs"
   }
 }

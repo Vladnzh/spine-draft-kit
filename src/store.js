@@ -23,12 +23,17 @@
     return dbPromise;
   }
 
+  function inMemory(fn) {
+    var r = fn(null);
+    return r && 'result' in r ? r.result : undefined;
+  }
+
   function run(mode, fn) {
     return open().then(function (db) {
-      if (!db) return fn(null);
+      if (!db) return inMemory(fn);
       return new Promise(function (resolve, reject) {
         var t;
-        try { t = db.transaction(STORE, mode); } catch (e) { persistent = false; resolve(fn(null)); return; }
+        try { t = db.transaction(STORE, mode); } catch (e) { persistent = false; resolve(inMemory(fn)); return; }
         var req = fn(t.objectStore(STORE));
         t.oncomplete = function () { resolve(req && 'result' in req ? req.result : undefined); };
         t.onerror = function () { reject(t.error); };

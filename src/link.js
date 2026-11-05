@@ -5,7 +5,9 @@
   var LABELS = {
     status: 'стан кита', list_projects: 'список проектів', open_project: 'відкрив проект', create_project: 'створив проект', get_project: 'читає проект',
     update_game: 'налаштування гри', set_symbols: 'символи', update_component: 'компонент', add_component: 'додав компонент', remove_component: 'прибрав компонент',
-    preview: 'превʼю', screenshot: 'скріншот', spin: 'спін', export_drafts: 'експорт драфту'
+    preview: 'превʼю', screenshot: 'скріншот', spin: 'спін', export_drafts: 'експорт драфту',
+    get_layouts: 'читає лейаути', update_layout: 'лейаут', place_components: 'компоненти на лейауті', import_layouts: 'імпорт лейаутів', show_layout: 'показує лейаут',
+    export_component: 'експорт компонента', import_component: 'імпорт компонента'
   };
   var link = { local: false, info: null, es: null, online: false, replaced: false, agents: [], busy: null, log: [], backupAt: 0, backupError: '' };
   var App = null;
@@ -112,7 +114,7 @@
           images[keys[j]] = await r.blob();
           uploaded.set(images[keys[j]], { pid: d.id, key: keys[j], file: file });
         }
-        await Store.put({ id: p.id, created: p.created, updated: p.updated, settings: p.settings, images: images });
+        await Store.put({ id: p.id, created: p.created, updated: p.updated, settings: p.settings, images: images, history: mine[d.id] && mine[d.id].history });
         n++;
       } catch (e) { continue; }
     }
@@ -143,6 +145,11 @@
     if (!Array.isArray(ev)) return '';
     return ev.map(function (e) { return typeof e === 'string' ? e : e.name + (e.int ? '(' + e.int + ')' : '') + (e.time ? '@' + e.time : ''); }).join(', ');
   }
+  function keysOf(name, raw) {
+    var nk = K().normKeys(raw);
+    if (nk.errors.length) throw new Error('ключі ' + name + ': ' + nk.errors.join('; '));
+    return Object.keys(nk.keys).length ? nk.keys : null;
+  }
   function normAnims(list) {
     if (!Array.isArray(list)) throw new Error('anims має бути масивом');
     return list.map(function (a) {
@@ -151,8 +158,119 @@
       var P = K().PRESETS;
       var preset = P[a.preset] ? a.preset : K().presetFor(name, 'custom');
       var d = Number(a.duration);
-      return App.A(name, isFinite(d) && d >= 0 ? d : (P[preset] && P[preset].duration) || 1, preset, !!a.loop, eventsText(a.events));
+      var row = App.A(name, isFinite(d) && d >= 0 ? d : (P[preset] && P[preset].duration) || 1, preset, !!a.loop, eventsText(a.events));
+      var keys = a.keys === undefined || a.keys === null ? null : keysOf(name, a.keys);
+      if (keys) row.keys = keys;
+      return row;
     });
+  }
+  function mergeAnims(rows, list) {
+    if (!Array.isArray(list)) throw new Error('anims має бути масивом');
+    var P = K().PRESETS;
+    list.forEach(function (a) {
+      var name = String(a && a.name || '').trim();
+      if (!name) throw new Error('анімація без назви');
+      var row = rows.filter(function (r) { return r.name === name; })[0];
+      if (!row) { rows.push(normAnims([a])[0]); return; }
+      if (a.preset !== undefined) { if (!P[a.preset]) throw new Error(name + ': немає руху ' + a.preset); row.preset = a.preset; }
+      if (num(a.duration) && Number(a.duration) >= 0) row.duration = Number(a.duration);
+      if (typeof a.loop === 'boolean') row.loop = a.loop;
+      if (a.events !== undefined) row.events = eventsText(a.events);
+      if (a.keys === null) delete row.keys;
+      else if (a.keys !== undefined) { var keys = keysOf(name, a.keys); if (keys) row.keys = keys; else delete row.keys; }
+    });
+    return rows;
+  }
+
+  var BAR_PARTS = ['bar', 'bar_fill', 'bar_shine', 'bar_head', 'bar_glow', 'bar_clip', 'bar_flash'];
+  function reservedOf(c) {
+    var out = ['root', 'art'];
+    K().listOf(c.spacers).forEach(function (s) { var n = K().slug(String(s).split('@')[0]); if (n) out.push(n, n + '_bone'); });
+    if (c.bar) out = out.concat(BAR_PARTS);
+    return out;
+  }
+  function partsInfo(c) {
+    return (c.parts || []).map(function (p) {
+      var o = JSON.parse(JSON.stringify(p));
+      var im = S().images[App.partKey(c, p.name)];
+      o.image = im ? im.fileName || true : false;
+      return o;
+    });
+  }
+  function renamePartRefs(c, from, to) {
+    (c.parts || []).forEach(function (p) { if (p.parent === from) p.parent = to; });
+    (c.anims || []).forEach(function (a) {
+      if (!a.keys || !a.keys[from]) return;
+      var next = {};
+      Object.keys(a.keys).forEach(function (k) { next[k === from ? to : k] = a.keys[k]; });
+      a.keys = next;
+    });
+  }
+  var PART_FIELDS = ['parent', 'x', 'y', 'w', 'h', 'pivot', 'rotate', 'behind', 'blend', 'alpha', 'shape', 'color'];
+  async function applyParts(c, list, mode, remove) {
+    var Kit = K();
+    if (!Array.isArray(c.parts)) c.parts = [];
+    var find = function (n) { return c.parts.filter(function (p) { return p.name === n; })[0]; };
+    var drop = function (p) {
+      c.parts = c.parts.filter(function (x) { return x !== p; });
+      App.forgetImage(App.partKey(c, p.name));
+      c.parts.forEach(function (x) { if (x.parent === p.name) x.parent = 'art'; });
+    };
+    (Array.isArray(remove) ? remove : []).forEach(function (r) {
+      var p = find(Kit.slug(r));
+      if (!p) throw new Error('немає частини ' + r + '. Є: ' + (c.parts.map(function (x) { return x.name; }).join(', ') || 'жодної'));
+      drop(p);
+    });
+    var reserved = reservedOf(c), names = [];
+    var items = Array.isArray(list) ? list : [];
+    for (var i = 0; i < items.length; i++) {
+      var it = items[i] || {};
+      var name = Kit.slug(it.name);
+      if (!name) throw new Error('частина без назви: ' + JSON.stringify(it.name));
+      var p = find(name);
+      if (it.rename) {
+        var nn = Kit.slug(it.rename);
+        if (!p) throw new Error('немає частини ' + name + ' для перейменування');
+        if (!nn) throw new Error('rename порожній');
+        if (nn !== name && (find(nn) || reserved.indexOf(nn) !== -1)) throw new Error('назва ' + nn + ' вже зайнята');
+        App.movePartImage(c, name, nn);
+        renamePartRefs(c, name, nn);
+        p.name = nn;
+        name = nn;
+      }
+      if (reserved.indexOf(name) !== -1) throw new Error('частина не може зватись ' + name + ': це вже кістка чи слот компонента');
+      var set = function (v) { return v !== undefined && v !== null && v !== ''; };
+      if (set(it.blend) && Kit.BLENDS.indexOf(it.blend) === -1) throw new Error(name + ': blend ' + it.blend + ', можна ' + Kit.BLENDS.join(', '));
+      if (set(it.shape) && Kit.SHAPES.indexOf(it.shape) === -1) throw new Error(name + ': shape ' + it.shape + ', можна ' + Kit.SHAPES.filter(Boolean).join(', '));
+      if (set(it.pivot) && it.pivot !== 'center' && !Kit.pivotName(it.pivot)) throw new Error(name + ': pivot ' + it.pivot + ', можна center, bottom, top, left, right або "x:y"');
+      if (set(it.color) && !Kit.hexOf(it.color)) throw new Error(name + ': color як "ffcc00"');
+      ['x', 'y', 'w', 'h', 'rotate', 'alpha'].forEach(function (f) { if (set(it[f]) && !num(it[f])) throw new Error(name + '.' + f + ' має бути числом'); });
+      if (!p) { p = { name: name }; c.parts.push(p); }
+      PART_FIELDS.forEach(function (f) { if (it[f] === null) delete p[f]; else if (it[f] !== undefined) p[f] = it[f]; });
+      if (it.remove_image) App.forgetImage(App.partKey(c, name));
+      if (it.image) {
+        var nat = await putImage(App.partKey(c, name), it.image);
+        if (!num(it.w) && !num(it.h)) { p.w = nat.w; p.h = nat.h; }
+      }
+      var clean = Kit.normPart(p);
+      Object.keys(p).forEach(function (k) { delete p[k]; });
+      Object.assign(p, clean);
+      if (names.indexOf(name) === -1) names.push(name);
+    }
+    c.parts.forEach(function (p) {
+      if (p.parent !== 'art' && !find(p.parent)) throw new Error(p.name + ': немає батька ' + p.parent + '. Є: art, ' + c.parts.map(function (x) { return x.name; }).join(', '));
+    });
+    if (mode === 'replace') {
+      c.parts.filter(function (p) { return names.indexOf(p.name) === -1; }).forEach(drop);
+      c.parts = names.map(find).filter(Boolean);
+    }
+    if (!c.parts.length) delete c.parts;
+  }
+  function setPivot(c, v) {
+    if (v === null || v === '' || v === 'center') { delete c.pivot; return; }
+    var pv = K().pivotName(v);
+    if (!pv) throw new Error('pivot: center, bottom, top, left, right або "x:y" (px від центру картинки, y угору)');
+    c.pivot = pv;
   }
 
   async function putImage(key, img) {
@@ -167,7 +285,7 @@
     App.renderGame();
     App.changed({ render: true, now: true });
     await sleep(40);
-    await App.saveNow();
+    await App.flush();
     await frame();
   }
 
@@ -183,7 +301,7 @@
   function compInfo(c) {
     var key = imageKey(c);
     var o = { id: c.id, type: c.type, on: c.on !== false };
-    if (c.type === 'custom') { o.spine = spineOf(c); o.w = c.w; o.h = c.h; o.x = c.x || 0; o.y = c.y || 0; }
+    if (c.type === 'custom') { o.spine = spineOf(c); o.label = c.label; o.w = c.w; o.h = c.h; o.x = c.x || 0; o.y = c.y || 0; if (c.pivot) o.pivot = c.pivot; if (c.bar) o.bar = c.bar; if (c.parts && c.parts.length) o.parts = partsInfo(c); }
     if (c.skins !== undefined) o.skins = c.skins;
     if (c.spacers !== undefined) o.spacers = c.spacers;
     if (key) o.image = S().images[key] ? S().images[key].fileName || true : false;
@@ -200,9 +318,9 @@
     x.drawImage(cv, 0, 0, c.width, c.height);
     return { data: c.toDataURL('image/png').split(',')[1], mime: 'image/png' };
   }
-  function shot(target) {
-    var cv = target === 'grid' ? $('grid-canvas') : document.querySelector('#stage canvas');
-    return cv && cv.width ? flat(cv) : null;
+  function shot(target, max) {
+    var cv = target === 'grid' ? $('grid-canvas') : target === 'layout' ? $('lay-canvas') : document.querySelector('#stage canvas');
+    return cv && cv.width ? flat(cv, max) : null;
   }
   async function waitPlayer() {
     for (var i = 0; i < 60; i++) {
@@ -213,6 +331,96 @@
     }
     return false;
   }
+
+  function LK() { return window.SpineKitLayouts; }
+  function lays() { return App.lay.all(); }
+  function r2(v) { return K().roundTo(Number(v), 2); }
+  function findLayout(q) {
+    var list = lays().list;
+    if (q === undefined || q === null || String(q).trim() === '') return App.lay.cur();
+    var k = String(q).trim(), low = k.toLowerCase();
+    var L = list.filter(function (x) { return x.name === k; })[0]
+      || list.filter(function (x) { return x.name.toLowerCase() === low || x.name.toLowerCase() === 'layout_' + low; })[0]
+      || list.filter(function (x) { return LK().title(x) === k; })[0];
+    if (!L) throw new Error('Немає лейауту «' + k + '». Є: ' + list.map(function (x) { return x.name + ' (' + LK().title(x) + ')'; }).join(', '));
+    return L;
+  }
+  function boneExists(n) { return lays().list.some(function (L) { return LK().boneOf(L, n); }); }
+  function layBound() {
+    var m = {};
+    App.lay.items().forEach(function (it) {
+      var b = App.lay.boneFor(it.id);
+      if (b && !lays().off[it.id]) (m[b] = m[b] || []).push(it.names);
+    });
+    return m;
+  }
+  function boneInfo(b, bound) {
+    var o = { name: b.name, parent: b.parent, x: b.x, y: b.y };
+    if (b.scaleX === b.scaleY) o.scale = b.scaleX;
+    else { o.scale_x = b.scaleX; o.scale_y = b.scaleY; }
+    if (b.rotation) o.rotation = b.rotation;
+    if (!LK().stock(b.name)) o.custom = true;
+    if (bound[b.name]) o.components = bound[b.name];
+    var w = App.lay.warn(b);
+    if (w) o.warning = w;
+    return o;
+  }
+  function layInfo(L) {
+    var bound = layBound();
+    return { name: L.name, title: LK().title(L), w: L.w, h: L.h, screens: LK().screens(L).map(function (s) { return s[0]; }), template: !!LK().template(L.name), bones: LK().anchors(L).map(function (b) { return boneInfo(b, bound); }) };
+  }
+  function layComps() {
+    var all = lays();
+    return App.lay.items().map(function (it) {
+      var b = App.lay.boneFor(it.id);
+      var o = { id: it.id, title: it.title, spine: it.names, bone: b || null };
+      if (typeof all.bind[it.id] !== 'string') o.default_bone = true;
+      if (all.off[it.id]) o.hidden = true;
+      var miss = b ? all.list.filter(function (L) { return !LK().boneOf(L, b); }).map(function (L) { return L.name; }) : [];
+      if (miss.length) o.missing_in = miss;
+      return o;
+    });
+  }
+  function layWarnings() {
+    var out = [];
+    lays().list.forEach(function (L) { LK().anchors(L).forEach(function (b) { var w = App.lay.warn(b); if (w) out.push(L.name + ' ' + b.name + ': ' + w); }); });
+    layComps().forEach(function (c) {
+      if (!c.bone) out.push(c.spine + ': не стоїть на жодній кістці');
+      else if (c.missing_in) out.push(c.spine + ': кістки ' + c.bone + ' немає в ' + c.missing_in.join(', '));
+    });
+    return out;
+  }
+  function layItem(id) {
+    var key = String(id || '').trim();
+    var items = App.lay.items();
+    var want = /^(reels|symbols|frame_under|frame_above)$|^animation_reels/.test(key) ? 'reels' : (findComp(key) || {}).id;
+    var it = items.filter(function (x) { return x.id === want || x.id === key; })[0];
+    if (!it) throw new Error('Немає на лейауті «' + key + '» (компонент вимкнений або не існує). Є: ' + items.map(function (x) { return x.id === 'reels' ? 'reels' : x.id + ' (' + x.names + ')'; }).join(', '));
+    return it;
+  }
+  function aspectOf(v, L) {
+    if (num(v) && Number(v) > 0) return Number(v);
+    var t = String(v).trim();
+    var hit = LK().screens(L).filter(function (s) { return s[0] === t; })[0];
+    if (hit) return hit[1];
+    var m = /^(\d+(?:\.\d+)?)\s*[:x×\/]\s*(\d+(?:\.\d+)?)$/.exec(t);
+    if (m && Number(m[2]) > 0) return Number(m[1]) / Number(m[2]);
+    throw new Error('Екран «' + t + '»: число (ширина/висота) або «21:9». Пресети ' + L.name + ': ' + LK().screens(L).map(function (s) { return s[0]; }).join(', '));
+  }
+  async function layView(L) {
+    var Y = App.lay;
+    if (S().view !== 'layouts') App.showView('layouts');
+    var i = L ? lays().list.indexOf(L) : -1;
+    if (i !== -1 && i !== Y.st.cur) { Y.st.cur = i; Y.st.reset = false; }
+    Y.render();
+    await frame();
+  }
+  async function layCommit(L) {
+    App.lay.save();
+    await layView(L);
+    await App.flush();
+  }
+  function drafts() { if (S().view === 'layouts') App.showView('drafts'); }
 
   var TOOLS = {
     status: async function () {
@@ -237,7 +445,7 @@
       var p = ps.filter(function (x) { return x.id === q; })[0] || ps.filter(function (x) { return x.name.toLowerCase() === q.toLowerCase(); })[0];
       if (!p) throw new Error('Немає проекту «' + q + '». Є: ' + ps.map(function (x) { return x.name + ' (' + x.id + ')'; }).join(', '));
       closeWizard();
-      if (p.id !== S().pid) await App.openProject(p.id);
+      if (p.id !== S().pid && !await App.openProject(p.id)) throw new Error('Проект не відкрито: у поточному є незбережені зміни, користувач скасував');
       App.toast('Claude відкрив проект ' + p.name);
       return summary();
     },
@@ -257,7 +465,7 @@
         if (c.type === 'frame_above' && a.frame_above === false) c.on = false;
       });
       closeWizard();
-      await App.createProject(s);
+      if (!await App.createProject(s)) throw new Error('Проект не створено: у поточному є незбережені зміни, користувач скасував');
       await commit();
       App.toast('Claude створив проект ' + s.game);
       return summary();
@@ -338,13 +546,21 @@
       if (typeof a.on === 'boolean') c.on = a.on;
       if (typeof a.skins === 'string' && c.type !== 'symbols' && c.type !== 'reels') c.skins = a.skins;
       if (typeof a.spacers === 'string' && c.type !== 'symbols' && c.type !== 'reels') c.spacers = a.spacers;
-      if (Array.isArray(a.anims)) { if (c.type === 'reels') throw new Error('Анімації барабанів фіксовані'); c.anims = normAnims(a.anims); }
+      if (Array.isArray(a.anims)) {
+        if (c.type === 'reels') throw new Error('Анімації барабанів фіксовані');
+        c.anims = a.anims_mode === 'merge' ? mergeAnims(c.anims || [], a.anims) : normAnims(a.anims);
+      }
       if (typeof a.txt === 'boolean' && c.type === 'symbols') c.txt = a.txt;
       if (typeof a.blur === 'boolean' && c.type === 'symbols') c.blur = a.blur;
       if (num(a.fill) && c.type === 'symbols') c.fill = clamp(a.fill, 10, 100);
+      if (c.type !== 'custom' && (a.parts || a.remove_parts || a.pivot !== undefined)) throw new Error('Частини й опорна точка є лише у своїх компонентах (custom)');
       if (c.type === 'custom') {
         if (typeof a.name === 'string' && a.name.trim()) c.name = a.name.trim();
+        if (typeof a.label === 'string' && a.label.trim()) c.label = a.label.trim();
+        if (typeof a.bar === 'string') c.bar = a.bar.trim();
+        if (a.pivot !== undefined) setPivot(c, a.pivot);
         ['w', 'h', 'x', 'y'].forEach(function (k) { if (num(a[k])) c[k] = Number(a[k]); });
+        if (a.parts || a.remove_parts) await applyParts(c, a.parts, a.parts_mode, a.remove_parts);
       }
       if (a.remove_image && key) App.forgetImage(key);
       if (a.image) {
@@ -359,17 +575,26 @@
     },
     add_component: async function (a) {
       needProject();
-      var t = App.templates[a.template];
-      if (!t) throw new Error('Шаблон: background, logo, popup або custom');
+      var t = App.templates[a.template || 'custom'];
+      if (!t) throw new Error('Шаблон: ' + Object.keys(App.templates).join(', '));
       var st = S();
       var taken = st.s.components.filter(function (c) { return c.type === 'custom'; }).map(spineOf);
       var base = a.name ? 'animation_' + K().slug(a.name).replace(/^animation_/, '') : t.name;
       var name = base, n = 2;
       while (taken.indexOf(name) !== -1) name = base + '_' + n++;
-      var c = { id: App.newId(), type: 'custom', label: t.label, on: true, name: name, w: t.w, h: t.h, x: 0, y: 0, skins: typeof a.skins === 'string' ? a.skins : 'default', spacers: typeof a.spacers === 'string' ? a.spacers : '', anims: Array.isArray(a.anims) ? normAnims(a.anims) : t.anims() };
-      st.s.components.push(c);
-      if (a.image) { App.fitSize(c, await putImage('c:' + c.id, a.image)); }
+      var c = App.fromTemplate(t, name);
+      if (typeof a.label === 'string' && a.label.trim()) c.label = a.label.trim();
+      if (typeof a.skins === 'string') c.skins = a.skins;
+      if (typeof a.spacers === 'string') c.spacers = a.spacers;
+      if (typeof a.bar === 'string') c.bar = a.bar.trim();
+      if (a.pivot !== undefined) setPivot(c, a.pivot);
+      if (Array.isArray(a.anims)) c.anims = a.anims_mode === 'merge' ? mergeAnims(c.anims, a.anims) : normAnims(a.anims);
+      try {
+        if (a.parts) { delete c.parts; await applyParts(c, a.parts, 'replace'); }
+        if (a.image) { App.fitSize(c, await putImage('c:' + c.id, a.image)); }
+      } catch (e) { App.forgetComponentImages(c); throw e; }
       ['w', 'h', 'x', 'y'].forEach(function (k) { if (num(a[k])) c[k] = Number(a[k]); });
+      st.s.components.push(c);
       st.open[c.id] = true;
       st.pv = { spine: name, anim: null, skin: null };
       await commit();
@@ -382,10 +607,35 @@
       if (!c) throw new Error('Немає компонента «' + a.id + '». Є: ' + compList());
       if (c.type !== 'custom') throw new Error('Вбудовані компоненти вимикаються: update_component on:false');
       S().s.components = S().s.components.filter(function (x) { return x !== c; });
-      App.forgetImage('c:' + c.id);
+      App.forgetComponentImages(c);
       await commit();
       App.toast('Claude прибрав ' + spineOf(c));
       return summary();
+    },
+    export_component: async function (a) {
+      needProject();
+      var c = findComp(a.id);
+      if (!c) throw new Error('Немає компонента «' + a.id + '». Є: ' + compList());
+      if (c.type !== 'custom') throw new Error('Експортуються лише свої компоненти (custom): ' + compList());
+      var r = await App.exportComponent(c);
+      var up = await fetch('/api/bridge/blobs?name=' + encodeURIComponent(r.name), { method: 'PUT', headers: { 'content-type': 'application/json' }, body: r.text });
+      if (!up.ok) throw new Error('файл не передався: ' + up.status);
+      var data = JSON.parse(r.text);
+      return { blob: (await up.json()).id, name: r.name, spine: spineOf(c), parts: (c.parts || []).map(function (p) { return p.name; }), anims: (c.anims || []).map(function (x) { return x.name + (x.keys ? ' (ключі)' : ''); }), images: Object.keys(data.images) };
+    },
+    import_component: async function (a) {
+      needProject();
+      if (!a.file || !a.file.blob) throw new Error('файл не передано');
+      var r = await fetch('/api/bridge/blobs/' + a.file.blob, { cache: 'no-store' });
+      if (!r.ok) throw new Error('файл не дійшов: ' + a.file.name);
+      var data;
+      try { data = JSON.parse(await r.text()); } catch (e) { throw new Error('Не JSON: ' + a.file.name); }
+      if (!data || data.kit !== App.COMP_KIT) throw new Error('Це не файл компонента кита (потрібен kit ' + App.COMP_KIT + ', його пише export_component або кнопка «Експорт» у картці)');
+      drafts();
+      var c = await App.importComponent(data, { name: a.name });
+      await commit();
+      App.toast('Claude імпортував ' + spineOf(c));
+      return { component: compInfo(c), warnings: warnings() };
     },
     preview: async function (a) {
       needProject();
@@ -397,6 +647,7 @@
       if (a.animation && anims.indexOf(a.animation) === -1) throw new Error('У ' + sp.name + ' немає анімації ' + a.animation + '. Є: ' + anims.join(', '));
       if (a.skin && skins.indexOf(a.skin) === -1) throw new Error('У ' + sp.name + ' немає скіна ' + a.skin + '. Є: ' + skins.join(', '));
       st.pv = { spine: sp.name, anim: a.animation || null, skin: a.skin || null };
+      drafts();
       App.renderPreview();
       App.renderComponents();
       var ok = await waitPlayer();
@@ -406,6 +657,7 @@
     },
     screenshot: async function (a) {
       var t = a.target || 'both';
+      if (t !== 'grid') drafts();
       await frame();
       var out = [];
       if (t !== 'preview') { var g = shot('grid'); if (g) out.push(g); }
@@ -414,6 +666,7 @@
     },
     spin: async function (a) {
       needProject();
+      if (a.layout) await layView(findLayout(a.layout));
       var wait = Date.now();
       while (App.spinning() && Date.now() - wait < 20000) await sleep(100);
       $('spin-win').checked = !!a.win;
@@ -424,10 +677,12 @@
       wait = Date.now();
       while (App.spinning() && Date.now() - wait < 30000) await sleep(100);
       await sleep(a.win ? 1200 : 250);
-      var g = shot('grid');
-      return { done: !App.spinning(), images: g ? [g] : [] };
+      var inLay = S().view === 'layouts';
+      if (inLay) await frame();
+      var g = shot(inLay ? 'layout' : 'grid');
+      return { done: !App.spinning(), view: inLay ? 'layout ' + App.lay.cur().name : 'grid', images: g ? [g] : [] };
     },
-    export_drafts: async function () {
+    export_drafts: async function (a) {
       needProject();
       var st = S();
       var spines = st.plan ? st.plan.spines : [];
@@ -435,10 +690,193 @@
       for (var i = 0; i < 100 && !window.JSZip; i++) await sleep(100);
       if (!window.JSZip) throw new Error('JSZip не завантажився');
       var name = (K().slug(st.s.game) || 'slot') + '-spine-drafts.zip';
-      var blob = await App.buildZip(spines);
+      var keep = st.skip;
+      if (typeof a.layouts === 'boolean') {
+        st.skip = {};
+        Object.keys(keep).forEach(function (k) { if (k.indexOf('layout:') !== 0) st.skip[k] = keep[k]; });
+        st.skip.layouts = !a.layouts;
+      }
+      var layNames = App.lay.names();
+      var blob;
+      try { blob = await App.buildZip(spines); } finally { st.skip = keep; }
       var r = await fetch('/api/bridge/blobs?name=' + encodeURIComponent(name), { method: 'PUT', headers: { 'content-type': 'application/zip' }, body: blob });
       if (!r.ok) throw new Error('zip не передався: ' + r.status);
-      return { blob: (await r.json()).id, name: name, spines: spines.length };
+      return { blob: (await r.json()).id, name: name, spines: spines.length, layouts: layNames.length ? { folder: App.lay.folder(), files: layNames } : null };
+    },
+    get_layouts: async function (a) {
+      needProject();
+      var cur = App.lay.cur();
+      var list = a.layout ? [findLayout(a.layout)] : lays().list;
+      return {
+        current: cur ? cur.name : null,
+        tab_open: S().view === 'layouts',
+        folder: App.lay.folder(),
+        layouts: list.map(layInfo),
+        components: layComps(),
+        warnings: layWarnings()
+      };
+    },
+    update_layout: async function (a) {
+      needProject();
+      var Y = App.lay, all = lays(), L = findLayout(a.layout), added = [];
+      var nn = typeof a.name === 'string' && a.name.trim() ? K().slug(a.name) : '';
+      if (typeof a.name === 'string' && a.name.trim() && !nn) throw new Error('Порожня назва лейауту');
+      if (nn && all.list.some(function (x) { return x !== L && x.name === nn; })) throw new Error('Лейаут ' + nn + ' вже є');
+      var t = a.reset ? LK().template(L.name) : null;
+      if (a.reset && !t) throw new Error('Для ' + L.name + ' немає шаблону Pandora');
+      var removes = (Array.isArray(a.remove_bones) ? a.remove_bones : []).map(function (n) {
+        var b = Y.boneName(n);
+        if (!boneExists(b)) throw new Error('Немає кістки ' + b);
+        if (LK().stock(b)) throw new Error(b + ' — кістка шаблону Pandora, гра її чекає: не видаляється');
+        return b;
+      });
+      var taken = {};
+      var edits = (Array.isArray(a.bones) ? a.bones : []).map(function (it) {
+        it = it || {};
+        if (/^area_/.test(K().slug(it.name))) throw new Error('area_* кістки фіксовані: міняй кістки position_*');
+        var name = Y.boneName(it.name);
+        if (!name) throw new Error('кістка без назви: ' + JSON.stringify(it.name));
+        if (removes.indexOf(name) !== -1) throw new Error(name + ' і в bones, і в remove_bones');
+        if (it.parent !== undefined && it.parent !== 'root' && LK().AREAS.indexOf(it.parent) === -1) throw new Error(name + ': батько root або ' + LK().AREAS.join(', '));
+        ['x', 'y', 'scale', 'scale_x', 'scale_y', 'rotation'].forEach(function (k) { if (it[k] !== undefined && !num(it[k])) throw new Error(name + '.' + k + ' має бути числом'); });
+        var to = '';
+        if (it.rename) {
+          to = Y.boneName(it.rename);
+          if (!to) throw new Error('rename порожній для ' + name);
+          if (!boneExists(name)) throw new Error('Немає кістки ' + name + ' для перейменування');
+          if (LK().stock(name)) throw new Error(name + ' — кістка шаблону Pandora: не перейменовується');
+          if (to !== name && (boneExists(to) || taken[to])) throw new Error('Кістка ' + to + ' вже є');
+          taken[to] = true;
+        }
+        return { it: it, name: name, to: to };
+      });
+      if (t) {
+        t.bones = t.bones.concat(L.bones.filter(function (x) { return !LK().isArea(x.name) && !LK().stock(x.name); }));
+        all.list[all.list.indexOf(L)] = t;
+        L = t;
+      }
+      if (nn && nn !== L.name) {
+        if (Y.st.scr[L.name]) { Y.st.scr[nn] = Y.st.scr[L.name]; delete Y.st.scr[L.name]; }
+        L.name = nn;
+      }
+      if (num(a.w)) L.w = clamp(a.w, 1, 10000);
+      if (num(a.h)) L.h = clamp(a.h, 1, 10000);
+      removes.forEach(function (n) { Y.remove(n); });
+      edits.forEach(function (e) {
+        var it = e.it, name = e.name;
+        if (e.to && e.to !== name) { Y.rename(name, e.to); name = e.to; }
+        if (!LK().boneOf(L, name)) {
+          all.list.forEach(function (x) { if (!LK().boneOf(x, name)) x.bones.push(LK().cleanBone({ name: name, parent: 'area_center', x: Math.round(x.w / 2), y: -Math.round(x.h / 2) })); });
+          added.push(name);
+        }
+        var b = LK().boneOf(L, name);
+        if (it.parent) b.parent = it.parent;
+        if (num(it.x)) b.x = r2(it.x);
+        if (num(it.y)) b.y = r2(it.y);
+        if (num(it.scale)) { b.scaleX = r2(it.scale); b.scaleY = r2(it.scale); }
+        if (num(it.scale_x)) b.scaleX = r2(it.scale_x);
+        if (num(it.scale_y)) b.scaleY = r2(it.scale_y);
+        if (num(it.rotation)) b.rotation = r2(it.rotation);
+        Y.st.sel = name;
+      });
+      await layCommit(L);
+      App.toast('Claude змінив лейаут ' + L.name);
+      var out = { layout: layInfo(L), warnings: layWarnings() };
+      if (added.length) out.added = added.map(function (n) { return n + ': додано в усі лейаути; в інших стоїть по центру (area_center), задай там значення окремо'; });
+      return out;
+    },
+    place_components: async function (a) {
+      needProject();
+      var Y = App.lay, all = lays();
+      var list = Array.isArray(a.components) ? a.components : [];
+      if (!list.length) throw new Error('components порожній');
+      var plan = list.map(function (p) {
+        p = p || {};
+        var it = layItem(p.id);
+        var bone;
+        if (p.bone === null) bone = null;
+        else if (p.bone === '') bone = '';
+        else if (p.bone !== undefined) {
+          bone = Y.boneName(p.bone);
+          if (!bone || !boneExists(bone)) throw new Error('Немає кістки ' + (bone || p.bone) + '. Додай її: update_layout bones');
+        }
+        return { id: it.id, bone: bone, hidden: p.hidden };
+      });
+      var last = null;
+      plan.forEach(function (p) {
+        if (p.bone === null) delete all.bind[p.id];
+        else if (p.bone !== undefined) all.bind[p.id] = p.bone;
+        if (p.hidden === true) all.off[p.id] = true;
+        else if (p.hidden === false) delete all.off[p.id];
+        var b = Y.boneFor(p.id);
+        if (b) last = b;
+      });
+      var L = a.layout ? findLayout(a.layout) : Y.cur();
+      if (last && LK().boneOf(L, last)) Y.st.sel = last;
+      await layCommit(L);
+      App.toast('Claude розставив компоненти на лейаутах');
+      return { components: layComps(), warnings: layWarnings() };
+    },
+    import_layouts: async function (a) {
+      needProject();
+      var Y = App.lay, all = lays(), done = [], skipped = [], got = [];
+      (Array.isArray(a.files) ? a.files : []).forEach(function (f) {
+        try { got.push(LK().parse(f.text, f.name)); }
+        catch (e) { skipped.push(f.name + ': ' + (e.message || e)); }
+      });
+      if (!got.length) throw new Error('Жодного лейауту' + (skipped.length ? ': ' + skipped.join('; ') : ''));
+      if (a.mode === 'replace') {
+        var seen = {};
+        all.list = got.filter(function (L) { if (seen[L.name]) return false; seen[L.name] = true; return true; });
+        all.list.forEach(function (L) { done.push({ name: L.name, w: L.w, h: L.h }); });
+      } else {
+        got.forEach(function (L) {
+          var at = all.list.map(function (x) { return x.name; }).indexOf(L.name);
+          if (at === -1) all.list.push(L);
+          else all.list[at] = L;
+          done.push({ name: L.name, w: L.w, h: L.h, replaced: at !== -1 });
+        });
+      }
+      Y.st.sel = null;
+      Y.st.reset = false;
+      await layCommit(got[got.length - 1]);
+      App.toast('Claude імпортував лейаути: ' + done.map(function (d) { return d.name; }).join(', '));
+      return { imported: done, skipped: skipped, layouts: all.list.map(function (L) { return L.name; }), components: layComps(), warnings: layWarnings() };
+    },
+    show_layout: async function (a) {
+      needProject();
+      var Y = App.lay, L = findLayout(a.layout);
+      if (a.bone !== undefined) {
+        var bn = a.bone ? Y.boneName(a.bone) : null;
+        if (bn && !LK().boneOf(L, bn)) throw new Error('У ' + L.name + ' немає кістки ' + bn);
+        Y.st.sel = bn;
+      }
+      if (typeof a.marks === 'boolean') { Y.st.marks = a.marks; $('lay-marks').checked = a.marks; }
+      var list = LK().screens(L);
+      var want = a.screen === 'all' ? list : a.screen === undefined || a.screen === null || a.screen === '' ? null : [[String(a.screen), aspectOf(a.screen, L)]];
+      if (want && !want.length) want = null;
+      await layView(L);
+      var images = [], names = [];
+      if (!want) {
+        var now = Y.st.scr[L.name] > 0 ? Y.st.scr[L.name] : L.w / L.h;
+        var hit = list.filter(function (s) { return Math.abs(s[1] - now) < 0.005; })[0];
+        images.push(shot('layout'));
+        names.push(hit ? hit[0] : String(Math.round(now * 1000) / 1000));
+      }
+      var keep = Y.st.scr[L.name];
+      for (var i = 0; want && i < want.length; i++) {
+        Y.st.scr[L.name] = want[i][1];
+        Y.render();
+        await frame();
+        images.push(shot('layout', want.length > 1 ? 1000 : 1400));
+        names.push(want[i][0]);
+      }
+      if (want && want.length > 1) {
+        if (keep > 0) Y.st.scr[L.name] = keep;
+        else delete Y.st.scr[L.name];
+        Y.render();
+      }
+      return { layout: L.name, size: L.w + 'x' + L.h, screens: names, presets: list.map(function (s) { return s[0]; }), selected: Y.st.sel, images: images.filter(Boolean) };
     }
   };
 
@@ -515,6 +953,10 @@
     $('link-txt').textContent = st.text;
     b.title = st.line;
     b.setAttribute('aria-label', 'Підключення Claude: ' + st.line);
+    var m = $('menu-btn');
+    if (!m) return;
+    m.setAttribute('data-state', link.local ? st.key : 'none');
+    m.title = link.local ? 'Проекти · ' + st.line : 'Проекти';
   }
 
   function copyBtn(text) {
