@@ -1,0 +1,34 @@
+services:
+  spine-kit:
+    build: .
+    image: spine-draft-kit:latest
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - spine-kit-data:/data
+    secrets:
+      - oidc_client_secret
+    environment:
+      PUBLIC_URL: https://spine-kit.example.com
+      OIDC_ISSUER: https://sso.example.com/realms/main
+      OIDC_CLIENT_ID: spine-kit
+      OIDC_CLIENT_SECRET_FILE: /run/secrets/oidc_client_secret
+      OIDC_SCOPES: openid email profile
+      OIDC_GROUPS_CLAIM: groups
+      ALLOWED_EMAIL_DOMAINS: example.com
+      ADMIN_EMAILS: lead@example.com
+      TRUST_PROXY: "1"
+      ENGINE_NO_SANDBOX: "1"
+      ENGINE_MAX_TABS: "6"
+      ENGINE_IDLE_MIN: "10"
+      MAX_IMAGE_MB: "64"
+    mem_limit: 3g
+    cpus: 1.0
+
+secrets:
+  oidc_client_secret:
+    file: ./oidc_client_secret.txt
+
+volumes:
+  spine-kit-data:

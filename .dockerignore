@@ -1,0 +1,15 @@
+.git
+.gitignore
+.idea
+.claude
+.DS_Store
+node_modules
+projects/
+dist/
+check/
+v2-backup-*
+server-data/
+Spine-Draft-Kit.html
+Dockerfile
+.dockerignore
+docker-compose*.yml
