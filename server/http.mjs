@@ -8,7 +8,7 @@ const MB = 1024 * 1024;
 const BASE_CSP = "default-src 'none'; style-src 'unsafe-inline'; img-src data:; form-action 'self'; frame-ancestors 'none'; base-uri 'none'";
 const BLOB_CSP = "default-src 'none'; sandbox";
 
-const limiter = (perSec, burst) => {
+export const limiter = (perSec, burst) => {
   const m = new Map();
   return key => {
     const now = Date.now();
@@ -45,7 +45,7 @@ const readJson = async (req, limit) => {
 };
 const out = (res, r, ok = 200) => r && r.error ? json(res, r.code || 400, { error: r.error }) : json(res, ok, r);
 
-export function createHttp({ data, hub, auth, cfg, page, log }) {
+export function createHttp({ data, hub, auth, cfg, page, log, oauth, mcp, files }) {
   const pub = new URL(cfg.publicUrl);
   const reloads = new Set();
   const maxImage = (Number(cfg.maxImageMb) || 64) * MB;
@@ -89,7 +89,7 @@ export function createHttp({ data, hub, auth, cfg, page, log }) {
     if (!hit || hit.src !== html) {
       let out = html.replace('<meta charset="utf-8">', `<meta charset="utf-8"><meta name="spine-kit-mode" content="${mode}">`);
       for (const v of vendor()) if (v.ok) out = out.split(`'${v.url}'`).join(`'/vendor/${v.file}'`);
-      if (cfg.dev) out = out.replace('</body>', `<script>new EventSource('/__reload').onmessage=()=>location.reload()</script></body>`);
+      if (cfg.dev && mode !== 'engine') out = out.replace('</body>', `<script>new EventSource('/__reload').onmessage=()=>location.reload()</script></body>`);
       hit = { src: html, out, csp: pageCsp(out) };
       if (pages.size > 8) pages.clear();
       pages.set(key, hit);
@@ -101,15 +101,17 @@ export function createHttp({ data, hub, auth, cfg, page, log }) {
   const api = async (req, res, url, s) => {
     const path = url.pathname;
     const m = req.method;
-    const user = { kind: 'user', email: s.user.email, name: s.user.name };
+    const user = s.by || { kind: 'user', email: s.user.email, name: s.user.name };
     let r;
+
+    if (path.startsWith('/api/mcp/') && oauth && !s.engine) return oauth.api(req, res, url, s);
 
     if (path === '/api/session' && m === 'GET') return json(res, 200, { user: s.user, role: s.role, csrf: s.csrf, mcpUrl: pub.origin + '/mcp' });
 
     if (path === '/api/events' && m === 'GET') {
       const project = url.searchParams.get('project');
       const since = url.searchParams.has('since') ? Number(url.searchParams.get('since')) : NaN;
-      return hub.subscribe(req, res, s.user, project && ID.test(project) ? project : null, since);
+      return hub.subscribe(req, res, s.engine ? null : s.user, project && ID.test(project) ? project : null, since);
     }
 
     if ((r = /^\/api\/blobs\/([0-9a-f]{64})$/.exec(path))) {
@@ -190,6 +192,13 @@ export function createHttp({ data, hub, auth, cfg, page, log }) {
     json(res, 404, { error: 'unknown api' });
   };
 
+  const serveVendor = (req, res, path) => {
+    const v = vendor().find(x => x.ok && '/vendor/' + x.file === path);
+    if (!v || (req.method !== 'GET' && req.method !== 'HEAD')) { res.writeHead(404, { 'content-type': 'text/plain' }); return res.end('not found'); }
+    res.writeHead(200, { 'content-type': 'text/javascript; charset=utf-8', 'content-length': v.buf.length, 'cache-control': 'public, max-age=31536000, immutable' });
+    return res.end(req.method === 'HEAD' ? undefined : v.buf);
+  };
+
   const handle = async (req, res) => {
     let url;
     try { url = new URL(req.url, pub.origin); } catch { res.writeHead(400); return res.end(); }
@@ -204,12 +213,10 @@ export function createHttp({ data, hub, auth, cfg, page, log }) {
       res.on('close', () => log.request({ id, user: res.kitUser || null, m: req.method, route: routeOf(path), status: res.statusCode, ms: Date.now() - t0 }));
     }
     if (req.headers.host !== pub.host) { res.writeHead(421, { 'content-type': 'text/plain' }); return res.end('misdirected request'); }
-    if (path.startsWith('/vendor/')) {
-      const v = vendor().find(x => x.ok && '/vendor/' + x.file === path);
-      if (!v || (req.method !== 'GET' && req.method !== 'HEAD')) { res.writeHead(404, { 'content-type': 'text/plain' }); return res.end('not found'); }
-      res.writeHead(200, { 'content-type': 'text/javascript; charset=utf-8', 'content-length': v.buf.length, 'cache-control': 'public, max-age=31536000, immutable' });
-      return res.end(req.method === 'HEAD' ? undefined : v.buf);
-    }
+    if (path.startsWith('/vendor/')) return serveVendor(req, res, path);
+    if (oauth && (path.startsWith('/.well-known/oauth-') || path.startsWith('/oauth/'))) return oauth.handle(req, res, url);
+    if (mcp && path === '/mcp') return mcp.handle(req, res, url);
+    if (files && /^\/[ud]\//.test(path)) return files.handle(req, res, url);
     if (path.startsWith('/auth/')) {
       if (path !== '/auth/bye' && path !== '/auth/done') {
         const wait = rate.auth(req.kitIp);
@@ -253,6 +260,9 @@ export function createHttp({ data, hub, auth, cfg, page, log }) {
         else res.end();
       }
     },
-    reload: () => { for (const r of reloads) r.write('data: reload\n\n'); }
+    reload: () => { for (const r of reloads) r.write('data: reload\n\n'); },
+    api,
+    sendPage,
+    serveVendor
   };
 }

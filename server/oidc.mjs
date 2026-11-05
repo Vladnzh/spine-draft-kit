@@ -102,7 +102,7 @@ export function createOidc({ issuer, clientId, clientSecret, scopes, redirectUri
     const d = await discovery();
     const now = Math.floor(Date.now() / 1000);
     const aud = Array.isArray(claims.aud) ? claims.aud : [claims.aud];
-    if (claims.iss !== d.issuer) fail('ID token: чужий iss');
+    if (claims.iss !== d.issuer && !(d.issuer === 'https://accounts.google.com' && claims.iss === 'accounts.google.com')) fail('ID token: чужий iss');
     if (!aud.includes(clientId)) fail('ID token: чужий aud');
     if ((aud.length > 1 || claims.azp !== undefined) && claims.azp !== clientId) fail('ID token: чужий azp');
     if (typeof claims.exp !== 'number' || claims.exp < now - 60) fail('ID token: прострочений');

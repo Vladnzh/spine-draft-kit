@@ -31,7 +31,7 @@
   }
   function A(name, duration, preset, loop, events) { return { name: name, duration: duration, preset: preset, loop: !!loop, events: events || '' }; }
   var seq = 0;
-  function newId() { seq += 1; return 'c' + Date.now().toString(36) + seq; }
+  function newId() { seq += 1; return 'c' + Date.now().toString(36) + seq + Math.random().toString(36).slice(2, 6); }
 
   function symbolAnims() { return [A('idle', 2, 'breathe', true), A('stop', 0.28, 'land'), A('win', 0.85, 'win'), A('win_idle', 0.85, 'win', true), A('win_insignificant', 0.65, 'pulse')]; }
   function frameAnims() { return [A('in', 0.5, 'fade_in'), A('loop_1', 2, 'hold', true), A('out', 0.3, 'fade_out')]; }
@@ -2176,7 +2176,7 @@
     var skins = sp.json.skins.map(function (s) { return s.name; });
     if (skins.indexOf(state.pv.skin) === -1) state.pv.skin = skins.indexOf('default') !== -1 ? 'default' : skins[0];
     var owner = comp(sp.comp);
-    var key = sp.name + '|' + sp.jsonText.length + '|' + sp.atlasText + '|' + state.pv.skin + '|' + Object.keys(state.images).join(',') + '|' + JSON.stringify(px('sym:' + ((symComp() || {}).symbols || [{ name: '' }])[0].name)) + '|' + JSON.stringify(owner && owner.parts ? owner.parts.map(function (p) { return [p.name, p.shape, p.color]; }) : '');
+    var key = sp.name + '|' + sp.jsonText.length + '|' + sp.atlasText + '|' + state.pv.skin + '|' + Object.keys(state.images).join(',') + '|' + JSON.stringify(px('sym:' + (((symComp() || {}).symbols || [])[0] || { name: '' }).name)) + '|' + JSON.stringify(owner && owner.parts ? owner.parts.map(function (p) { return [p.name, p.shape, p.color]; }) : '');
     var rec = state.player;
     if (rec && rec.key === key && rec.jsonText === sp.jsonText) {
       if (rec.ready && rec.anim !== state.pv.anim) { try { rec.player.setAnimation(state.pv.anim, true); rec.anim = state.pv.anim; } catch (e) { /* keep */ } }

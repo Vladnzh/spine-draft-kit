@@ -2,11 +2,16 @@ import { createServer } from 'node:http';
 import { readFileSync, existsSync, statSync, readdirSync, watch } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { join, dirname, resolve, basename } from 'node:path';
+import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { openData, lockInfo, imageInfo, ID, KIT } from './server/data.mjs';
 import { createHub } from './server/hub.mjs';
 import { createAuth } from './server/auth.mjs';
-import { createHttp } from './server/http.mjs';
+import { createHttp, limiter } from './server/http.mjs';
+import { createOAuth } from './server/oauth.mjs';
+import { createFiles } from './server/files.mjs';
+import { createEngine } from './server/engine.mjs';
+import { createMcpHttp } from './server/mcp-http.mjs';
 import { createLog } from './server/log.mjs';
 import { vendorState } from './vendor.mjs';
 
@@ -27,7 +32,13 @@ const cfg = {
   admins: String(env.ADMIN_EMAILS || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean),
   maxImageMb: Number(env.MAX_IMAGE_MB) || 64,
   trustProxy: env.TRUST_PROXY === '1' || env.TRUST_PROXY === 'true',
-  rateAuthPerMin: Number(env.RATE_AUTH_PER_MIN) || 10
+  rateAuthPerMin: Number(env.RATE_AUTH_PER_MIN) || 10,
+  chromePath: env.CHROME_PATH || '',
+  enginePort: Number(env.ENGINE_PORT) || 0,
+  engineMaxTabs: Number(env.ENGINE_MAX_TABS) || 6,
+  engineIdleMin: Number(env.ENGINE_IDLE_MIN) || 10,
+  engineNoSandbox: env.ENGINE_NO_SANDBOX === '1' || env.ENGINE_NO_SANDBOX === 'true',
+  extraRedirects: String(env.OAUTH_EXTRA_REDIRECTS || '').split(',').map(s => s.trim()).filter(Boolean)
 };
 const list = v => String(v || '').split(',').map(s => s.trim()).filter(Boolean);
 const LOOP = new Set(['127.0.0.1', '::1', 'localhost']);
@@ -79,7 +90,12 @@ function start() {
     try { cached = readFileSync(OUT, 'utf8'); } catch { cached = null; }
     return cached;
   };
-  const http = createHttp({ data, hub, auth, cfg, page, log });
+  const oauth = createOAuth({ data, publicUrl: cfg.publicUrl, auth, log, extraRedirects: cfg.extraRedirects, limiter });
+  const files = createFiles({ data, publicUrl: cfg.publicUrl, maxImageMb: cfg.maxImageMb, log, limiter });
+  const engine = createEngine({ chromePath: cfg.chromePath, port: cfg.enginePort, maxTabs: cfg.engineMaxTabs, idleMin: cfg.engineIdleMin, noSandbox: cfg.engineNoSandbox, profileDir: join(tmpdir(), `spine-kit-engine-${PORT}`), log });
+  const mcp = createMcpHttp({ hub, oauth, files, engine, publicUrl: cfg.publicUrl, log, limiter });
+  const http = createHttp({ data, hub, auth, cfg, page, log, oauth, mcp, files });
+  engine.use(http);
   const server = createServer(http.handler);
   server.on('error', e => die(`Не вдалося слухати ${cfg.host}:${PORT}: ${e.message}`));
   server.listen(PORT, cfg.host, () => log.info(`Draft Kit (сервер${dev ? ', dev' : ''}): ${cfg.publicUrl}`, { auth: cfg.auth, data: cfg.dataDir }));
@@ -102,6 +118,8 @@ function start() {
     closing = true;
     hub.shutdown();
     auth.flush();
+    oauth.flush();
+    engine.stop();
     data.unlock();
     process.exit(0);
   };

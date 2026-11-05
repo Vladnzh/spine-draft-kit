@@ -53,9 +53,34 @@ docker build -t spine-draft-kit .
   - Keycloak: mapper «Group Membership», `Full group path` вимкнути, «Add to ID token» увімкнути;
   - Microsoft Entra ID: Token configuration → Add groups claim → ID. Entra кладе туди id груп, тому в `ALLOWED_GROUPS` пиши id;
   - Okta: Groups claim у налаштуваннях застосунку;
-  - Google Workspace груп в ID token не дає, тому використовуй `ALLOWED_EMAIL_DOMAINS`.
+  - Google Workspace груп в ID token не дає, тому використовуй `ALLOWED_EMAIL_DOMAINS` (див. «Google Workspace» нижче).
 - Провайдер з внутрішнім TLS-сертифікатом: додай корпоративний CA через `NODE_EXTRA_CA_CERTS=/шлях/до/ca.pem` (і змонтуй файл).
 - Окремо для Claude Code в SSO нічого реєструвати не треба: кит сам є OAuth-сервером для `/mcp`, а Claude Code реєструється в ньому автоматично (DCR) і пускає людину через той самий SSO.
+
+### Google Workspace
+
+У компанії SSO — Google. Робить адмін Google Cloud у проекті, що належить організації Workspace:
+
+1. **APIs & Services → OAuth consent screen** (Google Auth Platform → Branding / Audience): User type — **Internal**. Тоді увійти можуть лише акаунти вашого Workspace, а перевірка застосунку Google не потрібна. Scopes додавати не треба: `openid email profile` базові.
+2. **Credentials → Create credentials → OAuth client ID**, тип **Web application**:
+   - Authorized redirect URIs: `<PUBLIC_URL>/auth/callback`, наприклад `https://spine-kit.example.com/auth/callback`. Google приймає лише https (виняток — `http://localhost`);
+   - Authorized JavaScript origins не потрібні.
+3. Client ID і Client secret передай тому, хто розгортає кит. Секрет клади у файл (`OIDC_CLIENT_SECRET_FILE`), а не в змінну.
+
+Змінні:
+
+```
+OIDC_ISSUER=https://accounts.google.com
+OIDC_CLIENT_ID=<…>.apps.googleusercontent.com
+OIDC_CLIENT_SECRET_FILE=/run/secrets/oidc_client_secret
+ALLOWED_EMAIL_DOMAINS=<домен Workspace, наприклад example.com>
+ADMIN_EMAILS=<хто адмін кита>
+```
+
+- `OIDC_GROUPS_CLAIM` і `ALLOWED_GROUPS` з Google не працюють: груп в ID token немає.
+- Для Google кит перевіряє не лише домен пошти, а й claim `hd` (домен Workspace). Звичайний Google-акаунт, зареєстрований на корпоративну адресу, має `email_verified`, але не має `hd`, тож його не пустить. Кілька доменів у Workspace — перелічи їх через кому, `hd` має збігтися з доменом пошти.
+- `iss` від Google буває і `https://accounts.google.com`, і `accounts.google.com`. Кит приймає обидва.
+- **Мережа.** Сам сервер кита ходить до Google по HTTPS: `accounts.google.com` (discovery), `oauth2.googleapis.com` (обмін коду), `www.googleapis.com` (ключі JWKS). Якщо кит стоїть у закритій мережі, ці адреси мають бути дозволені назовні прямим правилом у файрволі: змінну `HTTPS_PROXY` кит не використовує. Браузери людей теж мають бачити `accounts.google.com`.
 
 ## Змінні оточення
 
@@ -168,8 +193,8 @@ spec:
             - containerPort: 8080
           env:
             - { name: PUBLIC_URL, value: https://spine-kit.example.com }
-            - { name: OIDC_ISSUER, value: https://sso.example.com/realms/main }
-            - { name: OIDC_CLIENT_ID, value: spine-kit }
+            - { name: OIDC_ISSUER, value: https://accounts.google.com }
+            - { name: OIDC_CLIENT_ID, value: 000000000000-xxxxxxxx.apps.googleusercontent.com }
             - { name: OIDC_CLIENT_SECRET_FILE, value: /secrets/oidc/client-secret }
             - { name: ALLOWED_EMAIL_DOMAINS, value: example.com }
             - { name: ADMIN_EMAILS, value: lead@example.com }

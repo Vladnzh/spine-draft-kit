@@ -2,6 +2,9 @@
   'use strict';
   var KEY = 'spine-draft-kit.connect';
   var LOCAL = /^https?:$/.test(location.protocol) && /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname);
+  var MODE_TAG = typeof document !== 'undefined' ? document.querySelector('meta[name="spine-kit-mode"]') : null;
+  var ENGINE = !!MODE_TAG && MODE_TAG.content === 'engine';
+  var SERVER = !!MODE_TAG && MODE_TAG.content === 'server';
   var LABELS = {
     status: 'стан кита', list_projects: 'список проектів', open_project: 'відкрив проект', create_project: 'створив проект', get_project: 'читає проект',
     update_game: 'налаштування гри', set_symbols: 'символи', update_component: 'компонент', add_component: 'додав компонент', remove_component: 'прибрав компонент',
@@ -901,7 +904,7 @@
     link.busy = null;
     renderButton();
     renderPop();
-    try { await sendJson('/api/bridge/result', 'POST', out); } catch (e) { return; }
+    try { await sendJson(ENGINE ? '/api/engine/result' : '/api/bridge/result', 'POST', out); } catch (e) { return; }
   }
   async function enqueue(c) {
     calls.push(c);
@@ -923,6 +926,14 @@
     renderButton();
     renderPop();
   }
+  function connectEngine() {
+    if (link.es || !App) return;
+    var es = new EventSource('/api/engine/calls');
+    link.es = es;
+    es.addEventListener('call', function (e) { enqueue(JSON.parse(e.data)); });
+    es.onopen = function () { link.online = true; };
+    es.onerror = function () { link.online = false; };
+  }
   function disconnect() {
     if (link.es) { link.es.close(); link.es = null; }
     link.online = false;
@@ -937,6 +948,7 @@
   }
 
   function status() {
+    if (SERVER && root.SpineKitSync && root.SpineKitSync.linkState) return root.SpineKitSync.linkState();
     if (!link.local) return { key: 'off', text: 'Connect', line: 'Офлайн-версія: підключення працює з локального сервера' };
     if (link.busy) return { key: 'busy', text: 'Claude', line: 'Claude працює: ' + link.busy };
     if (link.replaced) return { key: 'off', text: 'Connect', line: 'Кит підключений в іншій вкладці' };
@@ -971,6 +983,7 @@
   function renderPop() {
     var body = $('link-body');
     if (!body || !$('link-dlg').open) return;
+    if (SERVER && root.SpineKitSync && root.SpineKitSync.renderConnect) { root.SpineKitSync.renderConnect(body); return; }
     var st = status();
     body.textContent = '';
     var on = !!link.es;
@@ -1017,6 +1030,7 @@
 
   function start(app) {
     App = app;
+    if (ENGINE) { connectEngine(); return; }
     var u = new URL(location.href);
     if (u.searchParams.get('connect') === '1') {
       writeWant(true);
@@ -1030,5 +1044,5 @@
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bind);
   else bind();
 
-  root.SpineKitLink = { restore: restore, backup: backup, forget: forget, start: start, local: function () { return link.local; } };
+  root.SpineKitLink = { restore: restore, backup: backup, forget: forget, start: start, refresh: renderButton, local: function () { return link.local; } };
 })(typeof window !== 'undefined' ? window : globalThis);

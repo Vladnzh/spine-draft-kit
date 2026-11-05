@@ -90,9 +90,10 @@ export function createAuth({ data, mode, publicUrl, admins, oidc: oc, log }) {
     for (const [k, f] of flows) if (now - f.t > FLOW) flows.delete(k);
     while (flows.size > 5000) flows.delete(flows.keys().next().value);
   };
-  const allowed = (email, groups) => {
+  const google = /^https:\/\/accounts\.google\.com\/?$/.test(String((oc && oc.issuer) || ''));
+  const allowed = (email, groups, hd) => {
     const domain = email.split('@')[1];
-    if (oc.domains.length && oc.domains.includes(domain)) return true;
+    if (oc.domains.length && oc.domains.includes(domain) && (!google || String(hd || '').toLowerCase() === domain)) return true;
     return oc.groups.length > 0 && groups.some(g => oc.groups.includes(g));
   };
   const login = (res, user) => {
@@ -155,7 +156,7 @@ export function createAuth({ data, mode, publicUrl, admins, oidc: oc, log }) {
       const name = String(claims.name || [claims.given_name, claims.family_name].filter(Boolean).join(' ') || email.split('@')[0]).trim().slice(0, 80);
       const raw = claims[oc.groupsClaim];
       const groups = (Array.isArray(raw) ? raw : raw ? [raw] : []).map(String);
-      if (claims.email_verified === false || !allowed(email, groups)) {
+      if (claims.email_verified === false || !allowed(email, groups, claims.hd)) {
         audit('login.denied', { email, reason: claims.email_verified === false ? 'email_verified' : 'access', ip: ipOf(req) });
         return html(res, 403, 'Немає доступу · Draft Kit', box('Немає доступу', email, outForm));
       }

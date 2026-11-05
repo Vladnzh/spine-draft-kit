@@ -11,11 +11,10 @@ services:
       - oidc_client_secret
     environment:
       PUBLIC_URL: https://spine-kit.example.com
-      OIDC_ISSUER: https://sso.example.com/realms/main
-      OIDC_CLIENT_ID: spine-kit
+      OIDC_ISSUER: https://accounts.google.com
+      OIDC_CLIENT_ID: 000000000000-xxxxxxxx.apps.googleusercontent.com
       OIDC_CLIENT_SECRET_FILE: /run/secrets/oidc_client_secret
       OIDC_SCOPES: openid email profile
-      OIDC_GROUPS_CLAIM: groups
       ALLOWED_EMAIL_DOMAINS: example.com
       ADMIN_EMAILS: lead@example.com
       TRUST_PROXY: "1"

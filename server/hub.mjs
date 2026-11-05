@@ -34,6 +34,7 @@ export function createHub({ data }) {
   const typeCache = new Map();
   let listTimer = null;
   let lastList = '';
+  let agents = () => [];
 
   const state = id => {
     if (!live.has(id)) live.set(id, { buffer: [], seen: new Map(), open: { drafts: null, layouts: null } });
@@ -57,7 +58,9 @@ export function createHub({ data }) {
   const presence = id => {
     const out = new Map();
     for (const s of subs) if (s.project === id && s.user) out.set(s.user.email, { kind: 'human', email: s.user.email, name: s.user.name });
-    return [...out.values()];
+    let more = [];
+    try { more = agents(id) || []; } catch { more = []; }
+    return [...out.values(), ...more];
   };
   const tellPresence = id => toProject(id, 'presence', { list: presence(id) });
   const tellList = force => {
@@ -186,6 +189,9 @@ export function createHub({ data }) {
 
   const hub = {
     list,
+    setAgents(fn) { agents = typeof fn === 'function' ? fn : () => []; },
+    presenceOf: presence,
+    presenceChanged: id => tellPresence(id),
     get: id => { const p = data.project(id); return p && !p.doc.deleted ? p.doc : null; },
     create(body, by, label = 'Створено') {
       const settings = body && body.settings;
@@ -288,7 +294,7 @@ export function createHub({ data }) {
       const ops = scope === 'layouts'
         ? P.diff({ settings: { layouts: cur.settings.layouts } }, { settings: { layouts: snap.settings.layouts } })
         : P.diff({ settings: omit(cur.settings, 'layouts'), images: cur.images }, { settings: omit(snap.settings, 'layouts'), images: snap.images });
-      const by = { kind: 'user', email: user.email, name: user.name, client: 'server' };
+      const by = { kind: user.kind === 'claude' ? 'claude' : 'user', email: user.email, name: user.name, client: 'server' };
       const label = 'Відкат · ' + e.label;
       if (!ops.length) return { v: cur.v, nothing: true };
       const r = commit(id, by, 'server', 0, ops, { [scope]: [label] }, { label, restoreOf: e.id, restoreT: e.t, restoreLabel: e.label });
@@ -302,7 +308,7 @@ export function createHub({ data }) {
       closeAll(id);
       const now = Date.now();
       const snap = JSON.stringify(p.doc);
-      const by = { kind: 'user', email: user.email, name: user.name };
+      const by = { kind: user.kind === 'claude' ? 'claude' : 'user', email: user.email, name: user.name };
       const out = [];
       for (const scope of ['drafts', 'layouts']) {
         const line = { id: rid('h'), v: p.doc.v, t0: now, t: now, scope, by, label: name, named: name };

@@ -6,7 +6,7 @@
 
   var P = root.SpineKitPatch;
   var App = null;
-  var me = null, csrf = '', role = '';
+  var me = null, csrf = '', role = '', mcpUrl = '';
   var client = 'k' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
   var seq = 0;
   var pid = null, confirmed = null, shadow = null, lastV = 0;
@@ -521,7 +521,74 @@
     list.sort(function (a, b) { return (a.email === (me && me.email)) - (b.email === (me && me.email)); });
     list.slice(0, 5).forEach(function (u) { box.appendChild(avatar(u)); });
     if (list.length > 5) box.appendChild(el('span', { class: 'sk-av more', title: list.slice(5).map(function (u) { return u.name; }).join(', '), text: '+' + (list.length - 5) }));
-    box.hidden = !list.length;
+    var bots = presence.filter(function (u) { return u.kind === 'claude'; });
+    bots.forEach(function (u) { box.appendChild(el('span', { class: 'sk-claude' + (u.busy ? ' busy' : ''), title: u.name + ' · ' + u.email + (u.busy ? ' · ' + u.busy : ''), text: u.name })); });
+    box.hidden = !list.length && !bots.length;
+    if (root.SpineKitLink && root.SpineKitLink.refresh) root.SpineKitLink.refresh();
+  }
+
+  function linkState() {
+    var bots = presence.filter(function (u) { return u.kind === 'claude'; });
+    var busy = bots.filter(function (u) { return u.busy; })[0];
+    if (busy) return { key: 'busy', text: 'Claude', line: busy.name + ': ' + busy.busy };
+    if (bots.length) return { key: 'on', text: 'Claude', line: 'У проекті: ' + bots.map(function (u) { return u.name; }).join(', ') };
+    return { key: 'off', text: 'Connect', line: 'Підключити Claude Code' };
+  }
+  function copyBtn(text) {
+    var b = el('button', { type: 'button', class: 'btn sm', text: 'Копіювати' });
+    b.addEventListener('click', async function () {
+      try { await navigator.clipboard.writeText(text); b.textContent = 'Скопійовано'; }
+      catch (e) { b.textContent = 'Виділіть і скопіюйте'; }
+      setTimeout(function () { b.textContent = 'Копіювати'; }, 1600);
+    });
+    return b;
+  }
+  function cmdRow(text) { return el('div', { class: 'lk-cmd' }, [el('code', { text: text }), copyBtn(text)]); }
+  function renderConnect(body) {
+    body.textContent = '';
+    var cmd = 'claude mcp add --transport http spine-kit ' + (mcpUrl || location.origin + '/mcp');
+    body.appendChild(el('div', { class: 'lk-step' }, [el('b', { text: '1. Додай кит у Claude Code (один раз)' }), cmdRow(cmd)]));
+    body.appendChild(el('div', { class: 'lk-step' }, [el('b', { text: '2. Увійди' }), el('p', {}, ['Далі в Claude Code: ', el('code', { text: '/mcp' }), ' → spine-kit → Authenticate. Відкриється вхід і сторінка «Дозволити».'])]));
+    body.appendChild(el('div', { class: 'lk-step' }, [el('b', { text: '3. Попроси Claude' }), el('p', { text: '«Створи проект і заповни його артом з /шлях/до/арту». Claude сам заллє файли, а зміни зʼявляться тут наживо з підписом «Claude · ' + ((me && me.name) || 'ваше імʼя') + '».' })]));
+    var list = el('ul', { class: 'sk-clients', id: 'sk-clients' });
+    body.appendChild(el('div', { class: 'lk-step' }, [el('b', { text: 'Підключені клієнти' }), list]));
+    var tok = el('div', { class: 'sk-token', id: 'sk-token' });
+    body.appendChild(el('div', { class: 'lk-step' }, [
+      el('b', { text: 'Персональний токен' }),
+      el('p', { text: 'Запасний шлях і для скриптів: діє 90 днів, працює лише для MCP, показується один раз.' }),
+      tok
+    ]));
+    drawToken(tok, null);
+    drawClients(list);
+  }
+  function drawToken(box, made) {
+    box.textContent = '';
+    if (made) {
+      box.appendChild(el('p', { text: 'Збережіть зараз: токен більше не покажемо.' }));
+      box.appendChild(cmdRow(made.command));
+    }
+    box.appendChild(el('button', { type: 'button', class: 'btn sm', id: 'sk-token-new', text: made ? 'Ще один токен' : 'Створити токен', onclick: async function () {
+      try { var r = await postJson('/api/mcp/tokens', { label: 'Персональний токен' }); drawToken(box, r); drawClients($('sk-clients')); }
+      catch (e) { toast('Не вдалося створити токен: ' + e.message); }
+    } }));
+  }
+  async function drawClients(ul) {
+    if (!ul) return;
+    var list;
+    try { list = await getJson('/api/mcp/clients'); } catch (e) { list = null; }
+    ul.textContent = '';
+    if (!list || !list.length) { ul.appendChild(el('li', { class: 'sk-h-empty', text: list ? 'Поки нікого' : 'Не вдалося завантажити список' })); return; }
+    list.forEach(function (c) {
+      var meta = 'підключено ' + stamp(c.created) + ' · остання дія ' + stamp(c.last) + (c.exp ? ' · діє до ' + stamp(c.exp) : '');
+      ul.appendChild(el('li', { class: 'sk-t' }, [
+        el('span', { class: 'sk-h-txt' }, [el('span', { class: 'sk-h-l', text: c.name || 'Клієнт' }), el('span', { class: 'sk-h-m', text: meta })]),
+        el('button', { type: 'button', class: 'btn sm', text: 'Відключити', onclick: async function () {
+          try { var r = await api('/api/mcp/clients/' + encodeURIComponent(c.id), { method: 'DELETE' }); if (!r.ok) throw new Error(String(r.status)); toast('Відключено: ' + (c.name || 'клієнт')); }
+          catch (e) { toast('Не вдалося відключити: ' + e.message); }
+          drawClients(ul);
+        } })
+      ]));
+    });
   }
 
   function renderMe() {
@@ -748,6 +815,9 @@
     + '.sk-me{flex:none;display:inline-grid;place-items:center;padding:0;margin:0 8px 0 4px;border:0;border-radius:50%;background:none;cursor:pointer}.sk-me[hidden]{display:none}.sk-me .sk-av{margin:0;border:0}'
     + '.sk-acct{position:fixed;z-index:70;display:grid;gap:8px;min-width:220px;max-width:calc(100% - 32px);padding:12px;border-radius:20px;background:var(--card);color:var(--ink);border:1px solid rgb(var(--ink-rgb)/.14);font:500 14px/1.3 var(--f-text)}'
     + '.sk-acct-who{display:grid;gap:2px;padding:2px 4px 6px}.sk-acct-who small{font-size:13px;color:rgb(var(--ink-rgb)/.6);overflow-wrap:anywhere}'
+    + '.sk-claude{flex:none;display:inline-flex;align-items:center;height:28px;max-width:180px;margin-left:6px;padding:0 10px;border-radius:9999px;background:var(--brand-soft);color:var(--brand);font:600 12px/1 var(--f-text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}'
+    + '.sk-claude.busy{animation:sk-pulse 1.2s ease-in-out infinite}@keyframes sk-pulse{50%{opacity:.45}}@media (prefers-reduced-motion:reduce){.sk-claude.busy{animation:none}}'
+    + '.sk-clients{list-style:none;margin:6px 0 0;padding:0;display:grid;gap:4px}.sk-clients .sk-t{padding:6px 0}.sk-token{display:grid;gap:8px;justify-items:start;margin-top:6px}'
     + '.sk-trash{list-style:none;margin:0;padding:0 8px 12px;display:grid;gap:4px;min-width:min(420px,calc(100vw - 64px))}.sk-t{display:flex;align-items:center;gap:12px;padding:8px 10px;border-radius:16px}.sk-t .sk-h-txt{flex:1}';
 
   function mount() {
@@ -757,7 +827,7 @@
     if (end && !$('sk-pres')) end.insertBefore(el('div', { class: 'sk-pres', id: 'sk-pres', hidden: true, 'aria-label': 'Хто в проекті' }), end.firstChild);
     if (end && !$('sk-me')) end.insertBefore(el('button', { type: 'button', class: 'sk-me', id: 'sk-me', hidden: true, 'aria-label': 'Акаунт', 'aria-haspopup': 'menu', onclick: toggleAcct }), $('sk-pres').nextSibling);
     var lb = $('link-btn');
-    if (lb) lb.hidden = true;
+    if (lb && MODE !== 'server') lb.hidden = true;
     window.addEventListener('beforeunload', function (e) {
       if (!outbox.length) return;
       e.preventDefault();
@@ -779,6 +849,7 @@
     me = s.user;
     role = s.role;
     csrf = s.csrf;
+    mcpUrl = s.mcpUrl || '';
     renderMe();
     if (MODE === 'view') {
       var id = pathId(), v = new URL(location.href).searchParams.get('v');
@@ -828,6 +899,8 @@
     closed: closed,
     step: step,
     renderHist: renderHist,
+    linkState: linkState,
+    renderConnect: renderConnect,
     me: function () { return me; },
     status: function () { return { pid: pid, v: lastV, pending: pending.length, outbox: outbox.length, live: live, undo: undo.length, redo: redo.length }; },
     app: function () { return App; },
