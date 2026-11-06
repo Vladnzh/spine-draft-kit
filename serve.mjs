@@ -1,4 +1,5 @@
 import { createServer } from 'node:http';
+import { createServer as createTlsServer } from 'node:https';
 import { readFileSync, existsSync, statSync, readdirSync, watch } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { join, dirname, resolve, basename } from 'node:path';
@@ -13,26 +14,34 @@ import { createFiles } from './server/files.mjs';
 import { createEngine } from './server/engine.mjs';
 import { createMcpHttp } from './server/mcp-http.mjs';
 import { createLog } from './server/log.mjs';
+import { createLibrary } from './server/library.mjs';
+import { createSandbox } from './server/sandbox.mjs';
 import { vendorState } from './vendor.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const OUT = join(HERE, 'Spine-Draft-Kit.html');
 const args = process.argv.slice(2);
 const dev = args.includes('--dev');
-const rest = args.filter(a => a !== '--dev');
+const httpsFlag = args.includes('--https');
+const rest = args.filter(a => a !== '--dev' && a !== '--https');
 const env = process.env;
 const PORT = Number(env.PORT) || (dev ? 5190 : 8080);
+const CERTS = join(HERE, 'certs');
+const tlsCert = env.TLS_CERT || (httpsFlag ? join(CERTS, 'localhost.pem') : '');
+const tlsKey = env.TLS_KEY || (httpsFlag ? join(CERTS, 'localhost-key.pem') : '');
+const tls = !!(tlsCert || tlsKey);
 const cfg = {
   dev,
   port: PORT,
   host: env.HOST || (dev ? '127.0.0.1' : '0.0.0.0'),
-  publicUrl: (env.PUBLIC_URL || (dev ? `http://localhost:${PORT}` : '')).replace(/\/+$/, ''),
+  publicUrl: (env.PUBLIC_URL || (dev ? `${tls ? 'https' : 'http'}://localhost:${PORT}` : '')).replace(/\/+$/, ''),
   dataDir: resolve(env.DATA_DIR || (dev ? join(HERE, 'server-data') : '/data')),
   auth: env.AUTH || (dev ? 'dev' : 'oidc'),
   admins: String(env.ADMIN_EMAILS || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean),
   maxImageMb: Number(env.MAX_IMAGE_MB) || 64,
   trustProxy: env.TRUST_PROXY === '1' || env.TRUST_PROXY === 'true',
   rateAuthPerMin: Number(env.RATE_AUTH_PER_MIN) || 10,
+  rateRegisterPerHour: Number(env.RATE_REGISTER_PER_HOUR) || (dev ? 600 : 10),
   chromePath: env.CHROME_PATH || '',
   enginePort: Number(env.ENGINE_PORT) || 0,
   engineMaxTabs: Number(env.ENGINE_MAX_TABS) || 6,
@@ -82,6 +91,8 @@ function start() {
   const data = openData(cfg.dataDir);
   try { data.lock(); } catch (e) { die(e.message); }
   const log = createLog({ dir: cfg.dataDir });
+  const library = createLibrary({ data, log });
+  const sandbox = createSandbox({ data, log });
   const hub = createHub({ data });
   const auth = createAuth({ data, mode: cfg.auth, publicUrl: cfg.publicUrl, admins: cfg.admins, oidc, log });
   let cached = null;
@@ -90,13 +101,18 @@ function start() {
     try { cached = readFileSync(OUT, 'utf8'); } catch { cached = null; }
     return cached;
   };
-  const oauth = createOAuth({ data, publicUrl: cfg.publicUrl, auth, log, extraRedirects: cfg.extraRedirects, limiter });
+  const oauth = createOAuth({ data, publicUrl: cfg.publicUrl, auth, log, extraRedirects: cfg.extraRedirects, limiter, regPerHour: cfg.rateRegisterPerHour });
   const files = createFiles({ data, publicUrl: cfg.publicUrl, maxImageMb: cfg.maxImageMb, log, limiter });
   const engine = createEngine({ chromePath: cfg.chromePath, port: cfg.enginePort, maxTabs: cfg.engineMaxTabs, idleMin: cfg.engineIdleMin, noSandbox: cfg.engineNoSandbox, profileDir: join(tmpdir(), `spine-kit-engine-${PORT}`), log });
-  const mcp = createMcpHttp({ hub, oauth, files, engine, publicUrl: cfg.publicUrl, log, limiter });
-  const http = createHttp({ data, hub, auth, cfg, page, log, oauth, mcp, files });
+  const mcp = createMcpHttp({ hub, oauth, files, engine, publicUrl: cfg.publicUrl, log, limiter, library });
+  const http = createHttp({ data, hub, auth, cfg, page, log, oauth, mcp, files, library, sandbox });
   engine.use(http);
-  const server = createServer(http.handler);
+  let server;
+  if (tls) {
+    if (!tlsCert || !tlsKey) die('Для HTTPS потрібні обидва: TLS_CERT і TLS_KEY');
+    for (const f of [tlsCert, tlsKey]) if (!existsSync(f)) die(`Немає файлу сертифіката: ${f}\nЛокально: brew install mkcert && mkcert -install && npm run certs`);
+    server = createTlsServer({ cert: readFileSync(tlsCert), key: readFileSync(tlsKey) }, http.handler);
+  } else server = createServer(http.handler);
   server.on('error', e => die(`Не вдалося слухати ${cfg.host}:${PORT}: ${e.message}`));
   server.listen(PORT, cfg.host, () => log.info(`Draft Kit (сервер${dev ? ', dev' : ''}): ${cfg.publicUrl}`, { auth: cfg.auth, data: cfg.dataDir }));
   setInterval(() => hub.ping(), 20000).unref();

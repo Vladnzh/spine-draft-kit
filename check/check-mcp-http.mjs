@@ -338,7 +338,7 @@ let refs;
   ok('set_symbols with refs', !s.error && s.json?.symbols?.length === 2 && s.json.symbols.every(x => x.image === x.name + '.png'), s.text.slice(0, 300));
   const live = await until(() => htab.ev(`(() => { const st = SpineKitSync.app().state; const c = st.s.components.find(c => c.type === 'symbols'); return c.symbols.map(s => s.name).join() === 'high_1,low_1' && !!st.images['sym:high_1'] && st.images['sym:high_1'].w === 220; })()`), 8000);
   ok('human tab sees the symbols with images live', live >= 0, String(live));
-  const chip = await until(() => htab.ev(`[...document.querySelectorAll('#sk-pres .sk-claude')].some(x => x.textContent === 'Claude · Аня')`), 5000);
+  const chip = await until(() => htab.ev(`[...document.querySelectorAll('#sk-pres .sk-claude')].some(x => x.getAttribute('aria-label') === 'Claude · Аня')`), 5000);
   ok('human tab shows the «Claude · Аня» chip', chip >= 0, await htab.ev(`document.getElementById('sk-pres').textContent`));
 }
 
@@ -399,7 +399,7 @@ const B = client(null);
   console.log(`   4 concurrent calls took ${Date.now() - t0} ms`);
   const seen = await until(() => htab.ev(`(() => { const s = SpineKitSync.app().state.s; return s.game === 'mcp-http-renamed' && s.components.some(c => c.name === 'animation_game_logo') && s.components.find(c => c.type === 'frame_under').on === false && s.components.find(c => c.type === 'symbols').symbols.some(x => x.name === 'wild_1'); })()`), 8000);
   ok('human tab sees both people\'s changes live', seen >= 0);
-  const chips = await until(() => htab.ev(`(() => { const t = [...document.querySelectorAll('#sk-pres .sk-claude')].map(x => x.textContent); return t.includes('Claude · Аня') && t.includes('Claude · Борис'); })()`), 5000);
+  const chips = await until(() => htab.ev(`(() => { const t = [...document.querySelectorAll('#sk-pres .sk-claude')].map(x => x.getAttribute('aria-label')); return t.includes('Claude · Аня') && t.includes('Claude · Борис'); })()`), 5000);
   ok('human tab shows both Claude chips', chips >= 0, await htab.ev(`document.getElementById('sk-pres').textContent`));
   const h = await A.tool('get_history', { scope: 'drafts', limit: 30 });
   const es = h.json?.entries || [];

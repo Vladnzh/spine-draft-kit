@@ -73,13 +73,15 @@
     return (c && (c.parts || []).filter(function (p) { return p && p.name === m[2]; })[0]) || null;
   }
   function forgetComponentImages(c) {
+    var st = imgs('c:' + c.id);
     forgetImage('c:' + c.id);
-    Object.keys(state.images).concat(Object.keys(state.blobs)).forEach(function (k) { if (k.indexOf('p:' + c.id + ':') === 0) forgetImage(k); });
+    Object.keys(st.images).concat(Object.keys(st.blobs)).forEach(function (k) { if (k.indexOf('p:' + c.id + ':') === 0) forgetImage(k); });
   }
   function movePartImage(c, from, to) {
     var a = partKey(c, from), b = partKey(c, to);
     if (a === b) return;
-    if (state.images[a]) { state.images[b] = state.images[a]; state.blobs[b] = state.blobs[a]; }
+    var st = imgs(a);
+    if (st.images[a]) { st.images[b] = st.images[a]; st.blobs[b] = st.blobs[a]; }
     forgetImage(a);
   }
 
@@ -93,12 +95,15 @@
     var d = clone(c);
     delete d.id;
     delete d.on;
+    delete d.lib;
+    delete d.libV;
     var bone = state.s.layouts && state.s.layouts.bind ? state.s.layouts.bind[c.id] : null;
     if (typeof bone === 'string' && bone) d.bone = bone;
     var keys = compImageKeys(c), images = {}, roles = Object.keys(keys);
     for (var i = 0; i < roles.length; i++) {
       var k = keys[roles[i]];
-      if (state.blobs[k]) images[roles[i]] = { name: (state.images[k] && state.images[k].fileName) || '', data: await readAsDataUrl(state.blobs[k]) };
+      var st = imgs(k);
+      if (st.blobs[k]) images[roles[i]] = { name: (st.images[k] && st.images[k].fileName) || '', data: await readAsDataUrl(st.blobs[k]) };
     }
     return { name: spineOf(c) + '.component.json', text: JSON.stringify({ kit: COMP_KIT, component: d, images: images }, null, 1) };
   }
@@ -106,13 +111,14 @@
     opts = opts || {};
     if (!data || data.kit !== COMP_KIT || !data.component || typeof data.component !== 'object') throw new Error('Це не файл компонента кита');
     var src = clone(data.component);
-    var c = { id: newId(), type: 'custom', label: typeof src.label === 'string' && src.label ? src.label : TEMPLATES.custom.label, on: true };
+    var c = { id: opts.sandbox ? sbNewId() : newId(), type: 'custom', label: typeof src.label === 'string' && src.label ? src.label : TEMPLATES.custom.label, on: true };
+    if (opts.sandbox) delete c.on;
     ['w', 'h', 'x', 'y'].forEach(function (k) { if (isFinite(Number(src[k]))) c[k] = Number(src[k]); });
     ['skins', 'spacers', 'bar'].forEach(function (k) { if (typeof src[k] === 'string') c[k] = src[k]; });
     if (K.pivotName(src.pivot)) c.pivot = K.pivotName(src.pivot);
     if (Array.isArray(src.parts)) c.parts = src.parts.map(K.normPart).filter(Boolean);
     c.anims = Array.isArray(src.anims) ? src.anims.filter(function (a) { return a && a.name; }) : frameAnims();
-    var taken = state.s.components.filter(function (x) { return x.type === 'custom'; }).map(spineOf);
+    var taken = (opts.sandbox ? sbList() : state.s.components.filter(function (x) { return x.type === 'custom'; })).map(spineOf);
     var base = 'animation_' + (K.slug(opts.name || src.name).replace(/^animation_/, '') || 'element');
     var name = base, n = 2;
     while (taken.indexOf(name) !== -1) name = base + '_' + n++;
@@ -121,8 +127,18 @@
     var roles = Object.keys(imgs);
     for (var i = 0; i < roles.length; i++) {
       var im = imgs[roles[i]], url = typeof im === 'string' ? im : im && im.data;
-      if (!keys[roles[i]] || typeof url !== 'string') continue;
-      try { await setImage(keys[roles[i]], dataUrlBlob(url), (im && im.name) || ''); } catch (e) { continue; }
+      var blob = im && im.blob instanceof Blob ? im.blob : null;
+      if (!keys[roles[i]] || (!blob && typeof url !== 'string')) continue;
+      try { await setImage(keys[roles[i]], blob || dataUrlBlob(url), (im && im.name) || ''); } catch (e) { continue; }
+    }
+    if (opts.sandbox) {
+      sbItems().push(c);
+      sb.cur = c.id;
+      sb.anim = null;
+      sb.skin = null;
+      sb.playing = true;
+      changed({ render: true, now: true });
+      return c;
     }
     state.s.components.push(c);
     if (typeof src.bone === 'string' && src.bone && lays().list.some(function (L) { return LK.boneOf(L, src.bone); })) lays().bind[c.id] = src.bone;
@@ -204,7 +220,7 @@
     confirmDel: null
   };
 
-  function comp(id) { return state.s.components.filter(function (c) { return c.id === id; })[0]; }
+  function comp(id) { return state.s.components.filter(function (c) { return c.id === id; })[0] || sbList().filter(function (c) { return c.id === id; })[0]; }
   function symComp() { return state.s.components.filter(function (c) { return c.type === 'symbols'; })[0]; }
   function geo() { return K.geometry(state.s); }
 
@@ -224,7 +240,16 @@
   function same(a, b) { return JSON.stringify(a) === JSON.stringify(b); }
 
   var saveTimer = null;
+  var cleanSig = null, blobIds = new WeakMap(), blobSeq = 0;
+  function blobRev(b) {
+    if (!b || typeof b !== 'object') return '-';
+    var id = blobIds.get(b);
+    if (!id) { blobSeq += 1; id = blobSeq; blobIds.set(b, id); }
+    return id;
+  }
+  function projSig() { return state.s ? JSON.stringify(state.s) + '|' + Object.keys(state.blobs).sort().map(function (k) { return k + ':' + blobRev(state.blobs[k]); }).join(',') : ''; }
   function scheduleSave() {
+    if (!auto && !hist.dirty && cleanSig !== null && projSig() === cleanSig) return;
     clearTimeout(saveTimer);
     clearTimeout(hist.timer);
     if (!Sync) hist.timer = setTimeout(histCommit, 1200);
@@ -240,6 +265,7 @@
     Link.backup(rec);
     histMark();
     setDirty(false);
+    cleanSig = projSig();
     renderHist();
     return Store.put(rec);
   }
@@ -351,6 +377,7 @@
     });
     histMark();
     hist.dirty = false;
+    cleanSig = projSig();
     renderSaveBtn();
     renderHist();
   }
@@ -382,12 +409,14 @@
     xc.forEach(function (c) { if (!find(yc, c.id)) { fresh[c.id] = true; add('− ' + compTitle(c)); } });
     var ids = function (list) { return list.map(function (c) { return c.id; }); };
     if (!out.length && !same(ids(xc), ids(yc))) add('Порядок компонентів');
+    var any = function (id) { return find(yc, id) || find(xc, id); };
     var ab = a.blobs || {}, bb = b.blobs || {};
     Object.keys(Object.assign({}, ab, bb)).forEach(function (k) {
       if (ab[k] === bb[k]) return;
       if (k.indexOf('sym:') === 0) add('Картинка ' + k.slice(4));
       else if (k.indexOf('blur:') === 0) add('Блюр ' + k.slice(5));
-      else if (k.indexOf('c:') === 0) { var c = find(yc, k.slice(2)) || find(xc, k.slice(2)); if (!fresh[k.slice(2)]) add('Картинка: ' + (c ? compTitle(c) : 'компонент')); }
+      else if (k.indexOf('c:') === 0) { var c = any(k.slice(2)); if (!fresh[k.slice(2)]) add('Картинка: ' + (c ? compTitle(c) : 'компонент')); }
+      else if (k.indexOf('p:') === 0) { var pid = k.split(':')[1], pc = any(pid); if (!fresh[pid]) add('Частина: ' + (pc ? compTitle(pc) : 'компонент') + ' · ' + k.split(':').slice(2).join(':')); }
       else add('Картинка: ' + (TITLES[k] || k));
     });
     if (!out.length && !same(x, y)) add('Зміни');
@@ -512,9 +541,7 @@
     if (!state.pid) return;
     histCommit();
     hist.view = state.view === 'layouts' ? 'layouts' : 'drafts';
-    var d = $('hist-dlg');
-    if (typeof d.showModal === 'function') { if (!d.open) d.showModal(); }
-    else d.setAttribute('open', '');
+    panel($('hist-dlg'), true);
     renderHist();
     renderSaveBtn();
   }
@@ -540,9 +567,8 @@
     $('hist-save').addEventListener('click', saveClick);
     $('hist-btn').addEventListener('click', openHist);
     var d = $('hist-dlg');
-    var close = function () { if (typeof d.close === 'function') d.close(); else d.removeAttribute('open'); };
-    $('hist-close').addEventListener('click', close);
-    d.addEventListener('click', function (e) { if (e.target === d) close(); });
+    bindPanel(d);
+    $('hist-close').addEventListener('click', function () { panel(d, false); });
     $('hist-auto').addEventListener('change', function (e) { setAuto(e.target.checked); });
     Array.prototype.forEach.call(document.querySelectorAll('#hist-tabs .preset'), function (b) {
       b.addEventListener('click', function () { hist.view = b.getAttribute('data-scope'); renderHist(); });
@@ -569,6 +595,7 @@
   var timer = null;
   function changed(opts) {
     opts = opts || {};
+    sbSchedule();
     scheduleSave();
     if (opts.render) renderComponents();
     clearTimeout(timer);
@@ -579,7 +606,7 @@
   document.addEventListener('keydown', function () { remote.key = Date.now(); }, true);
   function remoteBusy() {
     var a = document.activeElement;
-    return !!a && typing(a) && !!a.closest('#c-list, #game') && Date.now() - remote.key < 1500;
+    return !!a && typing(a) && !!a.closest('#c-list, #game, #sb-edit, #sb-lib') && Date.now() - remote.key < 1500;
   }
   function remoteRender() {
     clearTimeout(remote.timer);
@@ -600,7 +627,7 @@
     var P = window.SpineKitPatch;
     P.apply(state, P.diff({ s: state.s }, { s: normalize(settings) }));
     var todo = [];
-    Object.keys(images).forEach(function (k) { if (state.blobs[k] !== images[k].file) { state.blobs[k] = images[k].file; todo.push(k); } });
+    Object.keys(images).forEach(function (k) { if (isSbKey(k)) return; if (state.blobs[k] !== images[k].file) { state.blobs[k] = images[k].file; todo.push(k); } });
     Object.keys(state.blobs).forEach(function (k) { if (!images[k]) forgetImage(k); });
     remoteRender();
     return (async function () {
@@ -623,7 +650,7 @@
   }
 
   function px(key) {
-    var im = state.images[key];
+    var im = imgs(key).images[key];
     if (im) return { w: im.w, h: im.h, win: im.win || null, uploaded: true };
     var g = geo();
     if (key.indexOf('sym:') === 0) return { w: Math.round(0.86 * g.W), h: Math.round(0.86 * g.H) };
@@ -932,7 +959,7 @@
 
   var artCache = {};
   function art(key) {
-    var im = state.images[key];
+    var im = imgs(key).images[key];
     if (im) return im.canvas;
     if (key.indexOf('blur:') === 0) { var sc = art('sym:' + key.slice(5)); return sc ? drawBlur(sc) : null; }
     if (key.indexOf('bar:') === 0) return artCache[key] || (artCache[key] = drawBar(key));
@@ -1020,11 +1047,14 @@
     try { r = await canvasFromUrl(url); } finally { URL.revokeObjectURL(url); }
     var im = { canvas: r.canvas, w: r.canvas.width, h: r.canvas.height, fileName: fileName || '' };
     if (key === 'frame_above') im.win = windowOf(r.canvas);
-    state.images[key] = im;
-    state.blobs[key] = blob;
+    var st = imgs(key);
+    st.images[key] = im;
+    st.blobs[key] = blob;
     return r.natural;
   }
-  function forgetImage(key) { delete state.images[key]; delete state.blobs[key]; }
+  function isSbKey(k) { return /^(c|p):sb/.test(String(k || '')); }
+  function imgs(k) { return isSbKey(k) ? sb.store : state; }
+  function forgetImage(key) { var st = imgs(key); delete st.images[key]; delete st.blobs[key]; }
   function dropImage(key) {
     forgetImage(key);
     changed({ render: true, images: true });
@@ -1451,7 +1481,7 @@
   }
 
   function imageRow(key, note, after) {
-    var im = state.images[key];
+    var im = imgs(key).images[key];
     var row = el('div', { class: 'img-row' }, [
       el('div', { class: 'prev' }, [el('img', { alt: '', src: thumb(art(key)) })])
     ].concat(fileButton(im ? 'Замінити' : 'Картинка', 'image/png,image/webp,image/jpeg', false, function (fs) { addImageFile(key, fs[0], after); }))
@@ -1667,7 +1697,7 @@
     var sel = (state.selPart || {})[c.id];
     var p = (c.parts || []).filter(function (x) { return x && x.name === sel; })[0];
     if (!p) return null;
-    var k = partKey(c, p.name), im = state.images[k];
+    var k = partKey(c, p.name), im = imgs(k).images[k];
     var after = function (natural) { p.w = natural.w; p.h = natural.h; };
     var pick = fileButton('', 'image/png,image/webp,image/jpeg', false, function (fs) { addImageFile(k, fs[0], after); });
     var what = (im ? 'Замінити' : 'Додати') + ' картинку';
@@ -1831,6 +1861,7 @@
       if (again) again.focus({ preventScroll: true });
       if (again && caret && typeof again.setSelectionRange === 'function') { try { again.setSelectionRange(caret[0], caret[1]); } catch (e) { caret = null; } }
     }
+    if (sbShown()) { renderSbEdit(); renderSbItems(); window.scrollTo(0, y); }
   }
 
   function showInPreview(c) {
@@ -2127,7 +2158,7 @@
       }
       return K.bundle(sp.name, json, regions, state.plan.tech);
     }
-    var comp = state.s.components.filter(function (c) { return c.id === sp.comp; })[0];
+    var comp = state.s.components.filter(function (c) { return c.id === sp.comp; })[0] || sbList().filter(function (c) { return c.id === sp.comp; })[0];
     var tslot = comp && comp.type === 'custom' && sp.json.slots.filter(function (s) { return /^txt_/.test(s.name); })[0];
     if (tslot) {
       json = JSON.parse(sp.jsonText);
@@ -2370,6 +2401,7 @@
     renderPreview();
     renderCheckAs();
     renderLayouts();
+    if (sbShown()) { renderSbItems(); renderSbStage(); }
     if (state.open.reels) {
       var art_ = document.querySelector('[data-id="reels"] .comp-body');
       if (art_) art_.replaceWith(Object.assign(reelsBody(), { id: 'body-reels' }));
@@ -3463,9 +3495,1095 @@
     if (mq && mq.addEventListener) mq.addEventListener('change', function () { drawLayout(); });
   }
 
+  var Lib = window.SpineKitLibrary;
+  var SbStore = window.SpineKitSandboxStore;
+  var sb = { items: [], store: { images: {}, blobs: {} }, saved: {}, ready: false, loadErr: '', saveTimer: null, flushing: null, again: false, cur: null, anim: null, skin: null, speed: 1, playing: true, loop: true, bones: false, cam: null, camFor: null, zoomTxt: '', plan: null, player: null, scrub: false, t: 0, d: 0, confirm: null, conTimer: null, libDel: null, libBusy: '', libErr: '', libLoading: false, q: '' };
+  var SB_MOVED = 'spine-draft-kit.sandbox-moved';
+  var SB_PREF = 'spine-draft-kit.sandbox';
+  var SB_TPL = ['custom', 'character', 'logo', 'popup', 'infopanel', 'background'];
+  var SB_PLAY = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l10.5-6.5Z" fill="currentColor"/></svg>';
+  var SB_PAUSE = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6.5" y="5" width="4" height="14" rx="1.2" fill="currentColor"/><rect x="13.5" y="5" width="4" height="14" rx="1.2" fill="currentColor"/></svg>';
+  var SB_MORE = '<circle cx="5" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="19" cy="12" r="1.4"/>';
+  var SB_PLUS = '<path d="M12 5v14M5 12h14"/>';
+  var SB_BOX = '<rect x="4" y="4" width="16" height="16" rx="3"/><path d="M4 10h16"/>';
+  var SB_FILE = '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8Z"/><path d="M14 3v5h5"/>';
+
+  function sbPrefs() {
+    try {
+      var p = JSON.parse(localStorage.getItem(SB_PREF) || '{}') || {};
+      if (typeof p.speed === 'number' && p.speed >= 0.1 && p.speed <= 2) sb.speed = p.speed;
+      if (typeof p.loop === 'boolean') sb.loop = p.loop;
+    } catch (e) { return; }
+  }
+  function sbKeep() { try { localStorage.setItem(SB_PREF, JSON.stringify({ speed: sb.speed, loop: sb.loop })); } catch (e) { return; } }
+  function sbNewId() { return 'sb' + newId().slice(1); }
+  function sbList() { return sb.items; }
+  function sbItems() {
+    if (!sb.ready) throw new Error('Пісочниця ще завантажується, спробуйте за мить');
+    return sb.items;
+  }
+  function sbItem(id) {
+    var k = String(id || '');
+    if (!k) return null;
+    return sbList().filter(function (c) { return c.id === k; })[0] || sbList().filter(function (c) { return c.name === k || spineOf(c) === k; })[0] || null;
+  }
+  function sbCur() {
+    var l = sbList();
+    var c = sbItem(sb.cur) || l[l.length - 1] || null;
+    sb.cur = c ? c.id : null;
+    return c;
+  }
+  function sbShown() { return !!state.s && state.view === 'sandbox' && !$('view-sandbox').hidden; }
+  function sbFmt(t) { return (Math.round((Number(t) || 0) * 100) / 100).toFixed(2).replace('.', ','); }
+  function sbReset() {
+    sbDispose();
+    sb.cur = null;
+    sb.anim = null;
+    sb.skin = null;
+    sb.plan = null;
+    sb.confirm = null;
+    sb.libDel = null;
+    $('tab-sandbox').classList.remove('dot');
+  }
+  function sbClean(raw) {
+    var c = clone(raw.component || raw);
+    c.id = raw.id;
+    c.type = 'custom';
+    delete c.on;
+    if (!Array.isArray(c.anims)) c.anims = frameAnims();
+    return c;
+  }
+  function sbKeyOf(id, role) { return role === 'main' ? 'c:' + id : 'p:' + id + ':' + role.slice(5); }
+  async function sbImages(id, images) {
+    var roles = Object.keys(images || {});
+    for (var i = 0; i < roles.length; i++) {
+      var x = images[roles[i]];
+      if (!x || !x.blob || (roles[i] !== 'main' && roles[i].indexOf('part:') !== 0)) continue;
+      try { await setImage(sbKeyOf(id, roles[i]), x.blob, x.name || ''); } catch (e) { continue; }
+    }
+  }
+  function sbSig(c) {
+    var keys = compImageKeys(c);
+    return JSON.stringify(c) + '|' + Object.keys(keys).map(function (r) { return keys[r] + ':' + imgRev(keys[r]); }).join(',') + '|' + sb.items.indexOf(c);
+  }
+  function sbRecord(c) {
+    var d = clone(c);
+    delete d.id;
+    var keys = compImageKeys(c), images = {};
+    Object.keys(keys).forEach(function (role) {
+      var k = keys[role];
+      if (sb.store.blobs[k]) images[role] = { name: (sb.store.images[k] && sb.store.images[k].fileName) || '', blob: sb.store.blobs[k] };
+    });
+    return { id: c.id, component: d, images: images, order: sb.items.indexOf(c) };
+  }
+  async function sbLoad() {
+    var recs;
+    if (sb.ready) await sbFlush();
+    try { recs = await SbStore.load(); sb.loadErr = ''; }
+    catch (e) { sb.loadErr = e.message; return false; }
+    sb.store.images = {};
+    sb.store.blobs = {};
+    sb.items = recs.map(sbClean);
+    for (var i = 0; i < recs.length; i++) await sbImages(recs[i].id, recs[i].images);
+    sb.saved = {};
+    sb.items.forEach(function (c) { sb.saved[c.id] = sbSig(c); });
+    sb.ready = true;
+    if (!sbItem(sb.cur)) { sb.cur = null; sb.anim = null; sb.skin = null; }
+    return true;
+  }
+  function sbForget() {
+    clearTimeout(sb.saveTimer);
+    sbDispose();
+    sb.items = [];
+    sb.store.images = {};
+    sb.store.blobs = {};
+    sb.saved = {};
+    sb.again = false;
+    sb.ready = false;
+    sb.cur = null;
+    sb.anim = null;
+    sb.skin = null;
+    sb.plan = null;
+  }
+  function sbSchedule() {
+    if (!sb.ready) return;
+    clearTimeout(sb.saveTimer);
+    sb.saveTimer = setTimeout(sbFlush, 300);
+  }
+  async function sbWrite() {
+    var ids = {}, list = sb.items.slice();
+    for (var i = 0; i < list.length; i++) {
+      var c = list[i], sig = sbSig(c);
+      ids[c.id] = true;
+      if (sb.saved[c.id] === sig) continue;
+      try { await SbStore.put(sbRecord(c)); sb.saved[c.id] = sig; } catch (e) { toast('Пісочниця не зберіглась: ' + e.message); }
+    }
+    var gone = Object.keys(sb.saved).filter(function (id) { return !ids[id]; });
+    for (var j = 0; j < gone.length; j++) {
+      try { await SbStore.remove(gone[j]); delete sb.saved[gone[j]]; } catch (e) { toast('Пісочниця: не вдалося прибрати: ' + e.message); }
+    }
+  }
+  async function sbDrain() {
+    try {
+      while (sb.again) {
+        sb.again = false;
+        await sbWrite();
+      }
+    } finally { sb.flushing = null; }
+  }
+  async function sbFlush() {
+    clearTimeout(sb.saveTimer);
+    if (!sb.ready) return;
+    sb.again = true;
+    if (!sb.flushing) sb.flushing = sbDrain();
+    await sb.flushing;
+  }
+  function sbLegacy(settings) {
+    var out = {};
+    var list = settings && settings.sandbox && Array.isArray(settings.sandbox.items) ? settings.sandbox.items : [];
+    if (!list.length || !sb.ready || (Sync && Sync.mode() === 'engine')) return out;
+    var done = {};
+    try { done = JSON.parse(localStorage.getItem(SB_MOVED) || '{}') || {}; } catch (e) { done = {}; }
+    list.forEach(function (raw) {
+      if (!raw || !raw.id || done[raw.id] || sb.items.some(function (x) { return x.id === raw.id; })) return;
+      sb.items.push(sbClean(raw));
+      done[raw.id] = true;
+      out[raw.id] = true;
+    });
+    try { localStorage.setItem(SB_MOVED, JSON.stringify(done)); } catch (e) { return out; }
+    return out;
+  }
+  function sbMine(by) {
+    var me = Sync && Sync.me ? Sync.me() : null;
+    return !!by && by.kind === 'claude' && !!me && String(by.email || '').toLowerCase() === String(me.email || '').toLowerCase();
+  }
+  async function sbRemote(ev) {
+    if (!sb.ready || !ev || !ev.id) return;
+    var c = sb.items.filter(function (x) { return x.id === ev.id; })[0] || null;
+    var anim = null;
+    if (ev.op === 'del') {
+      if (!c) return;
+      sb.items = sb.items.filter(function (x) { return x !== c; });
+      forgetComponentImages(c);
+      delete sb.saved[c.id];
+      if (sb.cur === c.id) { sb.cur = null; sb.anim = null; sb.skin = null; }
+    } else if (ev.rec) {
+      var next = sbClean(ev.rec);
+      if (c) {
+        var old = {};
+        (c.anims || []).forEach(function (a) { if (a) old[a.name] = JSON.stringify(a); });
+        (next.anims || []).forEach(function (a) { if (!anim && a && old[a.name] !== JSON.stringify(a)) anim = a.name; });
+        var P = window.SpineKitPatch;
+        P.apply({ x: c }, P.diff({ x: c }, { x: next }));
+      } else { c = next; sb.items.push(c); }
+      var want = {}, roles = Object.keys(ev.rec.images || {});
+      roles.forEach(function (role) { want[sbKeyOf(c.id, role)] = true; });
+      Object.keys(sb.store.images).concat(Object.keys(sb.store.blobs)).forEach(function (k) { if ((k === 'c:' + c.id || k.indexOf('p:' + c.id + ':') === 0) && !want[k]) forgetImage(k); });
+      for (var i = 0; i < roles.length; i++) {
+        var x = ev.rec.images[roles[i]], k = sbKeyOf(c.id, roles[i]);
+        if (!x || !x.blob || sb.store.blobs[k] === x.blob) continue;
+        try { await setImage(k, x.blob, x.name || ''); } catch (e) { continue; }
+      }
+      sb.saved[c.id] = sbSig(c);
+    }
+    if (sbMine(ev.by) && ev.op !== 'del' && !(sbShown() && remoteBusy() && c.id !== sb.cur)) {
+      if (c.id !== sb.cur) { sb.cur = c.id; sb.skin = null; sb.anim = null; sb.confirm = null; }
+      if (anim) sb.anim = anim;
+      sb.playing = true;
+      if (!sbShown() && state.s) $('tab-sandbox').classList.add('dot');
+    }
+    if (!sbShown()) return;
+    if (remoteBusy()) { clearTimeout(sb.remoteTimer); sb.remoteTimer = setTimeout(renderSandbox, 600); return; }
+    renderSandbox();
+  }
+
+  function sbPlanOf(c) {
+    if (!c || !state.s) return null;
+    try { return K.planAll(Object.assign({}, state.s, { components: [c] }), px).spines[0] || null; } catch (e) { return null; }
+  }
+  function sbBuild() {
+    var c = sbCur();
+    sb.plan = null;
+    if (!c || !state.s) return null;
+    try { sb.plan = K.planAll(Object.assign({}, state.s, { components: [c] }), px); } catch (e) { toast('Пісочниця: не вдалося зібрати: ' + e.message); }
+    return sbSpine();
+  }
+  function sbSpine() { return (sb.plan && sb.plan.spines[0]) || null; }
+
+  var imgIds = new WeakMap(), imgSeq = 0;
+  function imgRev(k) {
+    var im = imgs(k).images[k];
+    if (!im || !im.canvas) return '-';
+    var id = imgIds.get(im.canvas);
+    if (!id) { imgSeq += 1; id = imgSeq; imgIds.set(im.canvas, id); }
+    return id;
+  }
+  function sbKey(c, sp) {
+    var keys = compImageKeys(c);
+    return sp.jsonText + '|' + sp.atlasText + '|' + Object.keys(keys).map(function (r) { return keys[r] + ':' + imgRev(keys[r]); }).join(',') + '|' + JSON.stringify((c.parts || []).map(function (p) { return [p.name, p.shape, p.color]; })) + '|' + sb.skin;
+  }
+  function sbDispose() {
+    if (sb.player && sb.player.player) { try { sb.player.player.dispose(); } catch (e) { /* already gone */ } }
+    sb.player = null;
+    var st = $('sb-stage');
+    if (st) st.textContent = '';
+  }
+  function sbMsg(text) { sbDispose(); $('sb-stage').appendChild(el('div', { class: 'stage-msg', text: text })); }
+  function sbApply(p) {
+    p.animationState.apply(p.skeleton);
+    p.skeleton.updateWorldTransform();
+  }
+  var SB_PAD = 1.16;
+  function sbAabb(v, n) {
+    var b = { l: Infinity, b: Infinity, r: -Infinity, t: -Infinity };
+    for (var i = 0; i < n; i += 2) {
+      if (!isFinite(v[i]) || !isFinite(v[i + 1])) return null;
+      b.l = Math.min(b.l, v[i]); b.r = Math.max(b.r, v[i]);
+      b.b = Math.min(b.b, v[i + 1]); b.t = Math.max(b.t, v[i + 1]);
+    }
+    return n ? b : null;
+  }
+  function sbJoin(a, b) {
+    if (!a) return b;
+    if (!b) return a;
+    return { l: Math.min(a.l, b.l), b: Math.min(a.b, b.b), r: Math.max(a.r, b.r), t: Math.max(a.t, b.t) };
+  }
+  function sbCut(a, c) {
+    var b = { l: Math.max(a.l, c.l), b: Math.max(a.b, c.b), r: Math.min(a.r, c.r), t: Math.min(a.t, c.t) };
+    return b.r > b.l && b.t > b.b ? b : null;
+  }
+  function sbBounds(p, a) {
+    var S = window.spine, sk = p.skeleton, seen = null, raw = null, v = [];
+    var n = a.duration > 0 ? 60 : 1;
+    sk.setToSetupPose();
+    for (var i = 0; i < n; i++) {
+      var t = n > 1 ? a.duration * i / (n - 1) : 0;
+      a.apply(sk, t, t, false, [], 1, S.MixBlend.setup, S.MixDirection.mixIn);
+      sk.updateWorldTransform();
+      var clip = null, end = null;
+      for (var j = 0; j < sk.drawOrder.length; j++) {
+        var s = sk.drawOrder[j], at = s.bone.active ? s.getAttachment() : null, k = 0;
+        if (at instanceof S.ClippingAttachment) {
+          k = at.worldVerticesLength;
+          at.computeWorldVertices(s, 0, k, v, 0, 2);
+          clip = sbAabb(v, k);
+          end = clip ? at.endSlot : null;
+          continue;
+        }
+        if (at instanceof S.RegionAttachment) { k = 8; at.computeWorldVertices(s, v, 0, 2); }
+        else if (at instanceof S.MeshAttachment) { k = at.worldVerticesLength; at.computeWorldVertices(s, 0, k, v, 0, 2); }
+        var b = k ? sbAabb(v, k) : null;
+        if (b) {
+          raw = sbJoin(raw, b);
+          var alpha = sk.color.a * s.color.a * (at.color ? at.color.a : 1);
+          if (clip) b = sbCut(b, clip);
+          if (b && alpha > 0.02) seen = sbJoin(seen, b);
+        }
+        if (clip && end === s.data) clip = null;
+      }
+    }
+    return seen || raw;
+  }
+  function sbFit(p) {
+    var vp = p.config.viewport, fit = { boxes: {}, all: null, w: 0, h: 0 };
+    p.skeleton.data.animations.forEach(function (a) {
+      var b;
+      try { b = sbBounds(p, a); } catch (e) { return; }
+      if (!b) return;
+      fit.boxes[a.name] = b;
+      fit.all = sbJoin(fit.all, b);
+      fit.w = Math.max(fit.w, b.r - b.l);
+      fit.h = Math.max(fit.h, b.t - b.b);
+    });
+    p.skeleton.setToSetupPose();
+    p.skeleton.updateWorldTransform();
+    if (!fit.all) return null;
+    fit.w = Math.max(fit.w, 32);
+    fit.h = Math.max(fit.h, 32);
+    vp.x = fit.all.l;
+    vp.y = fit.all.b;
+    vp.width = Math.max(fit.all.r - fit.all.l, 1);
+    vp.height = Math.max(fit.all.t - fit.all.b, 1);
+    return fit;
+  }
+  function sbAuto(p) {
+    var f = sb.player && sb.player.player === p ? sb.player.fit : null, cv = p.canvas;
+    if (!f || !cv || !cv.clientWidth || !cv.clientHeight) return null;
+    var e = p.animationState && p.animationState.getCurrent(0);
+    var b = (e && e.animation && f.boxes[e.animation.name]) || f.all;
+    return { x: (b.l + b.r) / 2, y: (b.b + b.t) / 2, s: Math.min(cv.clientWidth / (f.w * SB_PAD), cv.clientHeight / (f.h * SB_PAD)) };
+  }
+  function sbCam(p) {
+    var v = sb.cam || sbAuto(p), cv = p.canvas;
+    if (!v || !cv || !cv.clientWidth || !cv.clientHeight) return;
+    var w = cv.clientWidth / v.s, h = cv.clientHeight / v.s;
+    p.currentViewport = { x: v.x - w / 2, y: v.y - h / 2, width: w, height: h, padLeft: 0, padRight: 0, padTop: 0, padBottom: 0 };
+    var txt = Math.round(v.s * 100) + '%';
+    if (txt !== sb.zoomTxt) { sb.zoomTxt = txt; $('sb-zoom-v').textContent = txt; }
+  }
+  function sbView() {
+    var r = sb.player;
+    if (!r || !r.ready) return null;
+    return sb.cam || sbAuto(r.player);
+  }
+  function sbZoom(k, cx, cy) {
+    var v = sbView();
+    if (!v) return;
+    var cv = sb.player.player.canvas, s = Math.min(16, Math.max(0.05, v.s * k));
+    var dx = cx === undefined ? 0 : cx - cv.clientWidth / 2, dy = cy === undefined ? 0 : cy - cv.clientHeight / 2;
+    sb.cam = { x: v.x + dx / v.s - dx / s, y: v.y - dy / v.s + dy / s, s: s };
+  }
+  function sbActual() {
+    var v = sbView();
+    if (v) sb.cam = { x: v.x, y: v.y, s: 1 };
+  }
+  function sbCenter() { sb.cam = null; }
+  function sbSpeedTxt(n) { return String(Math.round(n * 100) / 100).replace('.', ',') + '×'; }
+  function sbSetSpeed(n) {
+    sb.speed = Math.min(2, Math.max(0.1, Math.round(n * 100) / 100));
+    if (sb.player && sb.player.player) sb.player.player.speed = sb.speed;
+    $('sb-speed').value = String(sb.speed);
+    $('sb-speed-v').textContent = sbSpeedTxt(sb.speed);
+  }
+  function sbPlay(name) {
+    var r = sb.player;
+    if (!r || !r.ready) return;
+    var p = r.player;
+    try {
+      if (!p.skeleton.data.findAnimation(name)) return;
+      p.skeleton.setToSetupPose();
+      var e = p.setAnimation(name, sb.loop);
+      r.anim = name;
+      p.speed = sb.speed;
+      if (sb.playing) p.play();
+      else { e.trackTime = 0; sbApply(p); p.pause(); }
+    } catch (e) { return; }
+    renderSbTransport();
+  }
+  function sbSeek(t) {
+    var r = sb.player;
+    if (!r || !r.ready) return;
+    var p = r.player, e = p.animationState.getCurrent(0);
+    if (!e) return;
+    p.pause();
+    sb.playing = false;
+    e.trackTime = Math.max(0, t);
+    p.skeleton.setToSetupPose();
+    sbApply(p);
+    sbTick(p);
+    renderSbTransport();
+  }
+  function sbToggle() {
+    var r = sb.player;
+    if (!r || !r.ready) return;
+    var p = r.player, e = p.animationState.getCurrent(0);
+    if (!p.paused) { p.pause(); sb.playing = false; }
+    else if (e && e.animation && !sb.loop && e.trackTime >= e.animation.duration - 0.0001) { sb.playing = true; sbPlay(sb.anim); return; }
+    else { sb.playing = true; p.play(); }
+    renderSbTransport();
+  }
+  function sbTick(p) {
+    if (!sb.player || sb.player.player !== p || !sb.player.ready) return;
+    var e = p.animationState.getCurrent(0);
+    if (!e || !e.animation) return;
+    var d = e.animation.duration || 0;
+    var t = d ? (sb.loop ? e.trackTime % d : Math.min(e.trackTime, d)) : 0;
+    if (!sb.loop && !p.paused && d && e.trackTime >= d) { p.pause(); sb.playing = false; t = d; renderSbTransport(); }
+    if (Math.abs(t - sb.t) < 0.0005 && sb.d === d) return;
+    sb.t = t;
+    sb.d = d;
+    if (!sb.scrub) $('sb-scrub').value = String(d ? Math.round(t / d * 1000) : 0);
+    $('sb-time').textContent = sbFmt(t) + ' / ' + sbFmt(d) + ' с';
+  }
+  function sbMount() {
+    var c = sbCur(), sp = sbSpine();
+    if (!c) { sbDispose(); return; }
+    if (sb.camFor !== c.id) { sb.cam = null; sb.camFor = c.id; }
+    if (!sp) { sbMsg('Не вдалося зібрати спайн.'); return; }
+    var anims = Object.keys(sp.json.animations);
+    if (!anims.length) { sbMsg('У компонента немає анімацій: додайте рядок в «Анімаціях».'); return; }
+    if (anims.indexOf(sb.anim) === -1) sb.anim = ['idle', 'loop_1', 'win', 'in'].filter(function (n) { return anims.indexOf(n) !== -1; })[0] || anims[0];
+    var skins = sp.json.skins.map(function (s) { return s.name; });
+    if (skins.indexOf(sb.skin) === -1) sb.skin = skins.indexOf('default') !== -1 ? 'default' : skins[0];
+    var key = sbKey(c, sp);
+    var rec = sb.player;
+    if (rec && rec.key === key) { if (rec.ready && rec.anim !== sb.anim) sbPlay(sb.anim); return; }
+    if (state.lib.spine !== 'ok') { sbMsg(state.lib.spine === 'fail' ? 'Рантайм Spine не завантажився з cdn.jsdelivr.net.' : 'Завантажую рантайм Spine…'); return; }
+    sbDispose();
+    var b = previewBundle(sp);
+    var raw = {};
+    raw[b.name + '.json'] = 'data:application/json;base64,' + b64(b.jsonText);
+    raw[b.name + '.atlas'] = 'data:text/plain;base64,' + b64(b.atlasText);
+    raw[b.pageName] = pageCanvas(b.page).toDataURL('image/png');
+    var div = el('div', { class: 'pc' });
+    $('sb-stage').appendChild(div);
+    var cfg = {
+      jsonUrl: b.name + '.json',
+      atlasUrl: b.name + '.atlas',
+      rawDataURIs: raw,
+      animation: sb.anim,
+      skin: sb.skin,
+      showControls: false,
+      showLoading: false,
+      alpha: true,
+      backgroundColor: '00000000',
+      premultipliedAlpha: false,
+      preserveDrawingBuffer: true,
+      defaultMix: 0,
+      viewport: { padLeft: '8%', padRight: '8%', padTop: '8%', padBottom: '8%', transitionTime: 0 },
+      debug: { bones: sb.bones, regions: false, meshes: false, bounds: false, paths: false, clipping: false, points: false, hulls: false },
+      frame: function (p) { sbCam(p); sbTick(p); },
+      success: function (p) {
+        var r = sb.player;
+        if (!r || r.player !== p) return;
+        r.fit = sbFit(p);
+        r.ready = true;
+        sbPlay(sb.anim);
+      },
+      error: function (p, msg) { if (sb.player && sb.player.player === p) sbMsg('Превʼю не запустилося: ' + msg); }
+    };
+    try { sb.player = { player: new window.spine.SpinePlayer(div, cfg), key: key, ready: false, anim: null }; }
+    catch (e) { sbMsg('Превʼю не запустилося: ' + e.message); }
+    renderSbTransport();
+  }
+  async function sbWait() {
+    for (var i = 0; i < 80; i++) {
+      if (sb.player && sb.player.ready) return true;
+      if (state.lib.spine === 'fail') return false;
+      await new Promise(function (r) { setTimeout(r, 100); });
+    }
+    return false;
+  }
+  function frame2() { return new Promise(function (r) { requestAnimationFrame(function () { requestAnimationFrame(function () { r(); }); }); }); }
+
+  function sbStart() {
+    var tpls = el('div', { class: 'sb-tpls' }, SB_TPL.map(function (k) {
+      var t = TEMPLATES[k];
+      return el('button', { type: 'button', class: 'sb-tpl', onclick: function () { sbFromTemplate(k); } }, [
+        el('span', { class: 'add-pic' }, [el('img', { alt: '', src: thumb(drawCustom({ name: t.name }, 160, k === 'character' ? 240 : 160)) })]),
+        el('span', { text: t.label }),
+        el('small', { text: t.name })
+      ]);
+    }));
+    var more = el('div', { class: 'row', style: 'justify-content: center;' }, [sbFromProjectBtn('З чернеток'), sbFileBtn()]);
+    return el('div', { class: 'sb-start' }, [
+      el('h3', { text: 'Пісочниця порожня' }),
+      el('p', { text: 'Ваш особистий верстак: його бачите лише ви і ваш Claude, він той самий у всіх проектах і не йде в чернетки чи експорт. Почніть із шаблону, відкрийте компонент з бібліотеки або попросіть Claude.' }),
+      tpls,
+      more,
+      el('p', {}, ['Наприклад: ', el('code', { text: '«Зроби в пісочниці колектор монет: in, idle, add, win»' })])
+    ]);
+  }
+  function sbFromProjectBtn(text) {
+    var list = state.s.components.filter(function (c) { return c.type === 'custom'; });
+    var b = menuBtn('', text, list.map(function (c) {
+      return { text: compTitle(c) + ' · ' + spineOf(c), icon: SB_BOX, run: async function () { try { await sbFromComp(c); } catch (e) { toast('Не вдалося: ' + e.message); } } };
+    }));
+    if (!list.length) { b.disabled = true; b.title = 'У чернетках немає своїх компонентів'; }
+    return b;
+  }
+  function sbFileBtn() {
+    var input = el('input', { type: 'file', class: 'file', accept: '.json,application/json' });
+    input.addEventListener('change', async function () {
+      var f = input.files && input.files[0];
+      input.value = '';
+      if (f) { try { await sbFromFile(f); } catch (e) { toast(e.message); } }
+    });
+    var b = labelBtn('З файлу', SB_FILE, { type: 'button', class: 'btn sm', title: 'Відкрити .component.json', onclick: function () { input.click(); } });
+    return el('span', {}, [input, b]);
+  }
+  function sbNewItems() {
+    var out = SB_TPL.map(function (k) { return { text: 'Новий: ' + TEMPLATES[k].label, icon: SB_PLUS, run: function () { sbFromTemplate(k); } }; });
+    state.s.components.filter(function (c) { return c.type === 'custom'; }).forEach(function (c) {
+      out.push({ text: 'Копія з чернеток: ' + compTitle(c), icon: SB_BOX, run: async function () { try { await sbFromComp(c); } catch (e) { toast('Не вдалося: ' + e.message); } } });
+    });
+    out.push({ text: 'З файлу .component.json', icon: SB_FILE, run: function () { var i = $('sb-file'); if (i) i.click(); } });
+    return out;
+  }
+
+  function renderSbItems() {
+    var box = $('sb-items');
+    if (!box || !state.s) return;
+    var cur = sbCur();
+    box.textContent = '';
+    sbList().forEach(function (c) {
+      box.appendChild(el('button', { type: 'button', class: 'sb-item', 'aria-pressed': String(!!cur && c.id === cur.id), title: spineOf(c) + (c.lib ? ' · у бібліотеці' : ''), onclick: function () { sbSel(c.id); } }, [
+        el('img', { alt: '', src: thumb(art('c:' + c.id)) }),
+        el('span', { text: c.label || spineOf(c) })
+      ]));
+    });
+    if (sbList().length) box.appendChild(menuBtn('', '+ Новий', sbNewItems()));
+  }
+  function renderSbAnims() {
+    var box = $('sb-anims');
+    box.textContent = '';
+    var sp = sbCur() ? sbSpine() : null;
+    if (!sp) return;
+    Object.keys(sp.json.animations).forEach(function (n) {
+      box.appendChild(el('button', { type: 'button', class: 'chip', 'aria-pressed': String(n === sb.anim), title: sbFmt(K.durationOf(sp.json.animations[n])) + ' с', text: n, onclick: function () { sb.anim = n; sb.playing = true; sbPlay(n); renderSbAnims(); } }));
+    });
+  }
+  function renderSbTransport() {
+    var r = sb.player, ready = !!(r && r.ready);
+    var playing = ready && !r.player.paused;
+    var b = $('sb-play');
+    b.innerHTML = playing ? SB_PAUSE : SB_PLAY;
+    b.setAttribute('aria-label', playing ? 'Пауза' : 'Грати');
+    b.disabled = !ready;
+    $('sb-scrub').disabled = !ready;
+    $('sb-time').textContent = sbFmt(sb.t) + ' / ' + sbFmt(sb.d) + ' с';
+    $('sb-speed').value = String(sb.speed);
+    $('sb-speed-v').textContent = sbSpeedTxt(sb.speed);
+    ['sb-zoom-out', 'sb-zoom-v', 'sb-zoom-in', 'sb-center'].forEach(function (id) { $(id).disabled = !ready; });
+    $('sb-loop').checked = sb.loop;
+    $('sb-bones').checked = sb.bones;
+    var sp = sbCur() ? sbSpine() : null, skins = sp ? sp.json.skins.map(function (s) { return s.name; }) : [];
+    var sel = $('sb-skin');
+    var now = Array.prototype.map.call(sel.options, function (o) { return o.value; });
+    if (now.join('|') !== skins.join('|')) { sel.textContent = ''; skins.forEach(function (n) { sel.appendChild(el('option', { value: n, text: n })); }); }
+    if (sb.skin && skins.indexOf(sb.skin) !== -1) sel.value = sb.skin;
+    sel.hidden = skins.length < 2;
+  }
+  function renderSbActs() {
+    var box = $('sb-acts');
+    box.textContent = '';
+    var c = sbCur();
+    if (!c) return;
+    var meta = c.lib ? (Lib.cached() || []).filter(function (m) { return m.id === c.lib; })[0] : null;
+    var mine = !!meta && Lib.canEdit(meta);
+    var busy = !!sb.libBusy;
+    box.appendChild(labelBtn(mine ? 'Оновити в бібліотеці' : 'Зберегти в бібліотеку', ICONS.upload, { type: 'button', class: 'btn primary sm', disabled: busy || null, onclick: async function () { try { await sbSave(c, {}); } catch (e) { return; } } }));
+    if (mine) box.appendChild(el('button', { type: 'button', class: 'btn ghost sm', text: 'Як новий', disabled: busy || null, onclick: async function () { try { await sbSave(c, { asNew: true }); } catch (e) { return; } } }));
+    var cur = state.projects.filter(function (p) { return p.id === state.pid; })[0];
+    var targets = [{ text: 'Цей проект: ' + ((cur && cur.name) || state.s.game || 'без назви'), icon: SB_BOX, run: async function () { try { await sbToProject(c, { show: true }); } catch (e) { toast('Не вдалося: ' + e.message); } } }];
+    state.projects.filter(function (p) { return p.id !== state.pid; }).forEach(function (p) {
+      targets.push({ text: p.name + ' · ' + p.reels + '×' + p.rows, icon: SB_BOX, run: async function () { try { await sbToProject(c, { pid: p.id, show: true }); } catch (e) { toast('Не вдалося: ' + e.message); } } });
+    });
+    box.appendChild(menuBtn('', 'Додати в проект', targets));
+    box.appendChild(menuBtn('ghost', 'Експорт', [
+      { text: 'Spine (.zip): json, atlas, png', icon: ICONS.download, run: function () { sbSpineExport(c); } },
+      { text: 'Компонент (.component.json)', icon: ICONS.download, run: function () { sbExport(c); } }
+    ]));
+    box.appendChild(el('span', { class: 'sb-gap' }));
+    if (sb.libBusy) box.appendChild(el('span', { class: 'note', text: sb.libBusy }));
+    else if (meta) box.appendChild(el('span', { class: 'note', text: mine ? 'Є в бібліотеці' : 'З бібліотеки · ' + ((meta.by && (meta.by.name || meta.by.email)) || '') }));
+    if (sb.confirm === c.id) box.appendChild(el('button', { type: 'button', class: 'btn sm sb-del', text: 'Точно прибрати?', onclick: function () { sbRemoveClick(c); } }));
+    else box.appendChild(iconBtn('ghost sb-rm', 'Прибрати з пісочниці', ICONS.trash, function () { sbRemoveClick(c); }));
+  }
+  function renderSbStage() {
+    var stage = $('sb-stage');
+    if (!stage || !state.s) return;
+    var c = sbCur();
+    sbBuild();
+    $('sb-play-row').hidden = !c;
+    $('sb-opts').hidden = !c;
+    $('sb-zoom').hidden = !c;
+    if (!c) { sbDispose(); stage.appendChild(sb.ready ? sbStart() : el('div', { class: 'stage-msg', text: sb.loadErr ? 'Пісочниця недоступна: ' + sb.loadErr : 'Завантажую пісочницю…' })); }
+    else {
+      var start = stage.querySelector('.sb-start');
+      if (start) start.remove();
+      sbMount();
+    }
+    renderSbAnims();
+    renderSbTransport();
+    renderSbActs();
+  }
+  function sbBody(c) {
+    var key = 'c:' + c.id;
+    return el('div', { class: 'comp-body' }, [
+      el('div', { class: 'row' }, [
+        textField('Назва', c.label, null, function (v) { c.label = v.trim() || TEMPLATES.custom.label; changed(); renderSbItems(); }),
+        textField('Назва спайна', c.name, 'w-name', function (v) { c.name = v; changed(); })
+      ]),
+      el('div', { class: 'row' }, [
+        listField('Скіни', c.skins, function (v) { c.skins = v; changed(); }, null, 'skins'),
+        listField('Спейсери', c.spacers, function (v) { c.spacers = v; changed(); }, 'txt_amount', 'spacers')
+      ]),
+      imageRow(key, null, function (natural) { fitSize(c, natural); }),
+      el('div', { class: 'row' }, [
+        numPair('Розмір у грі, px', c.w, c.h, function (v) { c.w = Number(v); changed(); }, function (v) { c.h = Number(v); changed(); }, ['Ширина', 'Висота'], 'custom'),
+        pivotField(c, 'Опорна точка компонента', true),
+        textField('Прогрес-бар', c.bar, null, function (v) { c.bar = v.trim(); changed(); }, 'x:y:ширина:висота', 'bar')
+      ]),
+      el('div', { class: 'sub' }, ['Частини', infoBtn('parts')]),
+      partTiles(c),
+      partEditor(c),
+      el('div', { class: 'sub', text: 'Анімації' }),
+      animTable(c.anims, c)
+    ]);
+  }
+  function renderSbEdit() {
+    var box = $('sb-edit');
+    if (!box || !state.s) return;
+    var c = sbCur();
+    var ae = document.activeElement;
+    var inside = ae && box.contains(ae);
+    var active = inside && ae.getAttribute('aria-label');
+    var caret = inside && typeof ae.selectionStart === 'number' ? [ae.selectionStart, ae.selectionEnd] : null;
+    box.textContent = '';
+    if (!c) { box.appendChild(el('p', { class: 'note', text: 'Тут будуть налаштування компонента: картинка, частини, анімації з ключами.' })); return; }
+    box.appendChild(sbBody(c));
+    if (active) {
+      var again = box.querySelector('[aria-label="' + active.replace(/"/g, '\\"') + '"]');
+      if (again) again.focus({ preventScroll: true });
+      if (again && caret && typeof again.setSelectionRange === 'function') { try { again.setSelectionRange(caret[0], caret[1]); } catch (e) { caret = null; } }
+    }
+  }
+
+  function libWho(m) { return m && m.by ? m.by.name || m.by.email || '' : ''; }
+  function libDay(t) {
+    if (!t) return '';
+    var d = new Date(t), p = function (v) { return String(v).padStart(2, '0'); };
+    return p(d.getDate()) + '.' + p(d.getMonth() + 1) + '.' + String(d.getFullYear()).slice(2);
+  }
+  function libHit(m, q) {
+    var words = String(q || '').toLowerCase().split(/\s+/).filter(Boolean);
+    if (!words.length) return true;
+    var hay = [m.label, m.name, m.note, (m.tags || []).join(' '), libWho(m), m.by && m.by.email].join(' ').toLowerCase();
+    return words.every(function (w) { return hay.indexOf(w) !== -1; });
+  }
+  async function sbLibLoad() {
+    if (sb.libLoading) return;
+    sb.libLoading = true;
+    try { await Lib.list(); sb.libErr = ''; } catch (e) { sb.libErr = e.message; }
+    sb.libLoading = false;
+    renderSbLib();
+    renderSbActs();
+  }
+  function libTile(m) {
+    var c = sbCur();
+    var url = Lib.thumbUrl(m);
+    var label = m.label || m.name;
+    var items = [
+      { text: 'Відкрити в пісочниці', icon: SB_PLUS, run: function () { sbOpenLib(m.id); } },
+      { text: 'Додати в «Чернетки»', icon: SB_BOX, run: async function () { try { var nc = await libToProject(m.id, {}); toast('Додано в «Чернетки»: ' + spineOf(nc)); } catch (e) { toast('Не вдалося: ' + e.message); } } },
+      { text: 'Експорт .component.json', icon: ICONS.download, run: function () { libExport(m); } }
+    ];
+    if (Lib.canEdit(m)) items.push({ text: 'Видалити з бібліотеки', icon: ICONS.trash, cls: 'm-del', run: function () { sb.libDel = m.id; renderSbLib(); } });
+    var more = iconBtn('ghost lib-more', 'Дії: ' + label, SB_MORE, function (e) { if (mn.btn === more) menuClose(false); else menuOpen(more, items, e.detail === 0); });
+    more.setAttribute('aria-haspopup', 'menu');
+    var meta = [m.anims.length + ' анім.', m.parts.length ? m.parts.length + ' част.' : '', libWho(m), libDay(m.updated)].filter(Boolean).join(' · ');
+    var foot = sb.libDel === m.id
+      ? el('div', { class: 'p-confirm' }, [
+        el('span', { class: 'p-confirm-q', text: 'Видалити «' + label + '» для всіх?' }),
+        el('button', { type: 'button', class: 'btn sm p-yes', text: 'Так', onclick: async function () { sb.libDel = null; try { await Lib.remove(m.id); toast('Видалено з бібліотеки'); } catch (e) { toast('Не вдалося: ' + e.message); renderSbLib(); } } }),
+        el('button', { type: 'button', class: 'btn ghost sm', text: 'Ні', onclick: function () { sb.libDel = null; renderSbLib(); } })
+      ])
+      : null;
+    return el('article', { class: 'lib-tile' + (c && c.lib === m.id ? ' on' : ''), title: m.note || '' }, [
+      el('button', { type: 'button', class: 'lib-open', 'aria-label': 'Відкрити в пісочниці: ' + label, onclick: function () { sbOpenLib(m.id); } }, [
+        el('span', { class: 'lib-pic' }, [url ? el('img', { alt: '', src: url, loading: 'lazy' }) : el('span', { text: label.slice(0, 2).toUpperCase() })]),
+        el('b', { text: label }),
+        el('code', { text: m.name }),
+        el('small', { text: meta })
+      ]),
+      more,
+      foot
+    ]);
+  }
+  function renderSbLib() {
+    var box = $('sb-lib');
+    if (!box) return;
+    var items = Lib.cached();
+    if (items === null && !sb.libLoading && !sb.libErr) sbLibLoad();
+    var q = $('sb-lib-q');
+    if (!q) {
+      q = el('input', { type: 'text', id: 'sb-lib-q', placeholder: 'Пошук: назва, тип, автор', spellcheck: 'false', autocomplete: 'off', 'aria-label': 'Пошук у бібліотеці', oninput: function (e) { sb.q = e.target.value; renderSbLib(); } });
+      box.appendChild(q);
+      box.appendChild(el('p', { class: 'note', id: 'sb-lib-note' }));
+      box.appendChild(el('div', { class: 'lib-grid', id: 'sb-lib-grid' }));
+    }
+    var list = (items || []).filter(function (m) { return libHit(m, sb.q); });
+    $('sb-lib-n').textContent = items ? String(items.length) : '';
+    var note = $('sb-lib-note');
+    note.textContent = sb.libErr ? 'Бібліотека недоступна: ' + sb.libErr
+      : items === null ? 'Завантажую…'
+        : !items.length ? 'Поки порожньо. «Зберегти в бібліотеку» під превʼю додасть сюди компонент' + (Lib.mode() === 'server' ? ' для всієї команди.' : ' (у цьому браузері).')
+          : !list.length ? 'Нічого не знайдено.'
+            : Lib.mode() === 'server' ? 'Спільна для всієї команди. Клік відкриває копію в пісочниці.' : 'Зберігається в цьому браузері. Клік відкриває копію в пісочниці.';
+    var grid = $('sb-lib-grid');
+    grid.textContent = '';
+    list.forEach(function (m) { grid.appendChild(libTile(m)); });
+  }
+  function renderSandbox() {
+    if (!state.s || $('view-sandbox').hidden) return;
+    renderSbItems();
+    renderSbStage();
+    renderSbEdit();
+    renderSbLib();
+  }
+  function sbSel(id, anim) {
+    if (id && id !== sb.cur) { sb.cur = id; sb.anim = null; sb.skin = null; sb.confirm = null; }
+    if (anim) sb.anim = anim;
+    sb.playing = true;
+    renderSandbox();
+  }
+  function sbShow(id, anim) {
+    if (id && id !== sb.cur) { sb.cur = id; sb.skin = null; sb.anim = null; sb.confirm = null; }
+    if (anim) sb.anim = anim;
+    sb.playing = true;
+    if (state.view !== 'sandbox') showView('sandbox');
+    else renderSandbox();
+  }
+
+  function sbCarry(c) {
+    var d = clone(c);
+    ['id', 'on', 'lib', 'libV'].forEach(function (k) { delete d[k]; });
+    var keys = compImageKeys(c), images = {};
+    Object.keys(keys).forEach(function (role) {
+      var k = keys[role];
+      var st = imgs(k);
+      if (st.blobs[k]) images[role] = { name: (st.images[k] && st.images[k].fileName) || '', blob: st.blobs[k] };
+    });
+    return { kit: COMP_KIT, component: d, images: images };
+  }
+  function sbFromTemplate(k) {
+    var t = TEMPLATES[k] || TEMPLATES.custom;
+    var taken = sbList().map(spineOf), name = t.name, n = 2;
+    while (taken.indexOf(name) !== -1) name = t.name + '_' + n++;
+    var c = fromTemplate(t, name);
+    c.id = sbNewId();
+    delete c.on;
+    sbItems().push(c);
+    sb.cur = c.id;
+    sb.anim = null;
+    sb.skin = null;
+    sb.playing = true;
+    changed({ render: true, now: true });
+    return c;
+  }
+  async function sbFromComp(src) {
+    var c = await importComponent(sbCarry(src), { sandbox: true });
+    toast('У пісочниці копія: ' + compTitle(c));
+    return c;
+  }
+  async function sbFromFile(f) {
+    var data;
+    try { data = JSON.parse(await f.text()); } catch (e) { throw new Error('Це не JSON: ' + f.name); }
+    var c = await importComponent(data, { sandbox: true });
+    toast('Відкрито в пісочниці: ' + compTitle(c));
+    return c;
+  }
+  async function sbFromLib(id) {
+    var got = await Lib.get(id);
+    if (!got) throw new Error('Немає компонента ' + id + ' у бібліотеці');
+    var c = await importComponent({ kit: COMP_KIT, component: got.component, images: got.images }, { sandbox: true });
+    c.lib = got.meta.id;
+    c.libV = got.meta.updated;
+    changed({ render: true, now: true });
+    return c;
+  }
+  async function sbOpenLib(id) {
+    var have = sbList().filter(function (c) { return c.lib === id; });
+    var m = (Lib.cached() || []).filter(function (x) { return x.id === id; })[0];
+    var same = have.filter(function (c) { return m && c.libV === m.updated; })[0];
+    if (same) { sbSel(same.id); return; }
+    try { var c = await sbFromLib(id); toast('Відкрито в пісочниці: ' + compTitle(c)); } catch (e) { toast('Не вдалося відкрити: ' + e.message); }
+  }
+  async function libToProject(id, opts) {
+    var got = await Lib.get(id);
+    if (!got) throw new Error('Немає компонента ' + id + ' у бібліотеці');
+    return importComponent({ kit: COMP_KIT, component: got.component, images: got.images }, { name: opts && opts.name });
+  }
+  async function libExport(m) {
+    try {
+      var got = await Lib.get(m.id);
+      if (!got) throw new Error('немає в бібліотеці');
+      var images = {}, roles = Object.keys(got.images);
+      for (var i = 0; i < roles.length; i++) images[roles[i]] = { name: got.images[roles[i]].name || '', data: await readAsDataUrl(got.images[roles[i]].blob) };
+      var text = JSON.stringify({ kit: COMP_KIT, component: got.component, images: images }, null, 1);
+      await saveFile((m.name || 'component') + '.component.json', new Blob([text], { type: 'application/json' }));
+    } catch (e) { toast('Не вдалося зберегти: ' + e.message); }
+  }
+  async function sbSpineExport(c) {
+    if (!window.JSZip) { toast(state.lib.zip === 'fail' ? 'JSZip не завантажився з cdnjs.cloudflare.com' : 'Ще завантажую JSZip, спробуйте за мить'); return; }
+    var plan;
+    try { plan = K.planAll(Object.assign({}, state.s, { components: [c] }), px); } catch (e) { toast('Не вдалося зібрати: ' + e.message); return; }
+    var sp = plan.spines[0];
+    if (!sp) { toast('Немає що експортувати'); return; }
+    try {
+      var zip = new window.JSZip();
+      var root = sp.name + '-spine/';
+      var folder = String(plan.tech.folder || '').replace(/^\/+/, '').replace(/\/?$/, '/');
+      if (folder === '/') folder = '';
+      zip.file(root + folder + sp.name + '.json', sp.jsonText);
+      zip.file(root + folder + sp.name + '.atlas', sp.atlasText);
+      zip.file(root + folder + sp.pageName, await canvasBlob(pageCanvas(sp.page)));
+      var ed = root + 'spine-editor/' + sp.name + '/';
+      zip.file(ed + sp.name + '.json', sp.importJsonText);
+      for (var j = 0; j < sp.regions.length; j++) {
+        var r = sp.regions[j];
+        zip.file(ed + 'images/' + r.name + '.png', await canvasBlob(regionCanvas(r.src, r.w, r.h)));
+      }
+      if (sp.warnings && sp.warnings.length) zip.file(root + 'WARNINGS.txt', sp.warnings.join('\n'));
+      await saveFile(sp.name + '-spine.zip', await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' }));
+    } catch (e) { toast('Архів не зібрався: ' + ((e && e.message) || e)); }
+  }
+  async function sbExport(c) {
+    try {
+      var r = await exportComponent(c);
+      await saveFile(r.name, new Blob([r.text], { type: 'application/json' }));
+    } catch (e) { toast('Не вдалося зберегти: ' + ((e && e.message) || e)); }
+  }
+  async function sbThumb(c) {
+    var sp = sbPlanOf(c);
+    var pose = sp && setupPose(sp);
+    if (!pose || !pose.box) return null;
+    var bw = Math.max(1, pose.box.r - pose.box.l), bh = Math.max(1, pose.box.b - pose.box.t);
+    var S = 256, k = Math.min(S * 0.88 / bw, S * 0.88 / bh);
+    var cv = el('canvas', { width: S, height: S });
+    var x = cv.getContext('2d');
+    x.setTransform(k, 0, 0, k, S / 2 - (pose.box.l + bw / 2) * k, S / 2 - (pose.box.t + bh / 2) * k);
+    drawSetup(x, pose);
+    return canvasBlob(cv);
+  }
+  async function sbSave(c, opts) {
+    opts = opts || {};
+    if (sb.libBusy) throw new Error('Бібліотека ще зберігає попереднє');
+    sb.libBusy = 'Зберігаю…';
+    renderSbActs();
+    try {
+      var meta = null;
+      if (c.lib && !opts.asNew) {
+        meta = (Lib.cached() || []).filter(function (m) { return m.id === c.lib; })[0] || null;
+        if (!meta) { try { var got = await Lib.get(c.lib); meta = got && got.meta; } catch (e) { meta = null; } }
+      }
+      var id = meta && Lib.canEdit(meta) ? meta.id : null;
+      var data = sbCarry(c);
+      var out = await Lib.save({
+        id: id,
+        label: String(opts.label || c.label || compTitle(c)).trim(),
+        name: spineOf(c),
+        note: opts.note !== undefined ? opts.note : meta ? meta.note : '',
+        tags: Array.isArray(opts.tags) ? opts.tags : meta ? meta.tags : [],
+        component: data.component,
+        images: data.images,
+        thumb: await sbThumb(c)
+      });
+      if (opts.label) c.label = String(opts.label).trim();
+      c.lib = out.id;
+      c.libV = out.updated;
+      changed();
+      toast(id ? 'Оновлено в бібліотеці' : 'Збережено в бібліотеку');
+      return { item: out, updated: !!id };
+    } catch (e) {
+      toast('Бібліотека: ' + e.message);
+      throw e;
+    } finally {
+      sb.libBusy = '';
+      if (sbShown()) { renderSbActs(); renderSbLib(); }
+    }
+  }
+  async function sbToProject(c, opts) {
+    opts = opts || {};
+    var data = sbCarry(c);
+    if (opts.pid && opts.pid !== state.pid && !await openProject(opts.pid)) throw new Error('Проект не відкрито');
+    var nc = await importComponent(data, { name: opts.name });
+    if (opts.show) { showView('drafts'); toast('Додано в «Чернетки»: ' + spineOf(nc)); }
+    return nc;
+  }
+  function sbRemove(c) {
+    sb.items = sb.items.filter(function (x) { return x !== c; });
+    forgetComponentImages(c);
+    if (sb.cur === c.id) { sb.cur = null; sb.anim = null; sb.skin = null; }
+    sb.confirm = null;
+    changed({ render: true, images: true, now: true });
+  }
+  function sbRemoveClick(c) {
+    clearTimeout(sb.conTimer);
+    if (sb.confirm === c.id) { sbRemove(c); return; }
+    sb.confirm = c.id;
+    renderSbActs();
+    sb.conTimer = setTimeout(function () { if (sb.confirm === c.id) { sb.confirm = null; if (sbShown()) renderSbActs(); } }, 3500);
+  }
+
+  function sbTimes(at, d) {
+    var list = Array.isArray(at) ? at : at !== undefined && at !== null && at !== '' ? [at] : null;
+    var out = list ? list.map(Number).filter(function (t) { return isFinite(t) && t >= 0; }).slice(0, 12) : d > 0 ? [0, 0.25, 0.5, 0.75, 1].map(function (f) { return K.roundTo(f * d, 3); }) : [0];
+    out = out.map(function (t) { return Math.min(t, d); }).filter(function (t, i, a) { return a.indexOf(t) === i; });
+    return out.length ? out : [0];
+  }
+  function sbCell(x, bg, l, t, w, h) {
+    if (bg === 'checker') {
+      x.fillStyle = '#d8d8dc';
+      x.fillRect(l, t, w, h);
+      x.fillStyle = '#c4c4ca';
+      for (var i = 0; i * 10 < w; i++) for (var j = 0; j * 10 < h; j++) if ((i + j) % 2) x.fillRect(l + i * 10, t + j * 10, Math.min(10, w - i * 10), Math.min(10, h - j * 10));
+      return;
+    }
+    x.fillStyle = bg === 'light' ? '#f6f6f8' : '#1b1b1e';
+    x.fillRect(l, t, w, h);
+  }
+  async function sbFilm(o) {
+    o = o || {};
+    var c = o.id ? sbItem(o.id) : sbCur();
+    if (!c) throw new Error(o.id ? 'У пісочниці немає «' + o.id + '». Є: ' + (sbList().map(function (x) { return x.id + ' (' + spineOf(x) + ')'; }).join(', ') || 'нічого') : 'Пісочниця порожня: sandbox_new');
+    if (c.id !== sb.cur) { sb.cur = c.id; sb.anim = null; sb.skin = null; }
+    var sp0 = sbPlanOf(c);
+    if (!sp0) throw new Error('Спайн не зібрався');
+    var all = Object.keys(sp0.json.animations);
+    var names = Array.isArray(o.animations) && o.animations.length ? o.animations.filter(function (n, i, l) { return l.indexOf(n) === i; }) : !o.animation || o.animation === 'all' ? all : [o.animation];
+    names.forEach(function (n) { if (all.indexOf(n) === -1) throw new Error('У ' + spineOf(c) + ' немає анімації ' + n + '. Є: ' + all.join(', ')); });
+    var skins = sp0.json.skins.map(function (s) { return s.name; });
+    if (o.skin && skins.indexOf(o.skin) === -1) throw new Error('Немає скіна ' + o.skin + '. Є: ' + skins.join(', '));
+    if (o.skin) sb.skin = o.skin;
+    if (names.length === 1) sb.anim = names[0];
+    sb.playing = true;
+    if (state.view !== 'sandbox') showView('sandbox');
+    else renderSandbox();
+    var sp = sbSpine() || sp0;
+    var info = { item: c.id, spine: spineOf(c), skin: sb.skin, animations: all.map(function (n) { return { name: n, duration: K.roundTo(K.durationOf(sp.json.animations[n]), 3) }; }), warnings: sp.warnings };
+    if (!await sbWait()) return Object.assign(info, { note: 'Рантайм Spine не готовий, кадрів немає', images: [] });
+    var p = sb.player.player, cv = p.canvas;
+    if (!cv || !cv.width || !cv.height) return Object.assign(info, { note: 'Сцена не має розміру', images: [] });
+    var bg = ['dark', 'light', 'checker'].indexOf(o.bg) !== -1 ? o.bg : 'dark';
+    var rows = names.map(function (n) { var d = K.roundTo(p.skeleton.data.findAnimation(n).duration || 0, 4); return { name: n, d: d, times: sbTimes(o.at, d) }; });
+    var cols = Math.max.apply(null, rows.map(function (r) { return r.times.length; }));
+    var gap = 8, pad = 12, head = 24, cap = 20, maxW = 1400;
+    var fw = Math.min(rows.length > 1 ? 220 : 280, Math.floor((maxW - 2 * pad - (cols - 1) * gap) / cols));
+    var f = sb.player.fit, v = f ? { width: f.w * SB_PAD, height: f.h * SB_PAD } : null, crop = { x: 0, y: 0, w: cv.width, h: cv.height };
+    if (v && v.width > 0 && v.height > 0) {
+      var z = Math.max(v.width / cv.width, v.height / cv.height);
+      crop = { x: (cv.width - v.width / z) / 2, y: (cv.height - v.height / z) / 2, w: v.width / z, h: v.height / z };
+    }
+    var ar = crop.w / crop.h;
+    var cw = ar >= 1 ? fw : Math.max(60, Math.round(fw * ar)), ch = ar >= 1 ? Math.max(40, Math.round(fw / ar)) : fw;
+    var rowH = head + ch + cap + gap;
+    var per = Math.max(1, Math.floor((2400 - 2 * pad) / rowH));
+    var ink = bg === 'light' || bg === 'checker' ? '#151517' : '#f4f4f6', soft = bg === 'light' || bg === 'checker' ? 'rgba(21,21,23,0.6)' : 'rgba(244,244,246,0.6)';
+    var sheets = [];
+    var keepLoop = sb.loop, keepCam = sb.cam;
+    sb.loop = false;
+    sb.cam = null;
+    try {
+      for (var s0 = 0; s0 < rows.length; s0 += per) {
+        var part = rows.slice(s0, s0 + per);
+        var W = 2 * pad + cols * cw + (cols - 1) * gap, H = 2 * pad + part.length * rowH - gap;
+        var sheet = el('canvas', { width: W, height: H });
+        var x = sheet.getContext('2d');
+        x.fillStyle = bg === 'dark' ? '#111113' : '#ffffff';
+        x.fillRect(0, 0, W, H);
+        for (var r = 0; r < part.length; r++) {
+          var row = part[r], top = pad + r * rowH;
+          x.fillStyle = ink;
+          x.font = '600 14px ' + FONT;
+          x.textBaseline = 'middle';
+          x.textAlign = 'left';
+          x.fillText(row.name + '  ·  ' + sbFmt(row.d) + ' с', pad, top + head / 2);
+          p.skeleton.setToSetupPose();
+          var e = p.setAnimation(row.name, false);
+          p.pause();
+          for (var k = 0; k < row.times.length; k++) {
+            e.trackTime = row.times[k];
+            p.skeleton.setToSetupPose();
+            sbApply(p);
+            await frame2();
+            var l = pad + k * (cw + gap), t = top + head;
+            sbCell(x, bg, l, t, cw, ch);
+            x.drawImage(cv, crop.x, crop.y, crop.w, crop.h, l, t, cw, ch);
+            x.fillStyle = soft;
+            x.font = '500 12px ' + FONT;
+            x.textAlign = 'center';
+            x.fillText(sbFmt(row.times[k]) + ' с', l + cw / 2, t + ch + cap / 2 + 1);
+          }
+        }
+        sheets.push({ data: sheet.toDataURL('image/png').split(',')[1], mime: 'image/png' });
+      }
+    } finally {
+      sb.loop = keepLoop;
+      sb.cam = keepCam;
+      sb.playing = true;
+      sb.anim = names[0];
+      if (sb.player && sb.player.ready) sbPlay(sb.anim);
+      if (sbShown()) renderSbAnims();
+    }
+    return Object.assign(info, { shown: rows.map(function (r) { return { name: r.name, at: r.times }; }), images: sheets });
+  }
+  function sbInfo(c, full) {
+    var o = { id: c.id, label: c.label, spine: spineOf(c), size: (Number(c.w) || 0) + 'x' + (Number(c.h) || 0), parts: (c.parts || []).map(function (p) { return p.name; }), anims: (c.anims || []).map(function (a) { return a.name + (a.keys ? ' (ключі)' : ''); }), library: c.lib || null };
+    if (!full) return o;
+    var sp = sbPlanOf(c);
+    var keys = compImageKeys(c), images = {};
+    Object.keys(keys).forEach(function (r) { var im = imgs(keys[r]).images[keys[r]]; images[r] = im ? im.fileName || true : false; });
+    o.settings = clone(c);
+    o.images = images;
+    if (sp) o.spine_info = { skins: sp.json.skins.map(function (s) { return s.name; }), animations: Object.keys(sp.json.animations).map(function (n) { return { name: n, duration: K.roundTo(K.durationOf(sp.json.animations[n]), 3) }; }), slots: sp.json.slots.map(function (s) { return s.name; }), warnings: sp.warnings };
+    return o;
+  }
+
+  function bindSandbox() {
+    sbPrefs();
+    $('sb-play').addEventListener('click', sbToggle);
+    var sc = $('sb-scrub');
+    sc.addEventListener('input', function () { sb.scrub = true; sbSeek(sb.d * Number(sc.value) / 1000); });
+    sc.addEventListener('change', function () { sb.scrub = false; });
+    $('sb-speed').addEventListener('input', function (e) { sbSetSpeed(Number(e.target.value) || 1); });
+    $('sb-speed').addEventListener('change', sbKeep);
+    $('sb-speed-v').addEventListener('click', function () { sbSetSpeed(1); sbKeep(); });
+    $('sb-zoom-in').addEventListener('click', function () { sbZoom(1.25); });
+    $('sb-zoom-out').addEventListener('click', function () { sbZoom(0.8); });
+    $('sb-zoom-v').addEventListener('click', sbActual);
+    $('sb-center').addEventListener('click', sbCenter);
+    var stage = $('sb-stage'), drag = null;
+    stage.addEventListener('wheel', function (e) {
+      if (e.target.tagName !== 'CANVAS' || !sbView()) return;
+      e.preventDefault();
+      var dy = e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 400 : 1);
+      var r = e.target.getBoundingClientRect();
+      sbZoom(Math.exp(-dy * (e.ctrlKey ? 0.01 : 0.0015)), e.clientX - r.left, e.clientY - r.top);
+    }, { passive: false });
+    stage.addEventListener('pointerdown', function (e) {
+      if (e.button !== 0 || e.target.tagName !== 'CANVAS') return;
+      var v = sbView();
+      if (!v) return;
+      drag = { id: e.pointerId, x: e.clientX, y: e.clientY, v: v };
+      stage.setPointerCapture(e.pointerId);
+      stage.classList.add('drag');
+    });
+    stage.addEventListener('pointermove', function (e) {
+      if (!drag || e.pointerId !== drag.id) return;
+      sb.cam = { x: drag.v.x - (e.clientX - drag.x) / drag.v.s, y: drag.v.y + (e.clientY - drag.y) / drag.v.s, s: drag.v.s };
+    });
+    var undrag = function (e) { if (drag && e.pointerId === drag.id) { drag = null; stage.classList.remove('drag'); } };
+    stage.addEventListener('pointerup', undrag);
+    stage.addEventListener('pointercancel', undrag);
+    stage.addEventListener('dblclick', function (e) { if (e.target.tagName === 'CANVAS') sbCenter(); });
+    $('sb-loop').addEventListener('change', function (e) { sb.loop = e.target.checked; sbKeep(); sb.playing = true; sbPlay(sb.anim); });
+    $('sb-bones').addEventListener('change', function (e) { sb.bones = e.target.checked; if (sb.player && sb.player.player) sb.player.player.config.debug.bones = sb.bones; });
+    $('sb-skin').addEventListener('change', function (e) { sb.skin = e.target.value; renderSbStage(); });
+    dropdown($('sb-skin'), true);
+    var file = el('input', { type: 'file', class: 'file', id: 'sb-file', accept: '.json,application/json' });
+    file.addEventListener('change', async function () {
+      var f = file.files && file.files[0];
+      file.value = '';
+      if (f) { try { await sbFromFile(f); } catch (e) { toast(e.message); } }
+    });
+    $('view-sandbox').appendChild(file);
+    dropTarget($('sb-stage'), async function (fs) {
+      var f = fs.filter(function (x) { return /\.json$/i.test(x.name); })[0];
+      if (f) { try { await sbFromFile(f); } catch (e) { toast(e.message); } return; }
+      var c = sbCur();
+      var pics = fs.filter(function (x) { return /^image\//.test(x.type); });
+      if (!c || !pics.length) return;
+      if (pics.length === 1 && !sb.store.images['c:' + c.id]) addImageFile('c:' + c.id, pics[0], function (natural) { fitSize(c, natural); });
+      else addPartFiles(c, pics);
+    });
+    $('sb-stage').addEventListener('keydown', function (e) {
+      if (e.target !== $('sb-stage')) return;
+      if (e.key === ' ') { e.preventDefault(); sbToggle(); }
+      else if (e.key === '+' || e.key === '=') { e.preventDefault(); sbZoom(1.25); }
+      else if (e.key === '-') { e.preventDefault(); sbZoom(0.8); }
+      else if (e.key === '0') { e.preventDefault(); sbCenter(); }
+    });
+    $('sb-stage').tabIndex = 0;
+    Lib.onChange(function () { if (sbShown()) { renderSbLib(); renderSbActs(); } });
+    SbStore.onRemote(sbRemote);
+    window.addEventListener('pagehide', function () { if (sb.ready) sbFlush(); });
+  }
+
   function showView(v) {
     state.view = v;
-    ['drafts', 'check', 'layouts'].forEach(function (n) {
+    ['drafts', 'check', 'layouts', 'sandbox'].forEach(function (n) {
       $('view-' + n).hidden = n !== v || !state.pid;
       var tab = $('tab-' + n);
       if (tab) tab.setAttribute('aria-selected', String(n === v));
@@ -3475,6 +4593,8 @@
     if (v !== 'drafts') disposePlayer();
     else if (state.plan) { state.player = null; renderComponents(); renderPreview(); }
     if (v === 'layouts') renderLayouts();
+    if (v === 'sandbox') { $('tab-sandbox').classList.remove('dot'); renderSandbox(); }
+    else sbDispose();
   }
 
   function renderCheckAs() {
@@ -3544,6 +4664,7 @@
     var rec = await Store.get(id);
     if (!rec) return false;
     disposePlayer();
+    sbReset();
     clearTimeout(saveTimer);
     clearTimeout(hist.timer);
     state.pid = id;
@@ -3557,8 +4678,13 @@
     state.confirmDel = null;
     lay.sel = null;
     lay.reset = false;
+    var moved = sbLegacy(rec.settings);
     var keys = Object.keys(rec.images || {});
-    for (var i = 0; i < keys.length; i++) { try { await setImage(keys[i], rec.images[keys[i]], rec.images[keys[i]].name); } catch (e) { /* skip a broken image */ } }
+    for (var i = 0; i < keys.length; i++) {
+      if (isSbKey(keys[i]) && !moved[keys[i].split(':')[1]]) continue;
+      try { await setImage(keys[i], rec.images[keys[i]], rec.images[keys[i]].name); } catch (e) { /* skip a broken image */ }
+    }
+    if (Object.keys(moved).length) { sbSchedule(); toast('Пісочниця тепер особиста: компоненти з неї перенесено до вашої'); }
     rememberLast(id);
     showEmpty(false);
     renderGame();
@@ -3576,6 +4702,7 @@
     $('view-empty').hidden = !on;
     $('view-drafts').hidden = on || v !== 'drafts';
     $('view-layouts').hidden = on || v !== 'layouts';
+    $('view-sandbox').hidden = on || v !== 'sandbox';
     document.querySelector('.bar-end').hidden = on;
     var tabs = document.querySelector('.bar .tabs');
     if (tabs) tabs.hidden = on;
@@ -3589,6 +4716,7 @@
     setDirty(false);
     stopSpin();
     disposePlayer();
+    sbReset();
     state.pid = null;
     state.s = null;
     state.plan = null;
@@ -3742,9 +4870,21 @@
     });
   }
 
+  async function panel(p, open) {
+    p.classList.toggle('open', open);
+    if (p.tagName !== 'DIALOG') return;
+    if (open) { if (!p.open) p.showModal(); return; }
+    try { await Promise.all(p.getAnimations().map(function (a) { return a.finished; })); } catch (e) { return; }
+    if (!p.classList.contains('open') && p.open) p.close();
+  }
+  function bindPanel(p) {
+    p.addEventListener('cancel', function (e) { e.preventDefault(); panel(p, false); });
+    p.addEventListener('close', function () { p.classList.remove('open'); });
+    p.addEventListener('click', function (e) { if (e.target === p) panel(p, false); });
+  }
   function drawer(open) {
-    $('sidebar').classList.toggle('open', open);
-    $('scrim').hidden = !open;
+    panel($('sidebar'), open);
+    $('scrim').classList.toggle('open', open);
     $('menu-btn').setAttribute('aria-expanded', String(open));
   }
 
@@ -3982,7 +5122,9 @@
     bindCheck();
     bindLayouts();
     bindHist();
+    bindSandbox();
     if (Sync) await Sync.start(App);
+    if (!Sync || Sync.mode() !== 'engine') await sbLoad();
     var restored = Sync ? 0 : await Link.restore(Store);
     var recs = await Store.list();
     if (!Store.persistent()) $('store-note').hidden = false;
@@ -3998,7 +5140,7 @@
     // if ((location.hash || '').replace('#', '') === 'check') showView('check');
     if (restored) toast('Відновлено з диска: ' + restored + ' ' + plural(restored, 'проект', 'проекти', 'проектів'));
     Link.start(App);
-    loadScript(SPINE_URL).then(function () { state.lib.spine = window.spine && window.spine.SpinePlayer ? 'ok' : 'fail'; state.player = null; renderPreview(); renderSpinBtn(); }, function () { state.lib.spine = 'fail'; renderPreview(); renderSpinBtn(); });
+    loadScript(SPINE_URL).then(function () { state.lib.spine = window.spine && window.spine.SpinePlayer ? 'ok' : 'fail'; state.player = null; renderPreview(); renderSpinBtn(); if (sbShown()) renderSbStage(); }, function () { state.lib.spine = 'fail'; renderPreview(); renderSpinBtn(); if (sbShown()) renderSbStage(); });
     loadScript(ZIP_URL).then(function () { state.lib.zip = window.JSZip ? 'ok' : 'fail'; }, function () { state.lib.zip = 'fail'; });
     var mq = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
     if (mq && mq.addEventListener) mq.addEventListener('change', function () { if (state.plan) drawGrid(); });
@@ -4009,10 +5151,20 @@
     partKey: partKey, movePartImage: movePartImage, forgetComponentImages: forgetComponentImages, exportComponent: exportComponent, importComponent: importComponent, COMP_KIT: COMP_KIT,
     setImage: setImage, forgetImage: forgetImage, moveSymbolImages: moveSymbolImages, forgetSymbolImages: forgetSymbolImages, changed: changed, saveNow: saveNow, flush: flush, saveProject: saveProject,
     renderGame: renderGame, renderComponents: renderComponents, renderPreview: renderPreview, renderWizard: renderWizard,
-    openProject: openProject, createProject: createProject, startSpin: startSpin, buildZip: buildZip, toast: toast,
+    openProject: openProject, createProject: createProject, startSpin: startSpin, buildZip: buildZip, toast: toast, panel: panel,
     applyRemote: applyRemote, histParts: histParts, setProjects: setProjects, clearProject: clearProject, hist: hist, dirty: function () { return hist.dirty; },
     spinning: function () { return !!(spin.ctl && spin.ctl.running); },
     showView: showView,
+    imageOf: function (k) { return imgs(k).images[k]; },
+    sb: {
+      st: sb, list: sbList, items: sbItems, item: sbItem, cur: sbCur, newId: sbNewId, show: sbShow, film: sbFilm, info: sbInfo, plan: sbPlanOf,
+      pull: async function () { if (!await sbLoad()) throw new Error('Пісочниця недоступна: ' + sb.loadErr); },
+      flush: sbFlush,
+      forget: sbForget,
+      fromTemplate: sbFromTemplate, fromComp: sbFromComp, fromLib: sbFromLib, fromData: function (data, opts) { return importComponent(data, Object.assign({}, opts || {}, { sandbox: true })); },
+      save: sbSave, toProject: sbToProject, remove: sbRemove, render: renderSandbox
+    },
+    lib: { api: Lib, add: libToProject },
     lay: { st: lay, all: lays, cur: curLayout, items: layItems, boneFor: boneFor, warn: boneWarn, boneName: boneName, rename: renameBone, remove: deleteBone, render: renderLayouts, draw: drawLayout, save: scheduleSave, folder: layFolder, names: layNames }
   };
 

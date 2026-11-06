@@ -45,7 +45,7 @@ const readJson = async (req, limit) => {
 };
 const out = (res, r, ok = 200) => r && r.error ? json(res, r.code || 400, { error: r.error }) : json(res, ok, r);
 
-export function createHttp({ data, hub, auth, cfg, page, log, oauth, mcp, files }) {
+export function createHttp({ data, hub, auth, cfg, page, log, oauth, mcp, files, library, sandbox }) {
   const pub = new URL(cfg.publicUrl);
   const reloads = new Set();
   const maxImage = (Number(cfg.maxImageMb) || 64) * MB;
@@ -186,6 +186,56 @@ export function createHttp({ data, hub, auth, cfg, page, log, oauth, mcp, files 
         const c = hub.copy(id, s.user, b.entry ? String(b.entry) : '');
         if (!c.error) audit('project.create', { email: s.user.email, project: c.doc.id, copyOf: id });
         return c.error ? out(res, c) : json(res, 200, { id: c.doc.id });
+      }
+    }
+
+    if (library && path === '/api/library') {
+      if (m === 'GET') return json(res, 200, { items: library.list() });
+      if (m === 'POST') {
+        const x = library.create(await readJson(req, 3 * MB), { email: s.user.email, name: s.user.name });
+        if (x.error) return out(res, x);
+        audit('library.create', { email: s.user.email, id: x.item.id });
+        hub.broadcast('library', { items: library.list() });
+        return json(res, 200, { item: library.meta(x.item) });
+      }
+    }
+
+    if (library && (r = /^\/api\/library\/([^/]+)$/.exec(path)) && ID.test(r[1])) {
+      const id = r[1];
+      const me = { email: s.user.email, name: s.user.name };
+      if (m === 'GET') { const item = library.get(id); return item ? json(res, 200, { item }) : json(res, 404, { error: 'немає компонента' }); }
+      if (m === 'PUT') {
+        const x = library.update(id, await readJson(req, 3 * MB), me, s.role === 'admin');
+        if (x.error) return out(res, x);
+        audit('library.update', { email: s.user.email, id });
+        hub.broadcast('library', { items: library.list() });
+        return json(res, 200, { item: library.meta(x.item) });
+      }
+      if (m === 'DELETE') {
+        const x = library.remove(id, me, s.role === 'admin');
+        if (x.error) return out(res, x);
+        audit('library.delete', { email: s.user.email, id });
+        hub.broadcast('library', { items: library.list() });
+        return json(res, 200, { ok: true });
+      }
+    }
+
+    if (sandbox && path === '/api/sandbox' && m === 'GET') return json(res, 200, sandbox.get(s.user.email));
+
+    if (sandbox && (r = /^\/api\/sandbox\/items\/([^/]+)$/.exec(path))) {
+      const id = r[1];
+      if (m === 'PUT') {
+        const body = await readJson(req, 3 * MB);
+        const x = sandbox.put(s.user.email, id, body, user);
+        if (x.error) return out(res, x);
+        hub.tell(s.user.email, 'sandbox', { op: 'put', item: x.item, by: user, client: String(body.client || '').slice(0, 64) });
+        return json(res, 200, { item: { id: x.item.id, v: x.item.v } });
+      }
+      if (m === 'DELETE') {
+        const x = sandbox.remove(s.user.email, id);
+        if (x.error) return out(res, x);
+        hub.tell(s.user.email, 'sandbox', { op: 'del', id, by: user, client: (url.searchParams.get('client') || '').slice(0, 64) });
+        return json(res, 200, { ok: true });
       }
     }
 

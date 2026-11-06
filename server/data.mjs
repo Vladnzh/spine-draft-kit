@@ -135,7 +135,7 @@ export function openData(dir) {
     readSnap(id, v) {
       try { return JSON.parse(gunzipSync(readFileSync(join(pdir(id), 'snaps', `${v}.json.gz`))).toString('utf8')); } catch { return null; }
     },
-    blobHas: sha => SHA.test(sha) && existsSync(blobPath(sha)),
+    blobHas: sha => typeof sha === 'string' && SHA.test(sha) && existsSync(blobPath(sha)),
     blobPut(buf) {
       const sha = sha256(buf);
       const f = blobPath(sha);
@@ -143,7 +143,7 @@ export function openData(dir) {
       return sha;
     },
     blobGet(sha) {
-      if (!SHA.test(sha)) return null;
+      if (typeof sha !== 'string' || !SHA.test(sha)) return null;
       try { return readFileSync(blobPath(sha)); } catch { return null; }
     },
     blobSize(sha) { try { return statSync(blobPath(sha)).size; } catch { return -1; } },

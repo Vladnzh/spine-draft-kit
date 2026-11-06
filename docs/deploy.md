@@ -102,6 +102,7 @@ ADMIN_EMAILS=<хто адмін кита>
 | `TRUST_PROXY` | `1`: брати IP клієнта з `X-Forwarded-For` (останній запис) для лімітів і аудиту. Вмикай лише за проксі | `0` |
 | `MAX_IMAGE_MB` | ліміт однієї картинки | `64` |
 | `RATE_AUTH_PER_MIN` | запитів до `/auth/*` за хвилину з одного IP | `10` |
+| `RATE_REGISTER_PER_HOUR` | реєстрацій MCP-клієнтів (`/oauth/register`) за годину з одного IP | `10` (`--dev`: `600`) |
 | `OAUTH_EXTRA_REDIRECTS` | додаткові redirect URI для MCP-клієнтів через кому (loopback дозволений завжди) | — |
 | `CHROME_PATH` | Chromium рушія | `/usr/bin/chromium` |
 | `ENGINE_PORT` | внутрішній порт рушія на `127.0.0.1`. Не публікувати й не проксувати | випадковий |
@@ -109,6 +110,7 @@ ADMIN_EMAILS=<хто адмін кита>
 | `ENGINE_IDLE_MIN` | через скільки хвилин простою закривається вкладка проекту | `10` |
 | `ENGINE_NO_SANDBOX` | `1`: Chromium без sandbox (див. «Безпека») | `0` |
 | `NODE_EXTRA_CA_CERTS` | корпоративний CA для звернень до SSO | — |
+| `TLS_CERT`, `TLS_KEY` | PEM-сертифікат і ключ: сервер сам слухає HTTPS (без проксі). `--https` бере `certs/localhost.pem` і `certs/localhost-key.pem` (`npm run certs`, потрібен mkcert) | — |
 
 ## Проксі
 

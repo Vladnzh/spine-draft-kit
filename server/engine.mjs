@@ -323,6 +323,8 @@ export function createEngine({ chromePath, port = 0, maxTabs = 6, idleMin = 10, 
       if (/\/(undelete|copy|restore|versions)$/.test(path) || (m === 'DELETE' && /^\/api\/projects\//.test(path))) return json(res, 403, { error: 'not for engine' });
       return http.api(req, res, url, sessionOf(t));
     }
+    if ((path === '/api/library' || /^\/api\/library\/[A-Za-z0-9_-]{1,64}$/.test(path)) && ['GET', 'POST', 'PUT', 'DELETE'].includes(m)) return http.api(req, res, url, sessionOf(t));
+    if ((path === '/api/sandbox' && m === 'GET') || (/^\/api\/sandbox\/items\/[^/]+$/.test(path) && ['GET', 'PUT', 'DELETE'].includes(m))) return http.api(req, res, url, sessionOf(t));
     json(res, 404, { error: 'unknown api' });
   };
 

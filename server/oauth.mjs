@@ -31,12 +31,12 @@ button.sub{background:transparent;color:inherit;border:1px solid var(--line)}
 const loopback = u => u.protocol === 'http:' && LOOP.has(u.hostname);
 const parseUri = s => { try { const u = new URL(String(s)); return u.hash ? null : u; } catch { return null; } };
 
-export function createOAuth({ data, publicUrl, auth, log, extraRedirects = [], limiter }) {
+export function createOAuth({ data, publicUrl, auth, log, extraRedirects = [], limiter, regPerHour = 10 }) {
   const origin = new URL(publicUrl).origin;
   const resource = origin + '/mcp';
   const audit = (type, o) => log && log.audit(type, o);
   const extra = extraRedirects.map(strip).filter(Boolean);
-  const regRate = limiter ? limiter(10 / 3600, 10) : () => 0;
+  const regRate = limiter ? limiter(regPerHour / 3600, regPerHour) : () => 0;
   const tokenRate = limiter ? limiter(1, 30) : () => 0;
 
   const clients = new Map();

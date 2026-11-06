@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { readBody } from './auth.mjs';
-import { HTTP_TOOLS, LABELS, listTools, httpInstructions } from './tools.mjs';
+import { HTTP_TOOLS, LABELS, listTools, httpInstructions, GUIDE } from './tools.mjs';
 
 const VERSION = '1.0.0';
 const PROTOCOLS = ['2025-11-25', '2025-06-18', '2025-03-26'];
@@ -17,8 +17,10 @@ const content = result => {
   return parts;
 };
 const iso = t => t ? new Date(t).toISOString() : null;
+const author = by => by ? by.name || by.email : '';
+const size = m => `${m.w}x${m.h}`;
 
-export function createMcpHttp({ hub, oauth, files, engine, publicUrl, log, limiter }) {
+export function createMcpHttp({ hub, oauth, files, engine, publicUrl, log, limiter, library }) {
   const origin = new URL(publicUrl).origin;
   const sessions = new Map();
   const rate = limiter ? limiter(10, 20) : () => 0;
@@ -40,12 +42,21 @@ export function createMcpHttp({ hub, oauth, files, engine, publicUrl, log, limit
   };
   hub.setAgents(agents);
   const tell = id => { if (id) hub.presenceChanged(id); };
+  const at = s => Math.max(s.last, s.seen || 0);
+  const linked = email => {
+    const now = Date.now();
+    const mine = [...sessions.values()].filter(s => s.owner.email === email && now - at(s) <= ACTIVE);
+    return { on: mine.length > 0, projects: [...new Set(mine.map(s => s.project).filter(Boolean))] };
+  };
+  hub.setLinked(linked);
+  const mine = email => hub.linkedChanged(email);
 
   setInterval(() => {
     const now = Date.now();
     for (const [id, s] of sessions) {
       if (now - s.last > SESSION_IDLE) sessions.delete(id);
       else if (s.project && !s.gone && now - s.last > ACTIVE) { s.gone = true; tell(s.project); }
+      if (sessions.has(id) && !s.away && now - at(s) > ACTIVE) { s.away = true; mine(s.owner.email); }
     }
   }, 60000).unref();
 
@@ -55,8 +66,16 @@ export function createMcpHttp({ hub, oauth, files, engine, publicUrl, log, limit
   };
   const rpcErr = (res, code, id, c, message) => json(res, code, { jsonrpc: '2.0', id: id ?? null, error: { code: c, message } });
 
+  const viewingOf = s => hub.viewing(s.owner.email).map(id => { const d = hub.get(id); return d ? { id, name: d.settings.game || '', url: projectUrl(id) } : null; }).filter(Boolean);
+  const viewHint = list => {
+    const one = v => `«${v.name || 'Без назви'}» (${v.id})`;
+    if (list.length === 1) return ` Людина зараз має відкритим у браузері проект ${one(list[0])}: open_project на ньому — і вона бачитиме роботу наживо.`;
+    if (list.length > 1) return ` Людина зараз має відкритими в браузері проекти ${list.map(one).join(', ')}: open_project на одному з них показує роботу наживо; спитай, у якому працювати.`;
+    return '';
+  };
+
   const need = s => {
-    if (!s.project) throw new Error('У цій MCP-сесії немає проекту (після перезапуску сервера його треба відкрити знову): list_projects, потім open_project або create_project.');
+    if (!s.project) throw new Error('У цій MCP-сесії немає проекту (після перезапуску сервера його треба відкрити знову): list_projects, потім open_project або create_project.' + viewHint(viewingOf(s)));
     if (!hub.get(s.project)) { const id = s.project; s.project = null; throw new Error(`Проект ${id} видалено або він недоступний. list_projects → open_project.`); }
     return s.project;
   };
@@ -77,6 +96,11 @@ export function createMcpHttp({ hub, oauth, files, engine, publicUrl, log, limit
     if (tool === 'import_component') {
       const f = files.resolve(s.owner, a.ref, ['component', 'layout']);
       return { name: a.name, file: { blob: engine.putBlob(f.buf, 'application/json', f.name), name: f.name, path: f.name } };
+    }
+    if (tool === 'sandbox_new' && typeof a.from_file === 'string' && a.from_file) {
+      const f = files.resolve(s.owner, a.from_file, ['component', 'layout']);
+      a.file = { blob: engine.putBlob(f.buf, 'application/json', f.name), name: f.name, path: f.name };
+      delete a.from_file;
     }
     if (typeof a.image === 'string' && a.image) a.image = img(a.image);
     if (tool === 'set_symbols') for (const x of a.symbols || []) {
@@ -105,9 +129,10 @@ export function createMcpHttp({ hub, oauth, files, engine, publicUrl, log, limit
     kit_status: async s => {
       const doc = s.project && hub.get(s.project);
       if (s.project && !doc) s.project = null;
-      const out = { server: origin, user: s.owner, client: s.client, project: doc ? { id: doc.id, name: doc.settings.game || '', grid: `${doc.settings.reels}x${doc.settings.rows}`, url: projectUrl(doc.id), version: doc.v } : null };
+      const viewing = viewingOf(s);
+      const out = { server: origin, user: s.owner, client: s.client, project: doc ? { id: doc.id, name: doc.settings.game || '', grid: `${doc.settings.reels}x${doc.settings.rows}`, url: projectUrl(doc.id), version: doc.v } : null, viewing };
       if (doc) out.in_project = hub.presenceOf(doc.id).map(p => ({ kind: p.kind, name: p.name, email: p.email, busy: p.busy || undefined }));
-      else out.hint = 'Проект не вибрано: list_projects, спитай людину, потім open_project або create_project.';
+      else out.hint = 'Проект не вибрано: list_projects, спитай людину, потім open_project або create_project.' + viewHint(viewing);
       return out;
     },
     list_projects: async s => {
@@ -122,6 +147,7 @@ export function createMcpHttp({ hub, oauth, files, engine, publicUrl, log, limit
       const before = s.project;
       s.project = p.id;
       if (before && before !== p.id) tell(before);
+      mine(s.owner.email);
       const st = await inEngine(s, 'status', {}, p.id);
       return { project: { id: p.id, name: p.settings.game || '', url: projectUrl(p.id) }, grid: st.project && st.project.grid, cell: st.project && st.project.cell, symbols: st.symbols, components: st.components, in_project: hub.presenceOf(p.id).map(x => x.name) };
     },
@@ -160,6 +186,7 @@ export function createMcpHttp({ hub, oauth, files, engine, publicUrl, log, limit
       s.project = r.project.id;
       if (before && before !== s.project) tell(before);
       tell(s.project);
+      mine(s.owner.email);
       return { ...r, url: projectUrl(r.project.id) };
     },
     export_drafts: async (s, a) => {
@@ -175,6 +202,29 @@ export function createMcpHttp({ hub, oauth, files, engine, publicUrl, log, limit
       if (!buf) throw new Error('файл не дійшов від рушія');
       const d = files.offer(s.owner, r.name, buf, 'application/json');
       return { name: r.name, bytes: buf.length, spine: r.spine, parts: r.parts, anims: r.anims, images: r.images, download: d.url, expires_in: d.expires_in, curl: `curl -fsS -o ${files.quote('<folder>/' + r.name)} ${files.quote(d.url)}` };
+    },
+    sandbox_guide: async () => GUIDE,
+    library_list: async (s, a) => {
+      if (a.id) {
+        const x = library.get(String(a.id));
+        if (!x) throw new Error(`Немає компонента ${String(a.id).slice(0, 80)} у бібліотеці`);
+        return { id: x.id, label: x.label, spine: x.name, note: x.note, tags: x.tags, size: size(library.meta(x)), by: author(x.by), updated: iso(x.updated), component: x.component, images: Object.keys(x.images || {}) };
+      }
+      const all = library.list();
+      const words = String(a.query || '').toLowerCase().split(/\s+/).filter(Boolean);
+      const hit = m => { const t = [m.label, m.name, m.note, ...m.tags, m.by && m.by.name, m.by && m.by.email].filter(Boolean).join(' ').toLowerCase(); return words.every(w => t.includes(w)); };
+      return { total: all.length, items: all.filter(hit).slice(0, 100).map(m => ({ id: m.id, label: m.label, spine: m.name, size: size(m), parts: m.parts, anims: m.anims, note: m.note, tags: m.tags, by: author(m.by), updated: iso(m.updated) })) };
+    },
+    library_remove: async (s, a) => {
+      const id = String(a.id || '');
+      const x = library.get(id);
+      const r = library.remove(id, s.owner, false);
+      if (r.code === 404) throw new Error(`Немає компонента ${id.slice(0, 80)} у бібліотеці`);
+      if (r.code === 403) throw new Error(`Видалити «${x.label}» з бібліотеки може лише його автор: ${author(x.by) || '?'}.`);
+      if (r.error) throw new Error(r.error);
+      hub.broadcast('library', { items: library.list() });
+      audit('library.delete', { email: s.owner.email, id, via: 'mcp' });
+      return { removed: true, id };
     }
   };
 
@@ -214,6 +264,7 @@ export function createMcpHttp({ hub, oauth, files, engine, publicUrl, log, limit
       if (!s || s.owner.email !== b.user.email) return json(res, 404, { error: 'unknown session' });
       sessions.delete(sid);
       tell(s.project);
+      mine(s.owner.email);
       res.writeHead(204);
       return res.end();
     }
@@ -233,6 +284,7 @@ export function createMcpHttp({ hub, oauth, files, engine, publicUrl, log, limit
       const id = randomBytes(24).toString('base64url');
       const s = { id, owner: b.user, family: b.family, client: String(ci.name || b.client || 'Claude').slice(0, 80), protocol: PROTOCOLS.includes(want) ? want : PROTOCOLS[0], project: null, busy: null, last: Date.now(), created: Date.now() };
       sessions.set(id, s);
+      mine(b.user.email);
       audit('mcp.session', { email: b.user.email, client: s.client });
       return json(res, 200, { jsonrpc: '2.0', id: msg.id, result: { protocolVersion: s.protocol, capabilities: { tools: { listChanged: false } }, serverInfo: { name: 'spine-draft-kit', title: 'Spine Draft Kit', version: VERSION }, instructions } }, { 'mcp-session-id': id });
     }
@@ -240,6 +292,7 @@ export function createMcpHttp({ hub, oauth, files, engine, publicUrl, log, limit
     const s = sessions.get(sid);
     if (!s || s.owner.email !== b.user.email) return rpcErr(res, 404, msg.id, -32001, 'Session not found: initialize again');
     s.seen = Date.now();
+    if (s.away) { s.away = false; mine(s.owner.email); }
     if (msg.id === undefined || msg.id === null || !msg.method) { res.writeHead(202); return res.end(); }
     if (msg.method === 'ping') return json(res, 200, { jsonrpc: '2.0', id: msg.id, result: {} });
     if (msg.method === 'tools/list') return json(res, 200, { jsonrpc: '2.0', id: msg.id, result: { tools: listed } });

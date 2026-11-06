@@ -11,7 +11,7 @@ const fill = (s, token, code, name) => {
 };
 let page = src('page.html');
 page = fill(page, '/*@CORE@*/', src('core.js'), 'core');
-page = fill(page, '/*@STORE@*/', src('store.js'), 'store');
+page = fill(page, '/*@STORE@*/', src('store.js') + '\n' + src('library.js'), 'store');
 page = fill(page, '/*@SYNC@*/', src('patch.js') + '\n' + src('sync.js'), 'sync');
 page = fill(page, '/*@INFO@*/', src('info.js'), 'info');
 page = fill(page, '/*@SPIN@*/', src('spin.js'), 'spin');

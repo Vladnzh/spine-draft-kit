@@ -10,7 +10,10 @@
     update_game: 'налаштування гри', set_symbols: 'символи', update_component: 'компонент', add_component: 'додав компонент', remove_component: 'прибрав компонент',
     preview: 'превʼю', screenshot: 'скріншот', spin: 'спін', export_drafts: 'експорт драфту',
     get_layouts: 'читає лейаути', update_layout: 'лейаут', place_components: 'компоненти на лейауті', import_layouts: 'імпорт лейаутів', show_layout: 'показує лейаут',
-    export_component: 'експорт компонента', import_component: 'імпорт компонента'
+    export_component: 'експорт компонента', import_component: 'імпорт компонента',
+    sandbox_get: 'читає пісочницю', sandbox_new: 'новий компонент у пісочниці', sandbox_update: 'пісочниця', sandbox_preview: 'дивиться пісочницю',
+    sandbox_remove: 'прибрав з пісочниці', sandbox_save: 'зберіг у бібліотеку', sandbox_to_project: 'з пісочниці в чернетки',
+    library_list: 'бібліотека', library_add: 'з бібліотеки в чернетки', library_remove: 'прибрав з бібліотеки'
   };
   var link = { local: false, info: null, es: null, online: false, replaced: false, agents: [], busy: null, log: [], backupAt: 0, backupError: '' };
   var App = null;
@@ -195,7 +198,7 @@
   function partsInfo(c) {
     return (c.parts || []).map(function (p) {
       var o = JSON.parse(JSON.stringify(p));
-      var im = S().images[App.partKey(c, p.name)];
+      var im = App.imageOf(App.partKey(c, p.name));
       o.image = im ? im.fileName || true : false;
       return o;
     });
@@ -423,7 +426,63 @@
     await layView(L);
     await App.flush();
   }
-  function drafts() { if (S().view === 'layouts') App.showView('drafts'); }
+  function drafts() { if (S().view === 'layouts' || S().view === 'sandbox') App.showView('drafts'); }
+
+  function SB() { return App.sb; }
+  async function sbIn() { if (ENGINE) await App.sb.pull(); }
+  async function sbOut() { await commit(); await App.sb.flush(); }
+  function sbNames() { return SB().list().map(function (c) { return c.id + ' (' + spineOf(c) + ')'; }).join(', ') || 'нічого'; }
+  function sbFind(id) {
+    var c = id ? SB().item(id) : SB().cur();
+    if (!c) throw new Error(id ? 'У пісочниці немає «' + id + '». Є: ' + sbNames() : 'Пісочниця порожня: спершу sandbox_new');
+    return c;
+  }
+  function sbWarn(c) { var sp = SB().plan(c); return sp ? sp.warnings : ['спайн не зібрався']; }
+  function animSnap(c) { var o = {}; (c.anims || []).forEach(function (a) { if (a) o[a.name] = JSON.stringify(a); }); return o; }
+  function animChanged(before, c) { return (c.anims || []).filter(function (a) { return a && before[a.name] !== JSON.stringify(a); }).map(function (a) { return a.name; }); }
+  async function sbFields(c, a) {
+    if (typeof a.name === 'string' && a.name.trim()) c.name = a.name.trim();
+    if (typeof a.label === 'string' && a.label.trim()) c.label = a.label.trim();
+    if (typeof a.skins === 'string') c.skins = a.skins;
+    if (typeof a.spacers === 'string') c.spacers = a.spacers;
+    if (typeof a.bar === 'string') c.bar = a.bar.trim();
+    if (a.pivot !== undefined) setPivot(c, a.pivot);
+    if (Array.isArray(a.anims)) c.anims = a.anims_mode === 'merge' ? mergeAnims(c.anims || [], a.anims) : normAnims(a.anims);
+    if (a.parts || a.remove_parts) await applyParts(c, a.parts, a.parts_mode, a.remove_parts);
+    if (a.remove_image) App.forgetImage('c:' + c.id);
+    if (a.image) {
+      var nat = await putImage('c:' + c.id, a.image);
+      if (!num(a.w) && !num(a.h)) App.fitSize(c, nat);
+    }
+    ['w', 'h', 'x', 'y'].forEach(function (k) { if (num(a[k])) c[k] = Number(a[k]); });
+  }
+  async function sbLook(c, look, changed) {
+    if (!look) return null;
+    var o = typeof look === 'object' ? look : {};
+    var want = o.animation ? { animation: o.animation } : changed && changed.length ? { animations: changed } : { animation: 'all' };
+    return SB().film(Object.assign({ id: c.id, at: o.at }, want));
+  }
+  function withFilm(out, film) {
+    if (!film) return out;
+    out.preview = film.shown || [];
+    out.animations = film.animations;
+    if (film.note) out.note = film.note;
+    out.images = film.images || [];
+    return out;
+  }
+  async function fileData(f) {
+    if (!f || !f.blob) throw new Error('файл не передано');
+    var r = await fetch('/api/bridge/blobs/' + f.blob, { cache: 'no-store' });
+    if (!r.ok) throw new Error('файл не дійшов: ' + f.name);
+    var data;
+    try { data = JSON.parse(await r.text()); } catch (e) { throw new Error('Не JSON: ' + f.name); }
+    if (!data || data.kit !== App.COMP_KIT) throw new Error('Це не файл компонента кита (потрібен kit ' + App.COMP_KIT + ')');
+    return data;
+  }
+  function libWords(q) { return String(q || '').toLowerCase().split(/\s+/).filter(Boolean); }
+  function libOut(m) {
+    return { id: m.id, label: m.label, spine: m.name, size: (m.w || 0) + 'x' + (m.h || 0), parts: m.parts, anims: m.anims, note: m.note || undefined, tags: m.tags && m.tags.length ? m.tags : undefined, by: m.by ? m.by.name || m.by.email : undefined, updated: m.updated ? new Date(m.updated).toISOString() : undefined };
+  }
 
   var TOOLS = {
     status: async function () {
@@ -618,6 +677,7 @@
     export_component: async function (a) {
       needProject();
       var c = findComp(a.id);
+      if (!c) { await sbIn(); c = App.sb.item(a.id); }
       if (!c) throw new Error('Немає компонента «' + a.id + '». Є: ' + compList());
       if (c.type !== 'custom') throw new Error('Експортуються лише свої компоненти (custom): ' + compList());
       var r = await App.exportComponent(c);
@@ -880,6 +940,112 @@
         Y.render();
       }
       return { layout: L.name, size: L.w + 'x' + L.h, screens: names, presets: list.map(function (s) { return s[0]; }), selected: Y.st.sel, images: images.filter(Boolean) };
+    },
+    sandbox_get: async function (a) {
+      needProject();
+      await sbIn();
+      if (a.id) return SB().info(sbFind(a.id), true);
+      var cur = SB().cur();
+      return { personal: true, shown: cur ? cur.id : null, items: SB().list().map(function (c) { return SB().info(c, false); }), library: App.lib.api.mode() === 'server' ? 'team server' : 'this browser' };
+    },
+    sandbox_new: async function (a) {
+      needProject();
+      await sbIn();
+      var srcs = ['template', 'from_library', 'from_component', 'file'].filter(function (k) { return a[k]; });
+      if (srcs.length > 1) throw new Error('Одне джерело: template, from_library, from_component або from_file');
+      var c;
+      if (a.from_library) c = await SB().fromLib(a.from_library);
+      else if (a.from_component) {
+        var src = findComp(a.from_component);
+        if (!src || src.type !== 'custom') throw new Error('У чернетках немає свого компонента «' + a.from_component + '». Є: ' + compList());
+        c = await SB().fromComp(src);
+      } else if (a.file) c = await SB().fromData(await fileData(a.file));
+      else {
+        var key = a.template || 'custom';
+        if (!App.templates[key]) throw new Error('Шаблон: ' + Object.keys(App.templates).join(', '));
+        c = SB().fromTemplate(key);
+      }
+      try { await sbFields(c, a); }
+      catch (e) { SB().remove(c); await sbOut(); throw e; }
+      await sbOut();
+      SB().show(c.id);
+      App.toast('Claude: у пісочниці ' + spineOf(c));
+      var out = { item: SB().info(c, false), warnings: sbWarn(c), note: 'Користувач бачить це наживо у вкладці «Пісочниця».' };
+      return withFilm(out, await sbLook(c, a.preview, null));
+    },
+    sandbox_update: async function (a) {
+      needProject();
+      await sbIn();
+      var c = sbFind(a.id);
+      var before = animSnap(c);
+      await sbFields(c, a);
+      var ch = animChanged(before, c);
+      await sbOut();
+      SB().show(c.id, ch[0]);
+      App.toast('Claude змінив ' + spineOf(c) + ' у пісочниці');
+      return withFilm({ item: SB().info(c, false), changed_animations: ch, warnings: sbWarn(c) }, await sbLook(c, a.preview, ch));
+    },
+    sandbox_preview: async function (a) {
+      needProject();
+      await sbIn();
+      var c = sbFind(a.id);
+      return SB().film({ id: c.id, animation: a.animation, at: a.at, skin: a.skin, bg: a.bg });
+    },
+    sandbox_remove: async function (a) {
+      needProject();
+      await sbIn();
+      var c = sbFind(a.id);
+      SB().remove(c);
+      await sbOut();
+      App.toast('Claude прибрав ' + spineOf(c) + ' з пісочниці');
+      return { removed: c.id, items: SB().list().map(function (x) { return SB().info(x, false); }) };
+    },
+    sandbox_save: async function (a) {
+      needProject();
+      await sbIn();
+      var c = sbFind(a.id);
+      var r = await SB().save(c, { asNew: !!a.as_new, label: a.label, note: a.note, tags: Array.isArray(a.tags) ? a.tags : undefined });
+      await sbOut();
+      return { saved: true, updated_existing: r.updated, library: libOut(r.item), where: App.lib.api.mode() === 'server' ? 'бібліотека команди на сервері' : 'бібліотека цього браузера' };
+    },
+    sandbox_to_project: async function (a) {
+      needProject();
+      await sbIn();
+      var c = sbFind(a.id);
+      var nc = await SB().toProject(c, { name: a.name });
+      await commit();
+      App.toast('Claude додав ' + spineOf(nc) + ' у «Чернетки»');
+      return { component: compInfo(nc), warnings: warnings() };
+    },
+    library_list: async function (a) {
+      var L = App.lib.api;
+      var items = await L.list();
+      if (a.id) {
+        var got = await L.get(a.id);
+        if (!got) throw new Error('Немає компонента ' + a.id + ' у бібліотеці');
+        return Object.assign(libOut(got.meta), { component: got.component, images: Object.keys(got.images) });
+      }
+      var words = libWords(a.query);
+      var hit = items.filter(function (m) {
+        var hay = [m.label, m.name, m.note, (m.tags || []).join(' '), m.by && m.by.name, m.by && m.by.email].join(' ').toLowerCase();
+        return words.every(function (w) { return hay.indexOf(w) !== -1; });
+      });
+      return { total: items.length, where: L.mode() === 'server' ? 'team server' : 'this browser', items: hit.slice(0, 100).map(libOut) };
+    },
+    library_add: async function (a) {
+      needProject();
+      var nc = await App.lib.add(a.id, { name: a.name });
+      await commit();
+      App.toast('Claude додав ' + spineOf(nc) + ' з бібліотеки');
+      return { component: compInfo(nc), warnings: warnings() };
+    },
+    library_remove: async function (a) {
+      var L = App.lib.api;
+      var m = (await L.list()).filter(function (x) { return x.id === a.id; })[0];
+      if (!m) throw new Error('Немає компонента ' + a.id + ' у бібліотеці');
+      if (!L.canEdit(m)) throw new Error('Видалити може лише автор: ' + ((m.by && (m.by.name || m.by.email)) || 'невідомо'));
+      await L.remove(a.id);
+      return { removed: true, id: a.id };
     }
   };
 
@@ -901,6 +1067,7 @@
       out = { id: c.id, ok: false, error: (e && e.message) || String(e) };
       note(c.tool, false, out.error);
     }
+    if (ENGINE && App.sb && App.sb.forget) App.sb.forget();
     link.busy = null;
     renderButton();
     renderPop();

@@ -4,7 +4,7 @@ import { join, resolve, extname, basename, relative, dirname } from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { createInterface } from 'node:readline';
-import { TOOLS, INSTRUCTIONS, listTools } from './server/tools.mjs';
+import { TOOLS, INSTRUCTIONS, GUIDE, listTools } from './server/tools.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.SPINE_KIT_PORT) || 5180;
@@ -53,6 +53,10 @@ async function prepare(tool, args) {
   const a = JSON.parse(JSON.stringify(args || {}));
   if (tool === 'import_layouts') return { mode: a.mode, files: layoutFiles(a.paths) };
   if (tool === 'import_component') return { name: a.name, file: await uploadComponent(a.path) };
+  if (tool === 'sandbox_new' && typeof a.from_file === 'string' && a.from_file) {
+    a.file = await uploadComponent(a.from_file);
+    delete a.from_file;
+  }
   if (typeof a.image === 'string' && a.image) a.image = await uploadFile(a.image);
   if (tool === 'set_symbols') for (const s of a.symbols || []) {
     if (typeof s.image === 'string' && s.image) s.image = await uploadFile(s.image);
@@ -235,6 +239,7 @@ async function runTool(name, args) {
   if (name === 'kit_status') return kitStatus();
   if (name === 'open_kit') return openKit();
   if (name === 'scan_art') return scanArt(args || {});
+  if (name === 'sandbox_guide') return GUIDE;
   if (name === 'export_drafts') return exportDrafts(args || {});
   if (name === 'export_component') return exportComponent(args || {});
   return bridge(name, await prepare(name, args), t.timeout || 90000);

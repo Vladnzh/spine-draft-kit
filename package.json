@@ -8,6 +8,8 @@
     "check": "node check/check-core.mjs",
     "start": "node serve.mjs",
     "serve:dev": "node serve.mjs --dev",
+    "serve:https": "node serve.mjs --dev --https",
+    "certs": "mkdir -p certs && mkcert -cert-file certs/localhost.pem -key-file certs/localhost-key.pem localhost 127.0.0.1 ::1",
     "vendor": "node vendor.mjs"
   }
 }

@@ -324,10 +324,8 @@ const libs = await until(() => A.ev(`(() => { const L = SpineKitSync.app().state
 ok('browser: spine-player and JSZip load from /vendor', libs >= 0, JSON.stringify(await A.ev(`SpineKitSync.app().state.lib`)));
 ok('browser: preview canvas mounted', await until(() => A.ev(`!!document.querySelector('#stage canvas')`), 15000, 200) >= 0);
 {
-  await A.ev(`document.getElementById('sk-me').click(), true`);
-  const menu = await A.ev(`(document.getElementById('sk-acct') || {}).textContent || ''`);
-  ok('browser: account menu shows the user', /anya@test\.dev/.test(menu) && /Вийти/.test(menu) && !/Кошик/.test(menu), menu);
-  await A.ev(`document.getElementById('sk-me').click(), true`);
+  const menu = await A.ev(`(() => { const m = document.getElementById('sk-me'); return m && !m.hidden ? m.textContent + (document.getElementById('sk-logout') ? ' Вийти' : '') + (document.getElementById('sk-trash-btn') ? ' Кошик' : '') : ''; })()`);
+  ok('browser: sidebar account shows the user', /anya@test\.dev/.test(menu) && /Вийти/.test(menu) && !/Кошик/.test(menu), menu);
 }
 const cookieIn = async t => (await cdp('Network.getCookies', { urls: [BASE] }, t.sessionId)).result?.cookies?.find(c => c.name === 'kit_sid');
 {
@@ -362,7 +360,6 @@ const cookieIn = async t => (await cdp('Network.getCookies', { urls: [BASE] }, t
   await A.ev(`(() => { const s = document.createElement('script'); s.textContent = 'window.__pwned = 1'; document.head.appendChild(s); const i = new Image(); i.src = 'https://example.com/x.png'; return true; })()`);
   await sleep(300);
   ok('browser: control — injected inline script and external image are blocked and detected', (await A.ev(`!window.__pwned && window.__csp.length >= 2`)) && cspHits.length >= 1, JSON.stringify(await A.ev(`window.__csp`)));
-  await A.ev(`document.getElementById('sk-me').click(), true`);
   await A.ev(`document.getElementById('sk-logout').click(), true`);
   ok('browser: «Вийти» from the menu', await until(() => A.ev(`location.pathname === '/auth/bye'`), 8000, 100) >= 0);
   ok('browser: no session after «Вийти»', !(await cookieIn(A)));
@@ -375,8 +372,7 @@ const cookieIn = async t => (await cdp('Network.getCookies', { urls: [BASE] }, t
   const cr = await call(anya.j, 'POST', '/api/projects', { settings: { game: 'bin-ui', reels: 5, rows: 3, components: [] } });
   await call(anya.j, 'DELETE', `/api/projects/${cr.body.id}`);
   await until(() => B.ev(`!!document.getElementById('sk-me') && !document.getElementById('sk-me').hidden`), 8000, 100);
-  await B.ev(`document.getElementById('sk-me').click(), true`);
-  await B.ev(`[...document.querySelectorAll('#sk-acct button')].find(b => b.textContent === 'Кошик').click(), true`);
+  await B.ev(`document.getElementById('sk-trash-btn').click(), true`);
   const row = await until(() => B.ev(`[...document.querySelectorAll('#sk-trash-list .sk-t')].some(li => /bin-ui/.test(li.textContent))`), 8000, 100);
   ok('browser: admin «Кошик» lists deleted project', row >= 0);
   await B.ev(`[...document.querySelectorAll('#sk-trash-list .sk-t')].find(li => /bin-ui/.test(li.textContent)).querySelector('button').click(), true`);

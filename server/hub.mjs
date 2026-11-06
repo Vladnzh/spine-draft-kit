@@ -35,6 +35,7 @@ export function createHub({ data }) {
   let listTimer = null;
   let lastList = '';
   let agents = () => [];
+  let linked = () => null;
 
   const state = id => {
     if (!live.has(id)) live.set(id, { buffer: [], seen: new Map(), open: { drafts: null, layouts: null } });
@@ -42,6 +43,8 @@ export function createHub({ data }) {
   };
   const send = (res, event, d) => { try { res.write(`event: ${event}\ndata: ${JSON.stringify(d)}\n\n`); } catch { return; } };
   const toProject = (id, event, d) => { for (const s of subs) if (s.project === id) send(s.res, event, d); };
+  const linkedOf = email => { try { return linked(email) || null; } catch { return null; } };
+  const toUser = (email, event, d) => { for (const s of subs) if (s.user && s.user.email === email) send(s.res, event, d); };
 
   const blobType = sha => {
     if (typeCache.has(sha)) return typeCache.get(sha);
@@ -50,7 +53,7 @@ export function createHub({ data }) {
     if (t) typeCache.set(sha, t);
     return t;
   };
-  const imageOk = im => !!im && typeof im === 'object' && !Array.isArray(im) && SHA.test(im.sha) && typeof im.name === 'string' && im.name.length <= 200 && ['png', 'jpeg', 'webp'].includes(im.type) && Number.isFinite(im.w) && Number.isFinite(im.h) && im.w >= 0 && im.h >= 0 && blobType(im.sha) === im.type;
+  const imageOk = im => !!im && typeof im === 'object' && !Array.isArray(im) && typeof im.sha === 'string' && SHA.test(im.sha) && typeof im.name === 'string' && im.name.length <= 200 && ['png', 'jpeg', 'webp'].includes(im.type) && Number.isFinite(im.w) && Number.isFinite(im.h) && im.w >= 0 && im.h >= 0 && blobType(im.sha) === im.type;
   const imagesOk = images => !!images && typeof images === 'object' && !Array.isArray(images) && Object.keys(images).every(k => k.length <= 200 && imageOk(images[k]));
 
   const meta = doc => ({ id: doc.id, created: doc.created, updated: doc.updated, updatedBy: doc.updatedBy || null, settings: { game: doc.settings.game || '', reels: doc.settings.reels, rows: doc.settings.rows, components: (doc.settings.components || []).map(c => ({ on: !c || c.on !== false })) } });
@@ -190,8 +193,19 @@ export function createHub({ data }) {
   const hub = {
     list,
     setAgents(fn) { agents = typeof fn === 'function' ? fn : () => []; },
+    setLinked(fn) { linked = typeof fn === 'function' ? fn : () => null; },
+    linkedChanged: email => { const d = linkedOf(email); if (d) toUser(email, 'mcp', d); },
     presenceOf: presence,
     presenceChanged: id => tellPresence(id),
+    broadcast(event, d) { for (const s of subs) send(s.res, event, d); },
+    tell(email, event, d) {
+      const e = String(email || '').toLowerCase();
+      for (const s of subs) if (s.user && String(s.user.email || '').toLowerCase() === e) send(s.res, event, d);
+    },
+    viewing(email) {
+      const e = String(email || '').toLowerCase();
+      return [...new Set([...subs].filter(s => s.user && s.project && String(s.user.email || '').toLowerCase() === e).map(s => s.project))];
+    },
     get: id => { const p = data.project(id); return p && !p.doc.deleted ? p.doc : null; },
     create(body, by, label = 'Створено') {
       const settings = body && body.settings;
@@ -261,6 +275,8 @@ export function createHub({ data }) {
         send(res, 'hello', { v: 0, me: user, presence: [] });
       }
       send(res, 'projects', { list: list() });
+      const mine = user && linkedOf(user.email);
+      if (mine) send(res, 'mcp', mine);
       req.on('close', () => { subs.delete(sub); if (sub.project) tellPresence(sub.project); });
     },
     history(id, scope, before) {

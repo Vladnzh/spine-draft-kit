@@ -6,6 +6,75 @@ const PORT = Number(process.env.SPINE_KIT_PORT) || 5180;
 const DATA = process.env.SPINE_KIT_DATA || join(HERE, 'projects');
 
 const PRESETS = 'hold, fade_in, fade_out, pop_in, pop_out, pulse, breathe, land, win, shake, float_up, glow, flash';
+const SANDBOX_STEP = 'Sandbox (the «Пісочниця» tab): the user\'s PERSONAL workbench to test and make components with a live preview. Only they and their Claude see it, it is the same in every project, it is not in the drafts, their export or the project history (so save what matters to the library). Use it for every new component or animation experiment. Call sandbox_guide once first (rules and recipes for a good result in 2-3 calls), look for a base in library_list, then sandbox_new with everything planned in one call and preview: true, read the filmstrip, fix with sandbox_update (anims_mode "merge", preview), check everything with sandbox_preview animation "all". When the user likes it: sandbox_save puts it into the component library (reusable in any project and game); sandbox_to_project or library_add copy it into the drafts only when the user asks. Changing the sandbox needs no permission; the drafts do.';
+
+const GUIDE = `Sandbox guide: a good-looking component in 2-3 calls.
+
+WORKFLOW
+1. library_list first (query by kind: collector, meter, logo, popup, character...). If something close exists, sandbox_new {"from_library": id} and adapt it. library_list {"id"} shows its full keys: copy what works.
+2. Plan the whole component before the first call: parts (what moves on its own), pivot, every animation the game calls with keys. Make it in ONE sandbox_new call (all parts + all anims) with "preview": true.
+3. Read the filmstrip with the checklist below. Fix only what is wrong: sandbox_update with anims_mode "merge", only the rows you change, "preview": {"animation": "<row>"}.
+4. After 2-3 rounds show it to the user (they watch the «Пісочниця» tab live) and ask what to change. Do not polish alone forever.
+5. When the user is happy: sandbox_save with a label in the user's language and a one-line note (what it is, which game, which animations the game calls). sandbox_to_project only when the user asks.
+
+STRUCTURE
+- art = the main image; w x h is its box in game px. Parts = everything that moves, fades or blends on its own: glow, rays, shine, sparkles, coin, icon, plate, counter background, character limbs. Name parts by role: glow, rays, coin, plate, star_1...
+- Draw order = the parts list; "behind": true puts a part under art (glows, rays, shadows).
+- Light: "blend": "additive", setup "alpha": 0 (hidden until an animation shows it), placeholder "shape" glow / star / ring with a warm colour (ffd34d, ffb020, fff2b0): reads as light on dark game backgrounds.
+- "parent": a part that must follow another part sits on it (a sparkle on a coin); x / y are from the parent's image centre, y up.
+- "pivot": bottom for characters and anything standing, centre for badges, coins, buttons, "x:y" for hinges (a lid).
+- Keep the motion compact: the stage fits every animation at one scale, a part flying 2000 px away makes everything tiny.
+- No art yet: placeholders (shape + colour) at the real sizes; the motion can be judged now, art drops in later under the same part names.
+
+TIMING (seconds)
+- in / appear 0.3-0.6 (pop 0.35-0.5). out / hide 0.2-0.35, faster than in.
+- idle / loop_N 1.5-3, seamless; breathing scale 1.02-1.05, float +-6-12 px.
+- win 0.8-1.5: the biggest move in the first 30 %, then settle. win_idle: a calmer loop of the same idea.
+- add / hit / bump (+1 on a counter) 0.25-0.4.
+- anticipation loop 0.6-1.4, small and quick: shake +-4-8 px, rotate +-2-4 deg, glow pulse.
+- trigger / big moment 1-2 with a flash: additive part, alpha 0 -> 0.9 -> 0 in 0.15-0.25 s.
+- Repeated parts stagger by 0.04-0.08 s; secondary parts lag the main move by 0.03-0.1 s (follow-through).
+
+EASING (ease = how the motion runs from THIS key to the next one)
+- Entrances ease-out, or "back" (overshoots the next value, then settles: a pop with no extra keys). Exits ease-in. Loops ease-in-out on every key. Spinning rays linear. "soft" = a strong ease-out for landings.
+- Never linear for organic motion. "shake" only on short keys. "stepped" = hard cuts.
+
+MOTION THAT READS
+- Pop in: scale 0.2 -> 1 with "back", alpha 0 -> 1 in the first 30 %.
+- Squash and stretch keeps the volume: sx 1.1 with sy 0.9; a landing is sy 0.85 / sx 1.12, then back to 1.
+- Anticipation: a small opposite move (scale 0.94, or y -10) for 10-20 % of the time before the main move.
+- Nothing stops dead: overshoot and settle.
+- One focal action per animation; secondary motion at about half the amplitude.
+- At game scale: win scale peak 1.15-1.3, rotation 3-8 deg, glow alpha peak 0.6-0.9 (1 burns the art out).
+- Loops: the first key equals the last key on every channel, the last key t equals the duration, no hold at the seam.
+- Spinning rays: {"rays": [{"t": 0, "rotate": 0, "ease": "linear"}, {"t": 8, "rotate": -360}]} (rotate = degrees counter-clockwise, negative = clockwise), duration 8.
+
+KEYS (recap)
+{"<target>": [key, ...]}, target = art, a part, a spacer slot, a bar part or all. key: t (s), x / y (px offset, y up), scale or sx / sy (multiplier of setup), rotate (deg CCW, added), alpha (absolute), color ("ffcc00", absolute), ease. A channel missing in a key keeps its previous value; a channel with no key at 0 starts from the setup pose; values hold after the last key. Keys override the preset on the same channels; to control everything set preset "hold" and key it all. Duration = max(duration, last key t).
+
+RECIPES (copy and adapt)
+- in 0.45 (pop): {"all": [{"t": 0, "alpha": 0}, {"t": 0.12, "alpha": 1}], "art": [{"t": 0, "scale": 0.2, "ease": "back"}, {"t": 0.4, "scale": 1}]}
+- idle 2 (breathe, loop): {"art": [{"t": 0, "scale": 1, "ease": "ease-in-out"}, {"t": 1, "scale": 1.04, "ease": "ease-in-out"}, {"t": 2, "scale": 1}]}
+- glow pulse 1.2 (loop, glow behind, additive, alpha 0): {"glow": [{"t": 0, "alpha": 0.25, "scale": 0.95, "ease": "ease-in-out"}, {"t": 0.6, "alpha": 0.7, "scale": 1.05, "ease": "ease-in-out"}, {"t": 1.2, "alpha": 0.25, "scale": 0.95}]}
+- win 1.1 (anticipation, burst, settle; glow + flash parts): {"art": [{"t": 0, "scale": 1, "ease": "ease-in"}, {"t": 0.08, "scale": 0.93, "ease": "back"}, {"t": 0.35, "scale": 1.22, "rotate": 4, "ease": "ease-in-out"}, {"t": 0.6, "scale": 0.98, "rotate": -2, "ease": "ease-out"}, {"t": 0.85, "scale": 1, "rotate": 0}], "glow": [{"t": 0.05, "alpha": 0, "scale": 0.9, "ease": "ease-out"}, {"t": 0.3, "alpha": 0.85, "scale": 1.15, "ease": "ease-in"}, {"t": 1.1, "alpha": 0, "scale": 1.4}], "flash": [{"t": 0.3, "alpha": 0, "ease": "ease-out"}, {"t": 0.36, "alpha": 0.9, "ease": "ease-in"}, {"t": 0.55, "alpha": 0}]}
+- add 0.32 (bump): {"art": [{"t": 0, "sx": 1, "sy": 1, "ease": "ease-out"}, {"t": 0.08, "sx": 1.12, "sy": 0.9, "ease": "back"}, {"t": 0.32, "sx": 1, "sy": 1}]}
+- collect 0.6 (a coin part flies up into the meter): {"coin": [{"t": 0, "x": 0, "y": -220, "scale": 1, "alpha": 1, "ease": "ease-in"}, {"t": 0.45, "x": 0, "y": 0, "scale": 0.5, "ease": "ease-out"}, {"t": 0.6, "alpha": 0}]}
+- anticipation_loop 0.6: {"art": [{"t": 0, "x": 0, "rotate": 0, "ease": "ease-in-out"}, {"t": 0.15, "x": -6, "rotate": 2, "ease": "ease-in-out"}, {"t": 0.3, "x": 6, "rotate": -2, "ease": "ease-in-out"}, {"t": 0.45, "x": -4, "rotate": 1, "ease": "ease-in-out"}, {"t": 0.6, "x": 0, "rotate": 0}]}
+- out 0.28: {"all": [{"t": 0.08, "alpha": 1, "ease": "ease-in"}, {"t": 0.28, "alpha": 0}], "art": [{"t": 0, "scale": 1, "ease": "ease-in"}, {"t": 0.28, "scale": 0.6}]}
+- text pops on a txt_* spacer: {"txt_amount": [{"t": 0, "y": -20, "alpha": 0, "ease": "back"}, {"t": 0.25, "y": 0, "alpha": 1}]}
+
+REVIEW CHECKLIST (every filmstrip)
+- First and last frame: "in" ends exactly at the idle pose; "out" ends hidden (or as the game expects); a loop looks the same at 0 and at the end.
+- No jumps between neighbouring frames; nothing pops in or out unless intended.
+- The silhouette and the main move read even at half size.
+- Glows do not wash out the art (alpha <= 0.9, additive on dark).
+- No warnings in the result (bad keys, unknown targets, reserved names).
+- The game contract: spine name animation_<name>, the animation names the game calls (in, idle / loop_1, out, win...), events only if the game listens.
+
+SPEED
+- One call with everything beats ten small ones: batch parts and animations.
+- anims_mode "merge" changes one row without resending the rest.
+- "preview": true on sandbox_new / sandbox_update returns the filmstrip in the same call; sandbox_preview {"animation": "all"} reviews every animation on one image.`;
 const PARENTS = ['root', 'area_top_left', 'area_top', 'area_top_right', 'area_left', 'area_center', 'area_right', 'area_bottom_left', 'area_bottom', 'area_bottom_right'];
 
 const INSTRUCTIONS = `Spine Draft Kit is a local web tool (http://localhost:${PORT}) that generates draft Spine 4.1.24 files for slot games (symbols, reels, reel frames, background, logo, popups). These tools drive the open kit page live: every change shows up in the user's browser immediately, and the project autosaves to the browser and to disk (${DATA}).
@@ -19,6 +88,7 @@ Workflow:
 6. Layouts (the «Лейаути» tab): every project starts with the Pandora template layouts layout_landscape_16_9 (2560x1440), layout_landscape_4_3 (1920x1440), layout_portrait_9_16 (1440x2560); the game picks one by window aspect and puts each component on a position_* bone. If the game already has layouts (art repo skins/main/Motion/layouts/), import_layouts them (ask before replacing). get_layouts shows bones and which component sits where; place_components binds components to bones; update_layout moves, adds, renames bones; show_layout with screen "all" checks wider and taller windows; spin with layout plays the spin there.
 7. export_drafts writes the zip with all spines (and the layouts) when the user wants files.
 8. Custom components (collectors, meters, characters, panels like Lucky 5): add_component (template custom or character) or update_component with parts (extra images: each part is its own bone + slot with the same name, region art/<spine>_<part>; parent, x/y from the parent's image centre with y up, w/h, pivot, behind, blend, setup alpha, placeholder shape/color) and per-animation keys ({"<part|art|spacer|all>": [{"t": 0, "y": 0, "alpha": 0, "ease": "ease-out"}, {"t": 0.3, "y": 120, "alpha": 1}]}). Use anims_mode "merge" to change one animation without resending the rest. Then preview each new animation (at several "at" values) and fix what looks wrong. export_component saves a component (settings, parts, keys, images) to a .component.json file; import_component adds such a file to the open project (another game or project).
+9. ${SANDBOX_STEP} The user sees every step live in the «Пісочниця» tab (a project must be open in the kit). The sandbox and the library of this local kit live in the browser.
 Talk to the user in their language (the kit UI is Ukrainian). Motion presets: ${PRESETS}. Events format: "onEvent@0.5, onOther(2)@0.1".`;
 
 const KEYS = 'Custom components only. Keyframes on top of the preset, as {"<target>": [key, ...]}. target: "art" (main image), a part name, a spacer slot (e.g. txt_count), a progress-bar part (bar, bar_fill, bar_head, bar_glow, bar_flash, bar_shine) or "all" (alpha / color of every visible slot). key: t (seconds, required), x, y (px offset from the setup position, y up), scale (both axes) or sx / sy (multiplier of setup), rotate (degrees counter-clockwise, added to setup), alpha (0..1, absolute), color ("ffcc00" tint, absolute), ease (how the motion runs from THIS key to the next: linear default, ease-in, ease-out, ease-in-out, back, soft, shake, stepped, or a bezier [x1, y1, x2, y2] like CSS cubic-bezier). A key keeps the previous value of channels it leaves out; a channel whose first key is after 0 starts from the setup pose at t 0; after the last key the value holds. Keys override the preset on the same channels (translate, scale, rotate, rgb, alpha). The animation lasts max(duration, last key t). null removes the keys.';
@@ -59,6 +129,12 @@ const parts = {
     },
     required: ['name']
   }
+};
+const sbId = { type: 'string', description: 'Sandbox item id (sandbox_get lists them) or its spine name. Omitted: the item the sandbox shows now (the last one worked on).' };
+const look = {
+  type: ['boolean', 'object'],
+  description: 'Return a filmstrip in the same call: true = the animations this call added or changed (every animation of a new item), 5 frames each; or {"animation": "<name>" | "all", "at": [seconds]}.',
+  properties: { animation: { type: 'string' }, at: { type: 'array', items: { type: 'number' } } }
 };
 
 const TOOLS = [
@@ -293,17 +369,123 @@ const TOOLS = [
         marks: { type: 'boolean', description: 'Bone marks on the canvas, default on.' }
       }
     }
+  },
+  {
+    name: 'sandbox_guide', title: 'Sandbox guide',
+    description: 'Rules and recipes for a good-looking component in 2-3 calls: workflow, parts and pivots, timing and easing per animation type, amplitudes that read at game scale, keyframe recipes (pop in, idle, glow, win burst, bump, collect, anticipation, out, text), the review checklist. Read it once before the first sandbox_new. Read-only.',
+    inputSchema: { type: 'object', properties: {} }
+  },
+  {
+    name: 'sandbox_get', title: 'Get sandbox',
+    description: 'The user\'s personal sandbox (the «Пісочниця» tab): a workbench for testing and making components with a live preview, the same in every project, apart from the drafts. Without id: the items on it (id, label, spine, size, parts, animations, library link) and which one it shows. With id: the full item (settings, parts, animations with keys, images, the generated spine: skins, animations with durations, slots, warnings). Read-only.',
+    inputSchema: { type: 'object', properties: { id: sbId } }
+  },
+  {
+    name: 'sandbox_new', title: 'New sandbox item', mutates: true,
+    description: 'Put a new component on the sandbox and show it (the user watches the «Пісочниця» tab live). Source: template (default custom), from_library (a library item), from_component (a copy of a custom component of the project) or from_file (.component.json). The other fields work as in add_component and override the source. Send everything you planned in this one call: parts and every animation with keys. The drafts and their export are not touched.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        template: { type: 'string', enum: ['custom', 'character', 'logo', 'popup', 'infopanel', 'background'], description: 'custom: any element (collector, meter, panel, badge); character: 1200x2000, pivot bottom, keyed in / idle / win / anticipation_* / trigger / attention / out.' },
+        from_library: { type: 'string', description: 'Library item id (library_list).' },
+        from_component: { type: 'string', description: 'A custom component of the project: id or spine name.' },
+        from_file: { type: 'string', description: 'Absolute path to a .component.json file.' },
+        name: { type: 'string', description: 'Spine name, e.g. animation_coin_collector.' },
+        label: { type: 'string', description: 'Title in the kit, in the user\'s language, e.g. Колектор монет.' },
+        image, anims,
+        anims_mode: { ...animsMode, description: '"replace" (default): anims replaces the source animations. "merge": patch / extend the source animations by name.' },
+        skins: { type: 'string' }, spacers: { type: 'string', description: 'Comma separated slot names the game reads; name@x:y = exact point from the image centre, y up.' },
+        bar: { type: 'string', description: 'Progress bar "x:y:w:h", see update_component.' },
+        pivot,
+        parts: { ...parts, description: 'Extra images inside the component, merged by name into the source parts. ' + parts.description },
+        w: { type: 'number' }, h: { type: 'number' }, x: { type: 'number' }, y: { type: 'number' },
+        preview: look
+      }
+    }
+  },
+  {
+    name: 'sandbox_update', title: 'Update sandbox item', mutates: true,
+    description: 'Change a sandbox item; the same fields as update_component for a custom component (parts merge by name, anims_mode "merge" patches rows by name). The sandbox shows the item and plays the animation you changed.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: sbId,
+        name: { type: 'string' }, label: { type: 'string' },
+        image, remove_image: { type: 'boolean' },
+        anims, anims_mode: animsMode,
+        skins: { type: 'string' }, spacers: { type: 'string' }, bar: { type: 'string' },
+        w: { type: 'number' }, h: { type: 'number' }, x: { type: 'number' }, y: { type: 'number' },
+        pivot: { ...pivot, type: ['string', 'null'] },
+        parts,
+        parts_mode: { type: 'string', enum: ['merge', 'replace'], description: '"merge" (default) keeps parts not listed; "replace" makes the list exactly these parts in this order.' },
+        remove_parts: { type: 'array', items: { type: 'string' } },
+        preview: look
+      }
+    }
+  },
+  {
+    name: 'sandbox_preview', title: 'Preview sandbox',
+    description: 'Filmstrip of a sandbox item: frames of its animations at exact times on one image, one row per animation, the same scale everywhere (so sizes compare), with durations and warnings. The animation then keeps playing in the sandbox for the user.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: sbId,
+        animation: { type: 'string', description: 'Animation name or "all" (default).' },
+        at: { type: ['number', 'array'], items: { type: 'number' }, description: 'Seconds: one number or a list (up to 12). Default 5 frames from 0 to the end.' },
+        skin: { type: 'string' },
+        bg: { type: 'string', enum: ['dark', 'light', 'checker'], description: 'Frame background, default dark (like most slot games).' }
+      }
+    }
+  },
+  {
+    name: 'sandbox_remove', title: 'Remove sandbox item', mutates: true, destructive: true,
+    description: 'Take an item off the sandbox. The sandbox has no history: only the library copy (if saved) stays. Ask the user first unless they asked for it.',
+    inputSchema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] }
+  },
+  {
+    name: 'sandbox_save', title: 'Save to library', mutates: true,
+    description: 'Save a sandbox item to the component library (settings, parts, animations with keys, images, a thumbnail), reusable in any project. An item that came from the library or was saved before updates its library entry when you may edit it (its author or an admin); otherwise, or with as_new, a new entry is made.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: sbId,
+        label: { type: 'string', description: 'Title in the user\'s language.' },
+        note: { type: 'string', description: 'One line: what it is, which game, which animations the game calls.' },
+        tags: { type: 'array', items: { type: 'string' }, description: 'Kinds for search: collector, meter, logo, popup, character...' },
+        as_new: { type: 'boolean' }
+      }
+    }
+  },
+  {
+    name: 'sandbox_to_project', title: 'Sandbox to drafts', mutates: true,
+    description: 'Copy a sandbox item into the project\'s drafts («Чернетки»: a component card, exported with the other spines). Only when the user asks. The spine name gets _2, _3 if taken.',
+    inputSchema: { type: 'object', properties: { id: sbId, name: { type: 'string', description: 'Spine name in the project, default the item\'s.' } } }
+  },
+  {
+    name: 'library_list', title: 'Component library',
+    description: 'Saved components to reuse: id, label, spine, size, parts, animations, note, tags, author, date. query filters by words in label, spine, note, tags or author. With id: the full settings of that component (parts, animations with keys) to learn from or copy. Read-only.',
+    inputSchema: { type: 'object', properties: { query: { type: 'string' }, id: { type: 'string' } } }
+  },
+  {
+    name: 'library_add', title: 'Library to drafts', mutates: true,
+    description: 'Copy a library component with its images straight into the project\'s drafts («Чернетки»). Only when the user asks. The spine name gets _2, _3 if taken.',
+    inputSchema: { type: 'object', properties: { id: { type: 'string', description: 'Library item id.' }, name: { type: 'string', description: 'Optional new spine name.' } }, required: ['id'] }
+  },
+  {
+    name: 'library_remove', title: 'Remove from library', mutates: true, destructive: true,
+    description: 'Delete a component from the library. Only its author (or an admin) can, and only when they asked.',
+    inputSchema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] }
   }
 ];
 
-export { TOOLS, INSTRUCTIONS, PRESETS };
+export { TOOLS, INSTRUCTIONS, PRESETS, GUIDE };
 
 export const listTools = TOOLS => TOOLS.map(t => ({
   name: t.name,
   title: t.title,
   description: t.description,
   inputSchema: t.inputSchema,
-  annotations: { title: t.title, readOnlyHint: !t.mutates && !['open_kit', 'export_drafts', 'export_component', 'spin', 'preview', 'show_layout'].includes(t.name), destructiveHint: !!t.destructive || t.name === 'remove_component' || t.name === 'set_symbols', openWorldHint: false }
+  annotations: { title: t.title, readOnlyHint: !t.mutates && !['open_kit', 'export_drafts', 'export_component', 'spin', 'preview', 'show_layout', 'sandbox_preview'].includes(t.name), destructiveHint: !!t.destructive || t.name === 'remove_component' || t.name === 'set_symbols', openWorldHint: false }
 }));
 
 export const LABELS = {
@@ -312,11 +494,14 @@ export const LABELS = {
   preview: 'превʼю', screenshot: 'скріншот', spin: 'спін', export_drafts: 'експорт драфту',
   get_layouts: 'читає лейаути', update_layout: 'лейаут', place_components: 'компоненти на лейауті', import_layouts: 'імпорт лейаутів', show_layout: 'показує лейаут',
   export_component: 'експорт компонента', import_component: 'імпорт компонента',
-  upload_files: 'завантаження файлів', get_history: 'читає історію', restore_version: 'відкат', save_version: 'версія'
+  upload_files: 'завантаження файлів', get_history: 'читає історію', restore_version: 'відкат', save_version: 'версія',
+  sandbox_guide: 'читає правила пісочниці', sandbox_get: 'читає пісочницю', sandbox_new: 'новий компонент у пісочниці', sandbox_update: 'пісочниця', sandbox_preview: 'дивиться пісочницю',
+  sandbox_remove: 'прибрав з пісочниці', sandbox_save: 'зберіг у бібліотеку', sandbox_to_project: 'з пісочниці в чернетки',
+  library_list: 'бібліотека', library_add: 'з бібліотеки в чернетки', library_remove: 'прибрав з бібліотеки'
 };
 
 const REF = 'A ref "upload:<id>" from upload_files (PNG / JPEG / WebP). The server cannot read local paths.';
-const SERVER_SIDE = new Set(['kit_status', 'list_projects', 'open_project', 'upload_files', 'get_history', 'restore_version', 'save_version']);
+const SERVER_SIDE = new Set(['kit_status', 'list_projects', 'open_project', 'upload_files', 'get_history', 'restore_version', 'save_version', 'sandbox_guide', 'library_list', 'library_remove']);
 
 const refs = schema => {
   if (!schema || typeof schema !== 'object') return schema;
@@ -327,7 +512,8 @@ const refs = schema => {
       out.properties = {};
       for (const [name, p] of Object.entries(v)) {
         if (name === 'image') out.properties.image = { type: 'string', description: REF };
-        else if (name === 'blur_image') out.properties.blur_image = { type: ['string', 'null'], description: 'Ref "upload:<id>" of the motion-blurred image for the symbol_<name>_blur skin. Omitted: the kit blurs the symbol image itself. null drops an uploaded one.' };
+        else if (name === 'from_file') out.properties.from_file = { type: 'string', description: 'Ref "upload:<id>" of a .component.json file (upload_files).' };
+        else if (name === 'blur_image') out.properties.blur_image ={ type: ['string', 'null'], description: 'Ref "upload:<id>" of the motion-blurred image for the symbol_<name>_blur skin. Omitted: the kit blurs the symbol image itself. null drops an uploaded one.' };
         else out.properties[name] = refs(p);
       }
     } else out[k] = refs(v);
@@ -368,7 +554,7 @@ const HTTP_EXTRA = [
 ];
 
 const HTTP_OVERRIDES = {
-  kit_status: { description: 'Who you are on the team server, which project this MCP session works on (with its link /p/<id>), and who is in that project now. After a server restart the session has no project: open it again.' },
+  kit_status: { description: 'Who you are on the team server, which project this MCP session works on (with its link /p/<id>), who is in that project now, and which projects you have open in the browser right now (viewing): the sandbox and the drafts update live there. After a server restart the session has no project: open it again.' },
   list_projects: { description: 'Projects on the team server (id, name, grid, last change and who made it; open = the project of this MCP session). Use before asking the user which project to fill.' },
   open_project: { description: 'Make an existing project (id or exact name) the project of this MCP session. It never switches what people have open. Only after the user chose it.' },
   create_project: { description: 'Create a new project on the team server and make it the project of this MCP session. Only after the user asked for a new project.' },
@@ -384,6 +570,8 @@ const HTTP_OVERRIDES = {
     description: 'Add a component from a .component.json (made by export_component or the card\'s «Експорт») to the project, with its images. Upload the file with upload_files first. The spine name gets _2, _3 if taken; the layout bone is kept when the project has it.',
     inputSchema: { type: 'object', properties: { ref: { type: 'string', description: 'Ref "upload:<id>" of the .component.json file.' }, name: { type: 'string', description: 'Optional new spine name.' } }, required: ['ref'] }
   },
+  library_list: { description: 'The team\'s component library on the server (made by people and Claude): id, label, spine, size, parts, animations, note, tags, author, date. query filters by words in label, spine, note, tags or author. With id: the full settings of that component (parts, animations with keys) to learn from or copy. Read-only.' },
+  library_remove: { description: 'Delete a component from the team library. Only its author can, and only when they asked.' },
   import_layouts: {
     description: 'Load the game\'s own layout files (Spine JSON with a game_size bone, e.g. <art repo>/skins/main/Motion/layouts/layout_*.json or the stripped {fileName, bones} build files) into the project. Upload them with upload_files first. A layout with the same file name is replaced; mode "replace" makes the list exactly these files. Component bindings stay.',
     inputSchema: { type: 'object', properties: { refs: { type: 'array', items: { type: 'string' }, description: 'Refs "upload:<id>" of the .json files.' }, mode: { type: 'string', enum: ['merge', 'replace'] } }, required: ['refs'] }
@@ -410,4 +598,5 @@ Workflow:
 7. export_drafts returns a download link with a curl command when the user wants files.
 8. Custom components (collectors, meters, characters, panels like Lucky 5): add_component (template custom or character) or update_component with parts (extra images: each part is its own bone + slot with the same name, region art/<spine>_<part>; parent, x/y from the parent's image centre with y up, w/h, pivot, behind, blend, setup alpha, placeholder shape/color) and per-animation keys ({"<part|art|spacer|all>": [{"t": 0, "y": 0, "alpha": 0, "ease": "ease-out"}, {"t": 0.3, "y": 120, "alpha": 1}]}). Use anims_mode "merge" to change one animation without resending the rest. Then preview each new animation (at several "at" values) and fix what looks wrong. export_component gives a .component.json download; import_component adds such a file (uploaded) to the project.
 9. Other people may be editing the same project at the same time: before a big change, say what you are going to do. Every change of yours is recorded as «Claude · <person>» in the history and can be rolled back (get_history, restore_version); save_version names the current state.
+10. ${SANDBOX_STEP} It belongs to the user of this MCP session and is stored on the server; the sandbox tools still run inside the project of this MCP session, so open one first (prefer the one the user has open: kit_status → viewing; opening a project only sets this session's project, it changes nothing). The user watches the changes live in the «Пісочниця» tab of whatever project they have open. The library is shared by the whole team: save there what is worth reusing, with a clear label and note.
 Talk to the user in their language (the kit UI is Ukrainian). Motion presets: ${PRESETS}. Events format: "onEvent@0.5, onOther(2)@0.1".`;
