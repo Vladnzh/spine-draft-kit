@@ -175,9 +175,9 @@ if (zip) {
       const sk = new core.Skeleton(data);
       if (!data.defaultSkin && data.skins.length) sk.setSkin(data.skins[0]);
       for (const a of data.animations) { const st = new core.AnimationState(new core.AnimationStateData(data)); st.setAnimation(0, a.name, false); for (let t = 0; t < a.duration + 0.05; t += 1 / 60) { st.update(1 / 60); st.apply(sk); sk.updateWorldTransform(); } }
-      const ed = JSON.parse(readFileSync(join(root, 'spine-editor', name, name + '.json'), 'utf8'));
-      if (ed.skeleton.images !== './images/') bad.push(`${name}: editor json images path`);
-      for (const r of atlas.regions) if (!existsSync(join(root, 'spine-editor', name, 'images', r.name + '.png'))) bad.push(`${name}: editor image ${r.name}`);
+      const ed = JSON.parse(readFileSync(join(root, 'spine-editor', name + '.json'), 'utf8'));
+      if (ed.skeleton.images !== './') bad.push(`${name}: editor json images path`);
+      for (const r of atlas.regions) if (!existsSync(join(root, 'spine-editor', r.name + '.png'))) bad.push(`${name}: editor image ${r.name}`);
     } catch (e) { bad.push(`${name}: ${e.message}`); }
   }
   ok('every zipped spine parses, plays, has matching pages and editor images', !bad.length, bad.slice(0, 6).join(' | '));
@@ -203,14 +203,14 @@ if (zip) {
   await sleep(500);
   const d2 = await send('DOM.getDocument');
   const fa = await send('DOM.querySelector', { nodeId: d2.result.root.nodeId, selector: '[data-id="frame_above"] input[type="file"]' });
-  await send('DOM.setFileInputFiles', { nodeId: fa.result.nodeId, files: [join(root, 'spine-editor/animation_reels_frame_above/images/art/reels_frame_above.png')] });
+  await send('DOM.setFileInputFiles', { nodeId: fa.result.nodeId, files: [join(root, 'spine-editor/art/reels/frame_above.png')] });
   await sleep(1200);
   const note = await ev(`(document.querySelector('[data-id="frame_above"] .img-row .note') || {}).textContent || ''`);
   ok('uploaded frame finds its transparent window', /вікно \d+×\d+ px/.test(note), note);
   const d3 = await send('DOM.getDocument');
   const si = await send('DOM.querySelector', { nodeId: d3.result.root.nodeId, selector: '[data-id="symbols"] .img-row input[type="file"]' });
   const before = await ev(`[...document.querySelectorAll('.tile:not(.add)')].length`);
-  await send('DOM.setFileInputFiles', { nodeId: si.result.nodeId, files: [join(root, 'spine-editor/animation_symbol_high_1/images/art/reels/high_1.png')] });
+  await send('DOM.setFileInputFiles', { nodeId: si.result.nodeId, files: [join(root, 'spine-editor/art/reels/high_1.png')] });
   await sleep(1200);
   const after = JSON.parse(await ev(`JSON.stringify({ n: [...document.querySelectorAll('.tile:not(.add)')].length, sel: (document.querySelector('.tile[aria-pressed="true"] span') || {}).textContent, btn: [...document.querySelectorAll('.sym-edit .btn')].map(b => b.textContent).join('/') })`));
   ok('symbol PNG lands on the matching symbol', after.n === before && after.sel === 'high_1' && /Прибрати картинку/.test(after.btn), JSON.stringify(after));

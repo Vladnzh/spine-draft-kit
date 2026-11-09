@@ -14,6 +14,8 @@ const DATA = process.env.SPINE_KIT_DATA || join(HERE, 'projects');
 const VERSION = '1.0.0';
 const PROTOCOLS = ['2025-11-25', '2025-06-18', '2025-03-26', '2024-11-05'];
 const IMAGE_EXT = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp' };
+const FINAL_EXT = { ...IMAGE_EXT, '.json': 'application/json', '.atlas': 'text/plain' };
+const finalType = n => /\.component\.json$/i.test(n) ? null : /\.atlas(\.txt)?$/i.test(n) ? 'text/plain' : FINAL_EXT[extname(n).toLowerCase()] || null;
 const SKIP_DIRS = new Set(['node_modules', '.git', '.idea', '.vscode', 'dist', '.trash']);
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -53,6 +55,7 @@ async function prepare(tool, args) {
   const a = JSON.parse(JSON.stringify(args || {}));
   if (tool === 'import_layouts') return { mode: a.mode, files: layoutFiles(a.paths) };
   if (tool === 'import_component') return { name: a.name, file: await uploadComponent(a.path) };
+  if (tool === 'import_final') { a.files = await finalFiles(a.files); return a; }
   if (tool === 'sandbox_new' && typeof a.from_file === 'string' && a.from_file) {
     a.file = await uploadComponent(a.from_file);
     delete a.from_file;
@@ -101,6 +104,34 @@ function layoutFiles(paths) {
   }
   if (!files.length) throw new Error(`JSON-файлів немає: ${list.join(', ')}`);
   return files;
+}
+
+async function finalFiles(paths) {
+  const list = (Array.isArray(paths) ? paths : [paths]).filter(p => typeof p === 'string' && p);
+  if (!list.length) throw new Error('files порожній: дай шляхи до Spine JSON, .atlas і PNG сторінок атласу або до папки з ними');
+  const found = new Set();
+  for (const p of list.map(x => resolve(x))) {
+    if (!existsSync(p)) throw new Error(`Немає: ${p}`);
+    if (!statSync(p).isDirectory()) { found.add(p); continue; }
+    for (const n of readdirSync(p).sort()) if (!n.startsWith('.') && finalType(n) && statSync(join(p, n)).isFile()) found.add(join(p, n));
+  }
+  if (!found.size) throw new Error(`Немає Spine JSON, .atlas чи PNG / JPEG / WebP: ${list.join(', ')}`);
+  if (found.size > 200) throw new Error(`Забагато файлів (${found.size}): дай папку експорту одного компонента або самі файли`);
+  let total = 0;
+  for (const f of found) {
+    if (!finalType(basename(f)) || !statSync(f).isFile()) throw new Error(`Не підходить (потрібен Spine JSON, .atlas або PNG / JPEG / WebP): ${f}`);
+    const mb = finalType(basename(f)) === 'text/plain' ? 16 : 64;
+    if (statSync(f).size > mb * 1024 * 1024) throw new Error(`Завеликий файл (більше ${mb} МБ): ${f}`);
+    total += statSync(f).size;
+  }
+  if (total > 1024 * 1024 * 1024) throw new Error('Разом понад 1 ГБ: дай папку експорту одного компонента або самі файли');
+  const out = [];
+  for (const f of found) {
+    const r = await api(`/api/bridge/blobs?name=${encodeURIComponent(basename(f))}`, { method: 'PUT', headers: { 'content-type': finalType(basename(f)) }, body: readFileSync(f) });
+    if (!r.data.id) throw new Error(r.data.error || 'upload failed');
+    out.push({ blob: r.data.id, name: basename(f), path: f });
+  }
+  return out;
 }
 
 function imageSize(path) {

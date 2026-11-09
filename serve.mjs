@@ -5,7 +5,7 @@ import { spawnSync } from 'node:child_process';
 import { join, dirname, resolve, basename } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
-import { openData, lockInfo, imageInfo, ID, KIT } from './server/data.mjs';
+import { openData, lockInfo, imageInfo, textInfo, ID, KIT } from './server/data.mjs';
 import { createHub } from './server/hub.mjs';
 import { createAuth } from './server/auth.mjs';
 import { createHttp, limiter } from './server/http.mjs';
@@ -192,10 +192,10 @@ function importOne(src, data, hub, by) {
   if (!settings || !Array.isArray(settings.components)) throw new Error('це не проект кита');
   const images = {}, skipped = [];
   for (const f of files) {
-    const info = f.buf && imageInfo(f.buf);
+    const info = f.buf && (imageInfo(f.buf) || textInfo(f.buf));
     if (!info) { skipped.push(f.key); continue; }
     const sha = data.blobPut(f.buf);
-    images[f.key] = { sha, name: f.name, type: info.type, w: info.w, h: info.h };
+    images[f.key] = { sha, name: f.name, type: info.type, w: info.w || 0, h: info.h || 0 };
   }
   const now = Date.now();
   const doc = { kit: KIT, id: ID.test(id || '') && !data.project(id) ? id : 'c' + now.toString(36) + Math.random().toString(36).slice(2, 7), v: 1, created: created || now, createdBy: { email: by.email, name: by.name }, updated: updated || now, updatedBy: { email: by.email, name: by.name }, settings, images };

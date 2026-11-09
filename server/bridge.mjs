@@ -1,15 +1,19 @@
 import { mkdirSync, readdirSync, readFileSync, writeFileSync, renameSync, rmSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, createHash } from 'node:crypto';
 
 const ID = /^[A-Za-z0-9_-]{1,64}$/;
-const MIME = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif' };
-const EXT = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp', 'image/gif': 'gif' };
+const MIME = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif', json: 'application/json', atlas: 'text/plain' };
+const EXT = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp', 'image/gif': 'gif', 'application/json': 'json', 'text/plain': 'atlas' };
 const LOOPBACK = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
 const BLOB_TTL = 15 * 60 * 1000;
 
 const slug = s => String(s || '').toLowerCase().normalize('NFKD').replace(/[^\w-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 48) || 'project';
-const fileOf = key => String(key).replace(/[^\w.-]+/g, '_');
+const fileOf = key => {
+  const k = String(key);
+  const f = k.replace(/[^\w.-]+/g, '_');
+  return /^[\w.:-]*$/.test(k) ? f : `${f}-${createHash('sha256').update(k).digest('hex').slice(0, 10)}`;
+};
 
 function writeAtomic(path, data) {
   const tmp = `${path}.tmp-${process.pid}`;
@@ -239,6 +243,7 @@ export function createBridge({ port, kitDir, dataDir }) {
     handle(req, res) {
       const url = new URL(req.url, 'http://localhost');
       if (!url.pathname.startsWith('/api/')) return false;
+      res.setHeader('x-content-type-options', 'nosniff');
       if (!allowed(req)) { json(res, 403, { error: 'forbidden' }); return true; }
       routes(req, res, url).catch(e => { if (!res.headersSent) json(res, 500, { ok: false, error: e.message }); else res.end(); });
       return true;

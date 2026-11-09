@@ -7,6 +7,20 @@ const DATA = process.env.SPINE_KIT_DATA || join(HERE, 'projects');
 
 const PRESETS = 'hold, fade_in, fade_out, pop_in, pop_out, pulse, breathe, land, win, shake, float_up, glow, flash';
 const SANDBOX_STEP = 'Sandbox (the «Пісочниця» tab): the user\'s PERSONAL workbench to test and make components with a live preview. Only they and their Claude see it, it is the same in every project, it is not in the drafts, their export or the project history (so save what matters to the library). Use it for every new component or animation experiment. Call sandbox_guide once first (rules and recipes for a good result in 2-3 calls), look for a base in library_list, then sandbox_new with everything planned in one call and preview: true, read the filmstrip, fix with sandbox_update (anims_mode "merge", preview), check everything with sandbox_preview animation "all". When the user likes it: sandbox_save puts it into the component library (reusable in any project and game); sandbox_to_project or library_add copy it into the drafts only when the user asks. Changing the sandbox needs no permission; the drafts do.';
+const finalStep = how => `Animator finals: the drafts go to animators, who polish them in Spine Editor (first animations, text spacers, events) and export under the same names. When the user brings such an export for a component (<spine>.json, <spine>.atlas and every .png page${how}; for symbols or reels the file names tell which spine they belong to), call import_final with apply false first. It checks the export against the component's draft, the contract the game and the art-repo validator rely on, and returns errors, warnings (each with an id) and the changes (animations, durations, events, spacers, skins, size, images). Errors block the import: tell the user what to fix in Spine and re-export; never change the component or the files to make an error go away. Show the user every warning as it is (title and detail) and the main changes, and ask about each warning; never accept a warning on your own, in bulk or because it looks harmless. Then call import_final with apply true, the same files, check = the check value of that result and accept = exactly the ids the user confirmed; if it answers that the warnings changed, show the new ones and ask again. If runtime_checked is false, the game-load, spacer, size and seam checks did not run: say so. After the import the preview and the export (zip, art repo) use the final instead of the draft. The component settings stay the contract: if they change later, get_project and the card show that the final no longer matches, so tell the user and suggest a new export or remove_final. preview with draft true shows the kit draft for comparison; remove_final goes back to the draft, only when the user asks.`;
+const FINAL_DESC = 'Check an animator\'s finished Spine export (json, atlas and png pages from Spine Editor, under the draft\'s names) against a component\'s draft and, when allowed, import it INSTEAD of the draft: the preview and the export (zip, art repo) then use the animator\'s files. apply false (default) only checks: it returns errors, warnings (id, title, detail) and the changes, and nothing changes. apply true imports only when there are no errors, every warning id is in accept and check is the value from the apply false result (if the files or the draft changed since, nothing is imported and the new warnings come back). Errors: another Spine version, nonessential data, missing skins, animations, spacers or events of the draft, missing, broken or oversized (over 8192 px) atlas pages, missing regions, page names taken by another spine, a file the runtime cannot load. Warnings: anything that differs from the draft (new or reordered animations, durations beyond ±10 %, moved spacers or events, changed event fields, loops with a seam, another size or root, removed slots or images, a kit draft instead of an export, the Spine runtime not loaded so the runtime checks did not run). The user reads and confirms each warning; show them all and never accept one yourself.';
+const finalSchema = files => ({
+  type: 'object',
+  properties: {
+    component: { type: 'string', description: 'Component id, spine name (e.g. animation_last_5, animation_symbol_high_1) or type (symbols, reels, frame_under, frame_above).' },
+    files: { type: 'array', items: { type: 'string' }, description: files + ' Files are matched to the component\'s spines by name; a component with one spine takes a single .json under any name.' },
+    spine: { type: 'string', description: 'Only this spine of the component (symbols and reels have several).' },
+    apply: { type: 'boolean', description: 'false (default): check only, nothing changes. true: import, allowed only without errors and with every warning id in accept.' },
+    accept: { type: 'array', items: { type: 'string' }, description: 'Ids of the warnings the user read and confirmed, one by one, exactly as the check returned them ("<spine>:<id>" when several spines are imported at once). Never fill it on your own.' },
+    check: { type: 'string', description: 'The check value returned by the apply false call whose warnings the user confirmed. Required for apply true when there are warnings.' }
+  },
+  required: ['component', 'files']
+});
 
 const GUIDE = `Sandbox guide: a good-looking component in 2-3 calls.
 
@@ -87,8 +101,9 @@ Workflow:
 5. Look at the result: screenshot (grid + preview), preview a spine and animation, spin to play a real reel spin. Fix what looks wrong.
 6. Layouts (the «Лейаути» tab): every project starts with the Pandora template layouts layout_landscape_16_9 (2560x1440), layout_landscape_4_3 (1920x1440), layout_portrait_9_16 (1440x2560); the game picks one by window aspect and puts each component on a position_* bone. If the game already has layouts (art repo skins/main/Motion/layouts/), import_layouts them (ask before replacing). get_layouts shows bones and which component sits where; place_components binds components to bones; update_layout moves, adds, renames bones; show_layout with screen "all" checks wider and taller windows; spin with layout plays the spin there.
 7. export_drafts writes the zip with all spines (and the layouts) when the user wants files.
-8. Custom components (collectors, meters, characters, panels like Lucky 5): add_component (template custom or character) or update_component with parts (extra images: each part is its own bone + slot with the same name, region art/<spine>_<part>; parent, x/y from the parent's image centre with y up, w/h, pivot, behind, blend, setup alpha, placeholder shape/color) and per-animation keys ({"<part|art|spacer|all>": [{"t": 0, "y": 0, "alpha": 0, "ease": "ease-out"}, {"t": 0.3, "y": 120, "alpha": 1}]}). Use anims_mode "merge" to change one animation without resending the rest. Then preview each new animation (at several "at" values) and fix what looks wrong. export_component saves a component (settings, parts, keys, images) to a .component.json file; import_component adds such a file to the open project (another game or project).
+8. Custom components (collectors, meters, characters, panels like Lucky 5): add_component (template custom or character) or update_component with parts (extra images: each part is its own bone + slot with the same name, region art/<spine>/<part>; parent, x/y from the parent's image centre with y up, w/h, pivot, behind, blend, setup alpha, placeholder shape/color) and per-animation keys ({"<part|art|spacer|all>": [{"t": 0, "y": 0, "alpha": 0, "ease": "ease-out"}, {"t": 0.3, "y": 120, "alpha": 1}]}). Use anims_mode "merge" to change one animation without resending the rest. Then preview each new animation (at several "at" values) and fix what looks wrong. export_component saves a component (settings, parts, keys, images) to a .component.json file; import_component adds such a file to the open project (another game or project).
 9. ${SANDBOX_STEP} The user sees every step live in the «Пісочниця» tab (a project must be open in the kit). The sandbox and the library of this local kit live in the browser.
+10. ${finalStep(' as local paths or their folder')}
 Talk to the user in their language (the kit UI is Ukrainian). Motion presets: ${PRESETS}. Events format: "onEvent@0.5, onOther(2)@0.1".`;
 
 const KEYS = 'Custom components only. Keyframes on top of the preset, as {"<target>": [key, ...]}. target: "art" (main image), a part name, a spacer slot (e.g. txt_count), a progress-bar part (bar, bar_fill, bar_head, bar_glow, bar_flash, bar_shine) or "all" (alpha / color of every visible slot). key: t (seconds, required), x, y (px offset from the setup position, y up), scale (both axes) or sx / sy (multiplier of setup), rotate (degrees counter-clockwise, added to setup), alpha (0..1, absolute), color ("ffcc00" tint, absolute), ease (how the motion runs from THIS key to the next: linear default, ease-in, ease-out, ease-in-out, back, soft, shake, stepped, or a bezier [x1, y1, x2, y2] like CSS cubic-bezier). A key keeps the previous value of channels it leaves out; a channel whose first key is after 0 starts from the setup pose at t 0; after the last key the value holds. Keys override the preset on the same channels (translate, scale, rotate, rgb, alpha). The animation lasts max(duration, last key t). null removes the keys.';
@@ -106,7 +121,7 @@ const animsMode = { type: 'string', enum: ['replace', 'merge'], description: '"r
 const pivot = { type: 'string', description: 'Rotation / scale point: center (default), bottom (characters: feet stay put), top, left, right, or "x:y" in px from the image centre, y up. Position fields still mean the image centre.' };
 const parts = {
   type: 'array',
-  description: 'Custom components only. Extra images inside the component, drawn in list order. Each part becomes a bone and a slot with the same name and a region art/<spine>_<part>. Matched by name: existing parts are updated (only the fields given), new ones are added.',
+  description: 'Custom components only. Extra images inside the component, drawn in list order. Each part becomes a bone and a slot with the same name and a region art/<spine>/<part>. Matched by name: existing parts are updated (only the fields given), new ones are added.',
   items: {
     type: 'object',
     properties: {
@@ -268,9 +283,19 @@ const TOOLS = [
     inputSchema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] }
   },
   {
+    name: 'import_final', title: 'Import animator final', mutates: true, timeout: 240000,
+    description: FINAL_DESC,
+    inputSchema: finalSchema('Absolute paths of the export files (<spine>.json, <spine>.atlas, every .png page of the atlas) or of a folder with them.')
+  },
+  {
+    name: 'remove_final', title: 'Remove animator final', mutates: true, destructive: true,
+    description: 'Drop the imported animator final of a component (or of one of its spines): the preview and the export go back to the kit\'s draft. The animator\'s own files are not touched. Only when the user asked.',
+    inputSchema: { type: 'object', properties: { component: { type: 'string', description: 'Component id, spine name or type.' }, spine: { type: 'string', description: 'Only this spine. Omitted: every final of the component.' } }, required: ['component'] }
+  },
+  {
     name: 'preview', title: 'Preview spine',
-    description: 'Show a spine animation in the kit preview (the user sees it too) and return a screenshot of it.',
-    inputSchema: { type: 'object', properties: { spine: { type: 'string', description: 'e.g. animation_symbol_high_1' }, animation: { type: 'string' }, skin: { type: 'string' }, at: { type: 'number', description: 'Seconds into the animation for the screenshot, default 0.4.' } } }
+    description: 'Show a spine animation in the kit preview (the user sees it too) and return a screenshot of it. A spine with an imported animator final shows the final unless draft is true.',
+    inputSchema: { type: 'object', properties: { spine: { type: 'string', description: 'e.g. animation_symbol_high_1' }, animation: { type: 'string' }, skin: { type: 'string' }, at: { type: 'number', description: 'Seconds into the animation for the screenshot, default 0.4.' }, draft: { type: 'boolean', description: 'Show the kit draft even when the spine has an imported animator final.' } } }
   },
   {
     name: 'screenshot', title: 'Screenshot',
@@ -493,7 +518,7 @@ export const LABELS = {
   update_game: 'налаштування гри', set_symbols: 'символи', update_component: 'компонент', add_component: 'додав компонент', remove_component: 'прибрав компонент',
   preview: 'превʼю', screenshot: 'скріншот', spin: 'спін', export_drafts: 'експорт драфту',
   get_layouts: 'читає лейаути', update_layout: 'лейаут', place_components: 'компоненти на лейауті', import_layouts: 'імпорт лейаутів', show_layout: 'показує лейаут',
-  export_component: 'експорт компонента', import_component: 'імпорт компонента',
+  export_component: 'експорт компонента', import_component: 'імпорт компонента', import_final: 'імпорт фіналу', remove_final: 'повернув драфт',
   upload_files: 'завантаження файлів', get_history: 'читає історію', restore_version: 'відкат', save_version: 'версія',
   sandbox_guide: 'читає правила пісочниці', sandbox_get: 'читає пісочницю', sandbox_new: 'новий компонент у пісочниці', sandbox_update: 'пісочниця', sandbox_preview: 'дивиться пісочницю',
   sandbox_remove: 'прибрав з пісочниці', sandbox_save: 'зберіг у бібліотеку', sandbox_to_project: 'з пісочниці в чернетки',
@@ -524,7 +549,7 @@ const refs = schema => {
 const HTTP_EXTRA = [
   {
     name: 'upload_files', title: 'Upload files',
-    description: 'Get one-time upload links for local files (images, layout_*.json, .component.json). Run the returned curl command (one command for all files; put the real local paths in), then pass each ref ("upload:<id>") to set_symbols / update_component / add_component (image, blur_image, parts[].image), import_layouts (refs) or import_component (ref). Links work once, PUT only, for 15 minutes; a ref stays valid for an hour for you only.',
+    description: 'Get one-time upload links for local files (images, layout_*.json, .component.json, an animator\'s Spine export: <spine>.json, <spine>.atlas, .png pages). Run the returned curl command (one command for all files; put the real local paths in), then pass each ref ("upload:<id>") to set_symbols / update_component / add_component (image, blur_image, parts[].image), import_layouts (refs), import_component (ref) or import_final (files). Links work once, PUT only, for 15 minutes; a ref stays valid for an hour for you only.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -566,6 +591,7 @@ const HTTP_OVERRIDES = {
     description: 'Save one custom component of the project (settings, parts, animations with keys, its images embedded, its layout bone) as a .component.json and return a download link (GET, 15 minutes) with a curl command, so it can be imported into another project with import_component.',
     inputSchema: { type: 'object', properties: { id: { type: 'string', description: 'Component id or spine name.' } }, required: ['id'] }
   },
+  import_final: { description: FINAL_DESC, inputSchema: finalSchema('Refs "upload:<id>" of the export files (<spine>.json, <spine>.atlas, every .png page of the atlas) from upload_files.') },
   import_component: {
     description: 'Add a component from a .component.json (made by export_component or the card\'s «Експорт») to the project, with its images. Upload the file with upload_files first. The spine name gets _2, _3 if taken; the layout bone is kept when the project has it.',
     inputSchema: { type: 'object', properties: { ref: { type: 'string', description: 'Ref "upload:<id>" of the .component.json file.' }, name: { type: 'string', description: 'Optional new spine name.' } }, required: ['ref'] }
@@ -596,7 +622,8 @@ Workflow:
 5. Look at the result: screenshot (grid + preview), preview a spine and animation, spin to play a real reel spin. Fix what looks wrong.
 6. Layouts (the «Лейаути» tab): every project starts with the Pandora template layouts layout_landscape_16_9 (2560x1440), layout_landscape_4_3 (1920x1440), layout_portrait_9_16 (1440x2560); the game picks one by window aspect and puts each component on a position_* bone. If the game already has layouts (art repo skins/main/Motion/layouts/), upload and import_layouts them (ask before replacing). get_layouts shows bones and which component sits where; place_components binds components to bones; update_layout moves, adds, renames bones; show_layout with screen "all" checks wider and taller windows; spin with layout plays the spin there.
 7. export_drafts returns a download link with a curl command when the user wants files.
-8. Custom components (collectors, meters, characters, panels like Lucky 5): add_component (template custom or character) or update_component with parts (extra images: each part is its own bone + slot with the same name, region art/<spine>_<part>; parent, x/y from the parent's image centre with y up, w/h, pivot, behind, blend, setup alpha, placeholder shape/color) and per-animation keys ({"<part|art|spacer|all>": [{"t": 0, "y": 0, "alpha": 0, "ease": "ease-out"}, {"t": 0.3, "y": 120, "alpha": 1}]}). Use anims_mode "merge" to change one animation without resending the rest. Then preview each new animation (at several "at" values) and fix what looks wrong. export_component gives a .component.json download; import_component adds such a file (uploaded) to the project.
+8. Custom components (collectors, meters, characters, panels like Lucky 5): add_component (template custom or character) or update_component with parts (extra images: each part is its own bone + slot with the same name, region art/<spine>/<part>; parent, x/y from the parent's image centre with y up, w/h, pivot, behind, blend, setup alpha, placeholder shape/color) and per-animation keys ({"<part|art|spacer|all>": [{"t": 0, "y": 0, "alpha": 0, "ease": "ease-out"}, {"t": 0.3, "y": 120, "alpha": 1}]}). Use anims_mode "merge" to change one animation without resending the rest. Then preview each new animation (at several "at" values) and fix what looks wrong. export_component gives a .component.json download; import_component adds such a file (uploaded) to the project.
 9. Other people may be editing the same project at the same time: before a big change, say what you are going to do. Every change of yours is recorded as «Claude · <person>» in the history and can be rolled back (get_history, restore_version); save_version names the current state.
 10. ${SANDBOX_STEP} It belongs to the user of this MCP session and is stored on the server; the sandbox tools still run inside the project of this MCP session, so open one first (prefer the one the user has open: kit_status → viewing; opening a project only sets this session's project, it changes nothing). The user watches the changes live in the «Пісочниця» tab of whatever project they have open. The library is shared by the whole team: save there what is worth reusing, with a clear label and note.
+11. ${finalStep(', uploaded with upload_files (the server cannot read local paths)')}
 Talk to the user in their language (the kit UI is Ukrainian). Motion presets: ${PRESETS}. Events format: "onEvent@0.5, onOther(2)@0.1".`;

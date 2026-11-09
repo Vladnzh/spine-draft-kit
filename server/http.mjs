@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { readBody } from './auth.mjs';
-import { ID, SHA, MIME, imageInfo, imageCheck, sha256 } from './data.mjs';
+import { ID, SHA, MIME, imageInfo, blobCheck, sha256 } from './data.mjs';
 import { routeOf } from './log.mjs';
 import { vendorState } from '../vendor.mjs';
 
@@ -127,12 +127,12 @@ export function createHttp({ data, hub, auth, cfg, page, log, oauth, mcp, files,
       if (m === 'PUT') {
         const wait = rate.upload(s.user.email);
         if (wait) return tooMany(res, wait);
-        if (Number(req.headers['content-length']) > maxImage) return json(res, 413, { error: `картинка більша за ${cfg.maxImageMb || 64} МБ` });
+        if (Number(req.headers['content-length']) > maxImage) return json(res, 413, { error: `файл більший за ${cfg.maxImageMb || 64} МБ` });
         let buf;
         try { buf = await readBody(req, maxImage); }
-        catch (e) { if (e.code === 413) return json(res, 413, { error: `картинка більша за ${cfg.maxImageMb || 64} МБ` }); throw e; }
+        catch (e) { if (e.code === 413) return json(res, 413, { error: `файл більший за ${cfg.maxImageMb || 64} МБ` }); throw e; }
         if (sha256(buf) !== sha) return json(res, 400, { error: 'sha не збігається з байтами' });
-        const c = imageCheck(buf, 8192);
+        const c = blobCheck(buf, 8192);
         if (c.error) return json(res, c.code, { error: c.error });
         data.blobPut(buf);
         return json(res, 200, { sha, type: c.info.type, w: c.info.w, h: c.info.h });

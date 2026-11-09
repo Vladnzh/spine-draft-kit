@@ -17,7 +17,7 @@
   var es = null, live = false, liveTimer = null, retry = 0, authLost = false, netDown = false;
   var presence = [];
   var mcp = null;
-  var hc ={ key: '', entries: null, more: false, token: 0, naming: false, nameText: '' };
+  var hc = { key: '', entries: null, more: false, token: 0, at: null };
   var viewInfo = null;
   var tasks = [], running = false, nested = null;
   var UNDO_MAX = 100, UNDO_MERGE = 1200;
@@ -117,6 +117,7 @@
     if (b.length > 12 && b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46 && b[8] === 0x57 && b[9] === 0x45 && b[10] === 0x42 && b[11] === 0x50) return 'webp';
     return null;
   }
+  function typeOf(k, h) { return /^f:.+:json$/.test(k) ? 'json' : /^f:.+:atlas$/.test(k) ? 'atlas' : h.type; }
   async function hashOf(blob) {
     var h = hashes.get(blob);
     if (h) return h;
@@ -185,12 +186,12 @@
     for (var i = 0; i < keys.length; i++) {
       var k = keys[i], b = blobs[k];
       if (!b) continue;
-      var h = await hashOf(b);
-      if (!h.type) continue;
+      var h = await hashOf(b), type = typeOf(k, h);
+      if (!type) continue;
       var old = base && base.images && base.images[k];
       if (old && old.sha === h.sha) { images[k] = clone(old); continue; }
-      var im = App.state.images[k];
-      images[k] = { sha: h.sha, name: String((im && im.fileName) || b.name || '').slice(0, 200), type: h.type, w: im ? im.w : 0, h: im ? im.h : 0 };
+      var im = App.state.images[k], text = type === 'json' || type === 'atlas';
+      images[k] = { sha: h.sha, name: String((im && im.fileName) || b.name || '').slice(0, 200), type: type, w: im && !text ? im.w : 0, h: im && !text ? im.h : 0 };
     }
     return { settings: clone(settings), images: images };
   }
@@ -323,7 +324,12 @@
       return { ack: null };
     }
     if (!shadow) return { ack: null };
-    var doc = await build(rec.settings, rec.images, shadow);
+    var at = hc.at;
+    var doc = await build(rec.settings, rec.images, at ? at.seen : shadow);
+    if (at) {
+      if (!P.diff(at.seen, doc).length) return { ack: null };
+      if (!(await overwrite(at))) return { ack: null };
+    }
     var ops = anchor(P.diff(shadow, doc), recompute(), doc);
     if (!ops.length) return { ack: null };
     var parts = partsOf(shadow, doc, ops);
@@ -337,10 +343,10 @@
     var keys = Object.keys(rec.images || {});
     for (var i = 0; i < keys.length; i++) {
       var b = rec.images[keys[i]];
-      var h = await hashOf(b);
-      if (!h.type) continue;
+      var h = await hashOf(b), type = typeOf(keys[i], h);
+      if (!type) continue;
       try { await upload(h.sha); } catch (e) { if (e.status === 401) throw e; continue; }
-      images[keys[i]] = { sha: h.sha, name: String(b.name || '').slice(0, 200), type: h.type, w: 0, h: 0 };
+      images[keys[i]] = { sha: h.sha, name: String(b.name || '').slice(0, 200), type: type, w: 0, h: 0 };
     }
     var dims = await Promise.all(Object.keys(images).map(function (k) { return dimsOf(rec.images[k]); }));
     Object.keys(images).forEach(function (k, i) { images[k].w = dims[i].w; images[k].h = dims[i].h; });
@@ -360,15 +366,34 @@
     for (var i = 0; i < list.length; i++) await list[i];
   }
   async function adopt() {
-    var pre = recompute();
+    var pre = shown(recompute());
     var imgs = await filesFor(pre.images);
     await flushLocal();
     var next = recompute();
     if (P.same(shadow, next)) return;
-    if (!P.same(next.images, pre.images)) imgs = await filesFor(next.images);
-    var done = App.applyRemote(next.settings, imgs);
-    shadow = { settings: clone(App.state.s), images: clone(next.images) };
+    var show = shown(next);
+    if (!P.same(show.images, pre.images)) imgs = await filesFor(show.images);
+    var done = App.applyRemote(show.settings, imgs);
+    if (hc.at) hc.at.seen = { settings: clone(App.state.s), images: clone(show.images) };
+    shadow = hc.at ? next : { settings: clone(App.state.s), images: clone(next.images) };
     await done;
+  }
+  async function paint(d) {
+    var show = shown(d);
+    var done = App.applyRemote(show.settings, await filesFor(show.images));
+    if (hc.at) hc.at.seen = { settings: clone(App.state.s), images: clone(show.images) };
+    await done;
+  }
+  function shown(d) {
+    var at = hc.at;
+    if (!at) return d;
+    var out = clone(d);
+    if (at.entry.scope === 'layouts') out.settings.layouts = clone(at.doc.settings.layouts);
+    else {
+      out.settings = Object.assign(clone(omit(at.doc.settings, 'layouts')), { layouts: out.settings.layouts });
+      out.images = clone(at.doc.images || {});
+    }
+    return out;
   }
   function recompute() {
     var next = clone(confirmed);
@@ -388,13 +413,15 @@
     }
     await adopt();
   }
-  async function reload() {
-    if (!pid) return;
-    var doc;
-    try { doc = await getJson('/api/projects/' + pid); } catch (e) { return; }
+  async function fetchDoc() {
+    var doc = await getJson('/api/projects/' + pid);
     confirmed = { settings: doc.settings, images: doc.images };
     lastV = doc.v;
     pending = pending.filter(function (x) { return !x.acked || x.v > doc.v; });
+  }
+  async function reload() {
+    if (!pid) return;
+    try { await fetchDoc(); } catch (e) { return; }
     await adopt();
   }
 
@@ -433,6 +460,8 @@
     undo = [];
     redo = [];
     hc.key = '';
+    hc.at = null;
+    renderBanner();
     known[id] = true;
   }
 
@@ -509,6 +538,12 @@
       b.className = 'sk-banner bad';
       b.appendChild(el('span', { text: 'Сесія завершилась' }));
       b.appendChild(el('button', { type: 'button', class: 'btn sm primary', text: 'Увійти', onclick: function () { window.open('/auth/login?next=' + encodeURIComponent('/auth/done'), '_blank'); } }));
+    } else if (hc.at) {
+      on = true;
+      b.className = 'sk-banner';
+      b.appendChild(el('span', { text: (hc.at.entry.scope === 'layouts' ? 'Лейаути' : 'Чернетки') + ' на версії ' + stamp(hc.at.entry.t) }));
+      b.appendChild(el('button', { type: 'button', class: 'btn sm primary', text: 'Відновити', onclick: restoreAt }));
+      b.appendChild(el('button', { type: 'button', class: 'btn sm', text: 'До поточної', onclick: function () { serial(leave); } }));
     } else if (netDown || (outbox.length && !live)) {
       on = true;
       b.className = 'sk-banner warn';
@@ -691,83 +726,106 @@
     if (hc.key !== pid + ':' + histView()) { hc.entries = null; hc.key = pid + ':' + histView(); loadHist(false); }
     drawHist();
   }
-  function nameStart() {
-    hc.naming = true;
-    hc.nameText = '';
-    drawHist();
-    var i = $('sk-name-in');
-    if (i) i.focus();
-  }
-  function nameForm() {
-    var input = el('input', { type: 'text', id: 'sk-name-in', maxlength: '120', placeholder: 'Наприклад: перед правками рамки', 'aria-label': 'Назва версії' });
-    input.value = hc.nameText;
-    input.addEventListener('input', function () { hc.nameText = input.value; });
-    var done = function () { hc.naming = false; hc.nameText = ''; drawHist(); };
-    var save = async function () {
-      var v = input.value.trim();
-      if (!v) { input.focus(); return; }
-      try {
-        await postJson('/api/projects/' + pid + '/versions', { label: v });
-        toast('Збережено версію «' + v + '»');
-        done();
-      } catch (e) { toast('Не вдалося: ' + e.message); }
-    };
-    input.addEventListener('keydown', function (e) {
-      if (e.key === 'Enter') save();
-      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); done(); }
-    });
-    return el('div', { class: 'sk-h-name' }, [
-      el('p', { text: 'Поточний стан проекту, тобто чернетки й лейаути, з’явиться в історії окремим записом ★ з цією назвою. До нього можна повернутися будь-коли.' }),
-      input,
-      el('div', { class: 'sk-h-name-btns' }, [
-        el('button', { type: 'button', class: 'btn sm ghost', text: 'Скасувати', onclick: done }),
-        el('button', { type: 'button', class: 'btn sm primary', text: 'Зберегти версію', onclick: save })
-      ])
-    ]);
+  function atIndex() {
+    if (!hc.at || !hc.entries || hc.key !== pid + ':' + hc.at.entry.scope) return -1;
+    return hc.entries.map(function (x) { return x.id; }).indexOf(hc.at.entry.id);
   }
   function drawHist() {
     var d = $('hist-dlg'), ul = $('hist-list');
     if (!d || !d.open || !ul) return;
-    var typing = document.activeElement && document.activeElement.id === 'sk-name-in';
     ul.textContent = '';
     if (!hc.entries) { ul.appendChild(el('li', { class: 'sk-h-empty', text: 'Завантаження…' })); return; }
     if (!hc.entries.length) { ul.appendChild(el('li', { class: 'sk-h-empty', text: 'Записів немає' })); return; }
+    var sel = Math.max(0, atIndex());
     hc.entries.forEach(function (e, i) {
       var who = e.by && e.by.kind === 'claude' ? 'Claude · ' + e.by.name : (e.by && e.by.name) || '';
-      var acts = el('span', { class: 'sk-h-act' });
-      var naming = i === 0 && MODE !== 'view' && hc.naming;
-      if (i === 0 && MODE !== 'view' && !naming) acts.appendChild(el('button', { type: 'button', class: 'btn sm', text: 'Назвати версію', title: 'Зберегти поточний стан під своєю назвою', onclick: nameStart }));
-      if (i > 0 && MODE !== 'view') acts.appendChild(el('button', { type: 'button', class: 'btn sm', text: 'Відновити', onclick: function () { restore(e); } }));
-      acts.appendChild(el('button', { type: 'button', class: 'btn sm ghost', text: 'Переглянути', onclick: function () { window.open('/p/' + pid + '?v=' + encodeURIComponent(e.id), '_blank'); } }));
-      if (MODE !== 'view') acts.appendChild(el('button', { type: 'button', class: 'btn sm ghost', text: 'Копія', onclick: function () { copyFrom(e); } }));
-      ul.appendChild(el('li', { class: 'sk-h' + (e.named ? ' named' : '') + (i === 0 ? ' now' : '') }, [
-        avatar(e.by || {}),
-        el('span', { class: 'sk-h-txt' }, [
-          el('span', { class: 'sk-h-l', text: e.named ? '★ ' + e.named : entryLabel(e) }),
-          el('span', { class: 'sk-h-m', text: who + ' · ' + stamp(e.t) + (i === 0 ? ' · зараз' : '') })
+      ul.appendChild(el('li', { class: 'sk-h' + (e.named ? ' named' : '') + (i === sel ? ' now' : '') + (i < sel ? ' later' : '') }, [
+        el('button', { type: 'button', class: 'sk-h-go', 'aria-current': i === sel ? 'step' : null, title: i === sel || MODE === 'view' ? null : i === 0 ? 'Повернутися до поточного стану' : 'Перейти до цієї зміни', onclick: function () { pick(e, i); } }, [
+          avatar(e.by || {}),
+          el('span', { class: 'sk-h-txt' }, [
+            el('span', { class: 'sk-h-l', text: e.named ? '★ ' + e.named : entryLabel(e) }),
+            el('span', { class: 'sk-h-m', text: who + ' · ' + stamp(e.t) + (i === 0 ? ' · зараз' : '') })
+          ])
         ]),
-        naming ? nameForm() : acts
+        i === sel && i > 0 && MODE !== 'view' ? el('div', { class: 'sk-h-act' }, [el('button', { type: 'button', class: 'btn sm primary', text: 'Відновити до цієї зміни', onclick: restoreAt })]) : null
       ]));
     });
     if (hc.more) ul.appendChild(el('li', null, [el('button', { type: 'button', class: 'btn sm ghost', text: 'Ще', onclick: function () { loadHist(true); } })]));
-    if (typing && $('sk-name-in')) $('sk-name-in').focus();
   }
-  async function restore(e) {
-    await serial(flushLocal);
-    try {
-      var r = await postJson('/api/projects/' + pid + '/restore', { entry: e.id, scope: e.scope });
-      toast(r.nothing ? 'Вже в цьому стані' : 'Відновлено: ' + entryLabel(e));
-    } catch (x) { toast('Не вдалося відновити: ' + x.message); }
+  function pick(e, i) {
+    if (MODE === 'view' || !pid) return;
+    if (i === 0) { if (hc.at) serial(leave); return; }
+    if (hc.at && hc.at.entry.id === e.id) return;
+    serial(function () { return visit(e); });
   }
-  async function copyFrom(e) {
-    try {
-      var r = await postJson('/api/projects/' + pid + '/copy', { entry: e.id });
-      known[r.id] = true;
-      var d = $('hist-dlg');
-      if (d && d.open) App.panel(d, false);
-      await App.openProject(r.id);
-      toast('Створено копію');
-    } catch (x) { toast('Не вдалося: ' + x.message); }
+  async function visit(e) {
+    await flushLocal();
+    var r;
+    try { r = await getJson('/api/projects/' + pid + '/history/' + encodeURIComponent(e.id)); }
+    catch (x) { toast('Не вдалося відкрити версію'); return; }
+    hc.at = { entry: e, doc: r.doc, seen: null };
+    hc.at.seen = shown(recompute());
+    renderBanner();
+    drawHist();
+    await paint(recompute());
+  }
+  async function leave() {
+    if (!hc.at) return;
+    hc.at = null;
+    renderBanner();
+    drawHist();
+    var next = recompute();
+    var done = App.applyRemote(next.settings, await filesFor(next.images));
+    shadow = { settings: clone(App.state.s), images: clone(next.images) };
+    await done;
+  }
+  function restoreAt() {
+    var at = hc.at;
+    if (!at) return;
+    serial(async function () {
+      if (hc.at !== at) return;
+      try { await postJson('/api/projects/' + pid + '/restore', { entry: at.entry.id, scope: at.entry.scope }); }
+      catch (x) { toast('Не вдалося відновити: ' + x.message); return; }
+      hc.at = null;
+      renderBanner();
+      drawHist();
+      toast('Відновлено версію ' + stamp(at.entry.t));
+      await reload();
+    });
+  }
+  async function overwrite(at) {
+    var ok = await ask(at.entry);
+    if (ok) {
+      try { await postJson('/api/projects/' + pid + '/restore', { entry: at.entry.id, scope: at.entry.scope }); }
+      catch (x) { ok = false; toast('Не вдалося відновити: ' + x.message); }
+    }
+    if (!ok) { await paint(shadow); return false; }
+    hc.at = null;
+    renderBanner();
+    drawHist();
+    try { await fetchDoc(); } catch (x) { return true; }
+    shadow = recompute();
+    return true;
+  }
+  function ask(e) {
+    var d = $('sk-ask');
+    if (!d) {
+      d = el('dialog', { class: 'dlg ask-dlg', id: 'sk-ask', 'aria-labelledby': 'sk-ask-h' }, [
+        el('form', { method: 'dialog' }, [
+          el('div', { class: 'dlg-head' }, [el('h3', { id: 'sk-ask-h', text: 'Перезаписати новіші зміни?' })]),
+          el('div', { class: 'dlg-text' }, [el('p', { id: 'sk-ask-txt' })]),
+          el('div', { class: 'ex-foot' }, [
+            el('button', { class: 'btn ghost', value: '', text: 'Скасувати' }),
+            el('span', { class: 'ask-btns' }, [el('button', { class: 'btn primary', value: 'go', autofocus: true, text: 'Перезаписати' })])
+          ])
+        ])
+      ]);
+      document.body.appendChild(d);
+    }
+    $('sk-ask-txt').textContent = 'Зараз відкрита версія ' + stamp(e.t) + '. Якщо продовжити, вона стане поточною разом із цією зміною, а все, що в ' + (e.scope === 'layouts' ? 'лейаутах' : 'чернетках') + ' змінили пізніше, перезапишеться. В історії ці записи залишаться.';
+    d.returnValue = '';
+    if (!d.open) d.showModal();
+    return new Promise(function (done) { d.addEventListener('close', function () { done(d.returnValue === 'go'); }, { once: true }); });
   }
   async function viewRestore() {
     try {
@@ -796,6 +854,18 @@
         return { id: id, created: doc.created, updated: doc.updated, settings: clone(doc.settings), images: images, history: [] };
       });
     },
+    peek: async function (id, want) {
+      var doc;
+      if (MODE === 'view') doc = viewInfo && viewInfo.id === id ? viewInfo.doc : null;
+      else { try { doc = await getJson('/api/projects/' + encodeURIComponent(id)); } catch (e) { return null; } }
+      if (!doc) return null;
+      var src = {};
+      Object.keys(doc.images || {}).forEach(function (k) { if (!want || want(k)) src[k] = doc.images[k]; });
+      var got = await filesFor(src);
+      var images = {};
+      Object.keys(got).forEach(function (k) { images[k] = got[k].file; });
+      return { id: id, settings: clone(doc.settings), images: images };
+    },
     put: async function (rec) {
       if (MODE === 'view') return;
       if (nested) { var st = stage(rec); nested.push(st); var x = await st; return x.ack; }
@@ -818,14 +888,12 @@
     + '.sk-banner{position:fixed;z-index:60;left:50%;top:12px;transform:translateX(-50%);display:flex;align-items:center;gap:10px;max-width:calc(100% - 32px);padding:8px 8px 8px 16px;border-radius:9999px;background:var(--card);color:var(--ink);border:1px solid rgb(var(--ink-rgb)/.14);font:500 14px/1.3 var(--f-text)}'
     + '.sk-banner[hidden]{display:none}.sk-banner::before{content:"";flex:none;width:8px;height:8px;border-radius:50%;background:var(--brand)}'
     + '.sk-banner.warn::before{background:var(--warning)}.sk-banner.bad::before{background:var(--destructive)}.sk-banner.warn{padding-right:16px}'
-    + '.sk-h-name{grid-column:2;display:grid;gap:10px;padding:4px 0 2px}.sk-h-name p{margin:0;font-size:13px;line-height:1.4;color:rgb(var(--ink-rgb)/.6)}'
-    + '.sk-h-name input{font:inherit;width:100%;height:40px;padding:0 14px;border-radius:12px;border:1px solid var(--line);background:var(--field);color:var(--ink)}'
-    + '.sk-h-name-btns{display:flex;justify-content:flex-end;gap:8px}.sk-h.now .sk-h-act{display:flex}'
-    + '.sk-h{display:grid;grid-template-columns:auto minmax(0,1fr);align-items:center;column-gap:12px;row-gap:6px;min-height:52px;padding:8px 10px;border-radius:16px}'
-    + '.sk-h .sk-av{margin:0;border:0}.sk-h.now{background:rgb(var(--ink-rgb)/.08)}.sk-h.named .sk-h-l{color:var(--achievement);font-weight:600}'
+    + '.sk-h{display:grid;border-radius:16px;transition:opacity 150ms var(--ease),background-color 150ms var(--ease)}'
+    + '.sk-h-go{display:grid;grid-template-columns:auto minmax(0,1fr);align-items:center;column-gap:12px;width:100%;min-height:52px;padding:8px 10px;border:0;border-radius:16px;background:none;text-align:left}'
+    + '.sk-h .sk-av{margin:0;border:0}.sk-h.now{background:rgb(var(--ink-rgb)/.08)}.sk-h.now .sk-h-go{cursor:default}.sk-h.later{opacity:.38}.sk-h.named .sk-h-l{color:var(--achievement);font-weight:600}'
     + '.sk-h-txt{display:grid;gap:2px;min-width:0}.sk-h-l{font-size:15px;line-height:1.35;overflow-wrap:anywhere}.sk-h-m{font:400 13px/1.2 var(--f-num);color:rgb(var(--ink-rgb)/.6)}'
-    + '.sk-h-act{grid-column:2;display:none;gap:4px;flex-wrap:wrap}.sk-h:hover .sk-h-act,.sk-h:focus-within .sk-h-act{display:flex}@media (hover:hover){.sk-h:not(.now):hover{background:rgb(var(--ink-rgb)/.06)}}'
-    + '@media (hover:none){.sk-h-act{display:flex}}.sk-h-empty{padding:16px 10px;color:rgb(var(--ink-rgb)/.6);font-size:14px}'
+    + '.sk-h-act{display:flex;gap:4px;flex-wrap:wrap;padding:0 10px 10px 50px}@media (hover:hover){.sk-h:not(.now) .sk-h-go:hover{background:rgb(var(--ink-rgb)/.06)}.sk-h.later:hover{opacity:.7}}'
+    + '.sk-h-empty{padding:16px 10px;color:rgb(var(--ink-rgb)/.6);font-size:14px}'
     + '.sk-me{display:flex;align-items:center;gap:10px;margin-top:4px;padding:12px 0 0 6px;border-top:1px solid rgb(var(--ink-rgb)/.08)}.sk-me[hidden]{display:none}.sk-me .sk-av{margin:0;border:0;width:34px;height:34px;font-size:12px}'
     + '.sk-me-who{flex:1;display:grid;gap:1px;min-width:0}.sk-me-who b{font:500 14px/1.3 var(--f-text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.sk-me-who small{font:400 12px/1.3 var(--f-text);color:rgb(var(--ink-rgb)/.55);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}'
     + '.sk-me .btn.icon{color:rgb(var(--ink-rgb)/.6)}@media (hover:hover){.sk-me .btn.icon:hover{color:var(--ink)}#sk-logout:hover{color:var(--destructive)}}'
@@ -897,12 +965,20 @@
     shadow = null;
     pending = [];
     presence = [];
+    hc.at = null;
+    renderBanner();
     renderPresence();
     if (MODE !== 'view' && location.pathname !== '/') history.replaceState(null, '', '/');
     connect();
   }
   function step(dir) {
     if (MODE === 'view') return;
+    if (hc.at) {
+      var i = atIndex(), to = i === -1 ? null : hc.entries[i - dir];
+      if (to) pick(to, i - dir);
+      else toast(dir < 0 ? 'Далі назад кроків немає' : 'Далі вперед кроків немає');
+      return;
+    }
     serial(function () { return revert(dir); });
   }
 

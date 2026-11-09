@@ -122,6 +122,24 @@ for (const s of g45.spines) {
   } catch (e) { fail(`4x5 ${s.name}: ${e.message}`); }
 }
 
+const own = s => ({ json: { name: s.name + '.json', text: s.jsonText }, atlas: { name: s.name + '.atlas', text: s.atlasText }, pages: { [s.pageName]: { name: s.pageName, w: s.page.width, h: s.page.height } } });
+for (const s of plan.spines) {
+  const r = K.finalCheck(own(s), s, { tech: plan.tech, spine });
+  const ids = r.errors.concat(r.warnings).map(f => f.id);
+  if (!r.ok || ids.join() !== 'draft-hash') fail(`${s.name}: final check of the draft itself gave ${ids.join(', ')}`);
+}
+const bg = plan.spines.find(s => s.name === 'animation_bg');
+if (bg) {
+  const j = JSON.parse(bg.jsonText);
+  j.skeleton.hash = 'AbC123';
+  j.skeleton.spine = '4.2.10';
+  delete j.animations.out;
+  j.animations.extra = JSON.parse(JSON.stringify(j.animations.in));
+  const r = K.finalCheck({ json: { name: 'x.json', text: JSON.stringify(j) }, atlas: { name: 'x.atlas', text: bg.atlasText.replace(bg.pageName, 'skeleton.png') }, pages: {} }, bg, { tech: plan.tech, spine });
+  const want = ['version', 'anim-missing', 'page-missing'], warn = ['anim-extra'];
+  if (r.ok || want.some(id => !r.errors.some(f => f.id === id)) || warn.some(id => !r.warnings.some(f => f.id === id)) || r.rename['skeleton.png'] !== 'animation_bg.png') fail(`final check of a broken export: errors ${r.errors.map(f => f.id)}, warnings ${r.warnings.map(f => f.id)}, rename ${JSON.stringify(r.rename)}`);
+}
+
 console.log(plan.spines.map(s => `${s.name} ${s.page.width}x${s.page.height}`).join('\n'));
-console.log(problems.length ? 'PROBLEMS:\n' + problems.join('\n') : 'OK: contract matches the Dice reference, spine-core parses and plays every spine');
+console.log(problems.length ? 'PROBLEMS:\n' + problems.join('\n') : 'OK: contract matches the Dice reference, spine-core parses and plays every spine, final checks hold');
 process.exit(problems.length ? 1 : 0);

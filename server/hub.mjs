@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { createRequire } from 'node:module';
-import { KIT, ID, SHA, imageInfo } from './data.mjs';
+import { KIT, ID, SHA, imageInfo, textInfo } from './data.mjs';
 
 createRequire(import.meta.url)('../src/patch.js');
 const P = globalThis.SpineKitPatch;
@@ -49,11 +49,11 @@ export function createHub({ data }) {
   const blobType = sha => {
     if (typeCache.has(sha)) return typeCache.get(sha);
     const buf = data.blobGet(sha);
-    const t = buf ? (imageInfo(buf) || {}).type || null : null;
+    const t = buf ? (imageInfo(buf) || textInfo(buf) || {}).type || null : null;
     if (t) typeCache.set(sha, t);
     return t;
   };
-  const imageOk = im => !!im && typeof im === 'object' && !Array.isArray(im) && typeof im.sha === 'string' && SHA.test(im.sha) && typeof im.name === 'string' && im.name.length <= 200 && ['png', 'jpeg', 'webp'].includes(im.type) && Number.isFinite(im.w) && Number.isFinite(im.h) && im.w >= 0 && im.h >= 0 && blobType(im.sha) === im.type;
+  const imageOk = im => !!im && typeof im === 'object' && !Array.isArray(im) && typeof im.sha === 'string' && SHA.test(im.sha) && typeof im.name === 'string' && im.name.length <= 200 && ['png', 'jpeg', 'webp', 'json', 'atlas'].includes(im.type) && Number.isFinite(im.w) && Number.isFinite(im.h) && im.w >= 0 && im.h >= 0 && blobType(im.sha) === im.type;
   const imagesOk = images => !!images && typeof images === 'object' && !Array.isArray(images) && Object.keys(images).every(k => k.length <= 200 && imageOk(images[k]));
 
   const meta = doc => ({ id: doc.id, created: doc.created, updated: doc.updated, updatedBy: doc.updatedBy || null, settings: { game: doc.settings.game || '', reels: doc.settings.reels, rows: doc.settings.rows, components: (doc.settings.components || []).map(c => ({ on: !c || c.on !== false })) } });

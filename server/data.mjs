@@ -67,6 +67,24 @@ export function imageCheck(b, maxSide = 8192) {
   return { info };
 }
 
+const plain = x => !!x && typeof x === 'object' && !Array.isArray(x);
+
+export function textInfo(b) {
+  let text;
+  try { text = new TextDecoder('utf-8', { fatal: true }).decode(b); } catch { return null; }
+  try { const d = JSON.parse(text); if (plain(d) && plain(d.skeleton)) return { type: 'json' }; } catch { }
+  const lines = text.split(/\r\n|\r|\n/);
+  const first = lines.find(l => l.trim());
+  if (first && /\.(png|jpe?g|webp)$/i.test(first.trim()) && lines.some(l => /^\s*size\s*:/.test(l))) return { type: 'atlas' };
+  return null;
+}
+
+export function blobCheck(b, maxSide = 8192) {
+  if (imageInfo(b)) return imageCheck(b, maxSide);
+  const t = textInfo(b);
+  return t ? { info: { type: t.type, w: 0, h: 0 } } : { code: 415, error: 'лише PNG, JPEG, WebP, Spine JSON або атлас' };
+}
+
 const alive = pid => { try { process.kill(pid, 0); return true; } catch (e) { return e.code === 'EPERM'; } };
 
 export function lockInfo(dir) {

@@ -186,6 +186,38 @@
     return true;
   }
 
+  function renamed(c, label, name) {
+    var x = clone(c) || {};
+    x.label = label;
+    x.name = name.replace(/^animation_/, '');
+    return x;
+  }
+  async function rename(id, label, name) {
+    label = String(label || '').trim();
+    name = String(name || '').trim();
+    var S = sync();
+    if (S) {
+      var g = await S.api('/api/library/' + encodeURIComponent(id));
+      if (!g.ok) throw await failOf(g);
+      var item = (await g.json()).item;
+      var r = await S.api('/api/library/' + encodeURIComponent(id), { method: 'PUT', json: { label: label, name: name, note: item.note || '', tags: item.tags || [], component: renamed(item.component, label, name), images: item.images || {}, thumb: item.thumb || null } });
+      if (!r.ok) throw await failOf(r);
+      var out = (await r.json()).item;
+      try { await list(); } catch (e) { tell(); }
+      return out;
+    }
+    var rec = await idb(LIB_DB, 'readonly', function (st) { return st ? st.get(id) : { result: memory[id] }; });
+    if (!rec) throw new Error('немає компонента');
+    rec.label = label;
+    rec.name = name;
+    rec.component = renamed(rec.component, label, name);
+    rec.updated = Date.now();
+    memory[rec.id] = rec;
+    await idb(LIB_DB, 'readwrite', function (st) { return st ? st.put(rec) : null; });
+    await list();
+    return metaOf(rec);
+  }
+
   function canEdit(m) {
     var S = sync();
     if (!S) return true;
@@ -200,6 +232,7 @@
     list: list,
     get: get,
     save: save,
+    rename: rename,
     remove: remove,
     canEdit: canEdit,
     thumbUrl: thumbUrl,

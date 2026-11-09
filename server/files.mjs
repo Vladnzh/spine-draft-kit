@@ -8,14 +8,14 @@ const REF_TTL = 60 * 60 * 1000;
 const IMG = /\.(png|jpe?g|webp)$/i;
 
 const hash = s => createHash('sha256').update(s).digest('hex');
-const kindOf = name => IMG.test(name) ? 'image' : /\.component\.json$/i.test(name) ? 'component' : /\.json$/i.test(name) ? 'layout' : null;
+const kindOf = name => IMG.test(name) ? 'image' : /\.component\.json$/i.test(name) ? 'component' : /\.json$/i.test(name) ? 'layout' : /\.atlas(\.txt)?$/i.test(name) ? 'atlas' : null;
 const cleanName = n => String(n || '').split(/[\\/]/).pop().replace(/[\x00-\x1f"'`]/g, '').slice(0, 200);
 const q = s => "'" + String(s).replace(/'/g, "'\\''") + "'";
 
 export function createFiles({ data, publicUrl, maxImageMb = 64, log, limiter }) {
   const origin = new URL(publicUrl).origin;
   const maxImage = maxImageMb * MB;
-  const LIMIT = { image: maxImage, layout: 32 * MB, component: 200 * MB };
+  const LIMIT = { image: maxImage, layout: 32 * MB, component: 200 * MB, atlas: 16 * MB };
   const ups = new Map();
   const refs = new Map();
   const downs = new Map();
@@ -42,7 +42,7 @@ export function createFiles({ data, publicUrl, maxImageMb = 64, log, limiter }) 
     const out = items.map(it => {
       const name = cleanName(it && it.name);
       const kind = kindOf(name);
-      if (!name || !kind) throw new Error(`${name || '?'}: лише PNG, JPEG, WebP, layout_*.json або .component.json`);
+      if (!name || !kind) throw new Error(`${name || '?'}: лише PNG, JPEG, WebP, layout_*.json, Spine JSON, .atlas або .component.json`);
       const t = randomBytes(32).toString('base64url');
       const id = randomBytes(12).toString('base64url');
       ups.set(hash(t), { id, owner: owner.email, name, kind, exp: Date.now() + LINK_TTL });
@@ -73,9 +73,16 @@ export function createFiles({ data, publicUrl, maxImageMb = 64, log, limiter }) 
       ref.w = c.info.w;
       ref.h = c.info.h;
       ref.bytes = buf.length;
+    } else if (u.kind === 'atlas') {
+      let text;
+      try { text = new TextDecoder('utf-8', { fatal: true }).decode(buf); } catch { return json(res, 415, { error: `${u.name}: не текст UTF-8` }); }
+      if (!text.trim()) return json(res, 415, { error: `${u.name}: порожній файл` });
+      ref.buf = buf;
+      ref.type = 'text/plain';
+      ref.bytes = buf.length;
     } else {
       let parsed;
-      try { parsed = JSON.parse(buf.toString('utf8')); } catch { return json(res, 415, { error: `${u.name}: не JSON` }); }
+      try { parsed = JSON.parse(buf.toString('utf8').replace(/^﻿/, '')); } catch { return json(res, 415, { error: `${u.name}: не JSON` }); }
       if (!parsed || typeof parsed !== 'object') return json(res, 415, { error: `${u.name}: не обʼєкт JSON` });
       ref.buf = buf;
       ref.type = 'application/json';

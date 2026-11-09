@@ -10,7 +10,7 @@
     update_game: 'налаштування гри', set_symbols: 'символи', update_component: 'компонент', add_component: 'додав компонент', remove_component: 'прибрав компонент',
     preview: 'превʼю', screenshot: 'скріншот', spin: 'спін', export_drafts: 'експорт драфту',
     get_layouts: 'читає лейаути', update_layout: 'лейаут', place_components: 'компоненти на лейауті', import_layouts: 'імпорт лейаутів', show_layout: 'показує лейаут',
-    export_component: 'експорт компонента', import_component: 'імпорт компонента',
+    export_component: 'експорт компонента', import_component: 'імпорт компонента', import_final: 'імпорт фіналу', remove_final: 'повернув драфт',
     sandbox_get: 'читає пісочницю', sandbox_new: 'новий компонент у пісочниці', sandbox_update: 'пісочниця', sandbox_preview: 'дивиться пісочницю',
     sandbox_remove: 'прибрав з пісочниці', sandbox_save: 'зберіг у бібліотеку', sandbox_to_project: 'з пісочниці в чернетки',
     library_list: 'бібліотека', library_add: 'з бібліотеки в чернетки', library_remove: 'прибрав з бібліотеки'
@@ -312,7 +312,48 @@
     if (c.spacers !== undefined) o.spacers = c.spacers;
     if (key) o.image = S().images[key] ? S().images[key].fileName || true : false;
     if (c.anims) o.anims = c.anims;
+    if (c.finals && Object.keys(c.finals).length) o.finals = App.fin.list(c);
     return o;
+  }
+  function finalOf(sp) {
+    var v = sp.final, f = v.meta;
+    var o = { imported: App.fin.iso(f.at), by: f.by || undefined, files: f.files || [], accepted_warnings: (f.accepted || []).map(function (a) { return a.id; }) };
+    if (v.obj) {
+      o.animations = Object.keys(v.obj.animations || {});
+      o.skins = Array.isArray(v.obj.skins) ? v.obj.skins.map(function (s) { return s.name; }) : Object.keys(v.obj.skins || {});
+    }
+    var bad = v.ready && v.drift ? v.drift.errors.concat(v.drift.warnings).map(function (x) { return x.id + ' (' + x.title + ')'; }) : App.fin.issues(v);
+    o.status = !bad.length ? 'відповідає драфту' : v.ready ? 'не відповідає драфту: ' + bad.join('; ') : 'не готовий, превʼю показує драфт, експорт зупиниться: ' + bad.join('; ');
+    return o;
+  }
+  function finalNum(v) { return String(Math.round(Number(v) * 1000) / 1000).replace('.', ','); }
+  function finalId(it, w, many) { return many ? it.sp.name + ':' + w.id : w.id; }
+  function finalTaken(it, w, accept, many) { return accept.indexOf(finalId(it, w, many)) !== -1 || (!many && accept.indexOf(it.sp.name + ':' + w.id) !== -1); }
+  function finalSig(items) {
+    var s = JSON.stringify(items.map(function (it) { return [it.sp.name, it.r.errors.map(function (e) { return e.id; }), it.r.warnings.map(function (w) { return [w.id, w.title, w.detail]; })]; }));
+    var h = 2166136261;
+    for (var i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+    return (h >>> 0).toString(36);
+  }
+  function finalReport(it, accept, many) {
+    var r = it.r, d = r.diff, m = it.m;
+    return {
+      spine: it.sp.name,
+      files: [m.json && m.json.name, m.atlas && m.atlas.name].concat(Object.keys(m.pages || {}).map(function (k) { return m.pages[k].name; })).filter(Boolean),
+      replaces: it.sp.final ? 'фінал від ' + (App.fin.iso(it.sp.final.meta.at) || 'невідомої дати') : 'драфт',
+      ok: r.ok,
+      errors: r.errors.map(function (f) { return { id: f.id, title: f.title, detail: f.detail }; }),
+      warnings: r.warnings.map(function (f) { return { id: finalId(it, f, many), title: f.title, detail: f.detail, accepted: finalTaken(it, f, accept, many) }; }),
+      notes: r.notes.map(function (f) { return f.title + (f.detail ? ': ' + f.detail : ''); }),
+      changes: {
+        animations: d.anims.filter(function (a) { return a.st !== 'same'; }).map(function (a) { return a.name + ': ' + (a.st === 'add' ? 'нова, ' + finalNum(a.b.d) + ' с' : a.st === 'del' ? 'немає у фіналі' : a.notes.map(function (n) { return n === 'події' ? 'події ' + a.a.ev + ' → ' + a.b.ev : n; }).join(', ')); }),
+        skins: d.skins.filter(function (s) { return s.st !== 'same'; }).map(function (s) { return (s.st === 'add' ? '+' : '−') + s.name; }),
+        spacers: d.spacers.filter(function (s) { return s.st !== 'same'; }).map(function (s) { return s.name + ': ' + ({ add: 'новий', del: 'немає', moved: 'зсунуто', kind: 'не спейсер' }[s.st] || s.st) + (s.a && s.b ? ' (' + finalNum(s.a.x) + ', ' + finalNum(s.a.y) + ' → ' + finalNum(s.b.x) + ', ' + finalNum(s.b.y) + ')' : ''); }),
+        skeleton: d.skel.filter(function (x) { return x.st !== 'same'; }).map(function (x) { return x.k + ': ' + x.a + ' → ' + x.b; }),
+        images_added: d.regions.add.length,
+        images_removed: d.regions.del
+      }
+    };
   }
 
   function flat(cv, max) {
@@ -538,8 +579,8 @@
       return {
         id: st.pid,
         settings: JSON.parse(JSON.stringify(st.s)),
-        images: Object.keys(st.images).map(function (k) { var im = st.images[k]; return { key: k, file: im.fileName, w: im.w, h: im.h }; }),
-        spines: st.plan ? st.plan.spines.map(function (sp) { return { name: sp.name, component: sp.comp, skins: sp.json.skins.map(function (s) { return s.name; }), animations: Object.keys(sp.json.animations), warnings: sp.warnings }; }) : []
+        images: Object.keys(st.images).filter(function (k) { return k.indexOf('f:') !== 0; }).map(function (k) { var im = st.images[k]; return { key: k, file: im.fileName, w: im.w, h: im.h }; }),
+        spines: st.plan ? st.plan.spines.map(function (sp) { var o = { name: sp.name, component: sp.comp, skins: sp.json.skins.map(function (s) { return s.name; }), animations: Object.keys(sp.json.animations), warnings: sp.warnings }; if (sp.final) o.final = finalOf(sp); return o; }) : []
       };
     },
     update_game: async function (a) {
@@ -617,7 +658,7 @@
       if (num(a.fill) && c.type === 'symbols') c.fill = clamp(a.fill, 10, 100);
       if (c.type !== 'custom' && (a.parts || a.remove_parts || a.pivot !== undefined)) throw new Error('Частини й опорна точка є лише у своїх компонентах (custom)');
       if (c.type === 'custom') {
-        if (typeof a.name === 'string' && a.name.trim()) c.name = a.name.trim();
+        if (typeof a.name === 'string' && a.name.trim()) { var was = spineOf(c); c.name = a.name.trim(); App.fin.move(c, was, spineOf(c)); }
         if (typeof a.label === 'string' && a.label.trim()) c.label = a.label.trim();
         if (typeof a.bar === 'string') c.bar = a.bar.trim();
         if (a.pivot !== undefined) setPivot(c, a.pivot);
@@ -700,23 +741,94 @@
       App.toast('Claude імпортував ' + spineOf(c));
       return { component: compInfo(c), warnings: warnings() };
     },
+    import_final: async function (a) {
+      needProject();
+      var c = findComp(a.component), only = a.spine || null;
+      var hit = c ? null : (S().plan ? S().plan.spines : []).filter(function (s) { return s.name === a.component; })[0];
+      if (hit) { c = S().s.components.filter(function (x) { return x.id === hit.comp; })[0]; only = only || hit.name; }
+      if (!c) throw new Error('Немає компонента «' + a.component + '». Є: ' + compList());
+      var spines = (S().plan ? S().plan.spines : []).filter(function (s) { return s.comp === c.id; });
+      if (!spines.length) throw new Error('У компонента немає спайнів: він вимкнений? Увімкни його через update_component on: true');
+      if (only && !spines.some(function (s) { return s.name === only; })) throw new Error('У компонента немає спайна ' + only + '. Є: ' + spines.map(function (s) { return s.name; }).join(', '));
+      var src = (Array.isArray(a.files) ? a.files : [a.files]).filter(Boolean);
+      if (!src.length) throw new Error('files порожній: потрібні <спайн>.json, <спайн>.atlas і всі .png сторінки атласу з експорту Spine');
+      var files = [], pid = S().pid, cid = c.id;
+      for (var i = 0; i < src.length; i++) {
+        var f = src[i];
+        if (!f.blob) throw new Error('файл не передано: ' + (f.name || i));
+        var r = await fetch('/api/bridge/blobs/' + f.blob, { cache: 'no-store' });
+        if (!r.ok) throw new Error('файл не дійшов: ' + f.name);
+        var b = await r.blob(), file = new File([b], f.name, { type: b.type });
+        file.kitPath = f.path || f.name;
+        files.push(file);
+      }
+      var res = await App.fin.check(c, await App.fin.read(files), only);
+      c = S().pid === pid ? S().s.components.filter(function (x) { return x.id === cid; })[0] : null;
+      if (!c) throw new Error('Поки йшла перевірка, компонент прибрали або відкрили інший проект: нічого не змінено');
+      var accept = (Array.isArray(a.accept) ? a.accept : a.accept ? [a.accept] : []).map(String);
+      var many = res.items.length > 1, sig = finalSig(res.items);
+      var out = {
+        component: c.type === 'custom' ? spineOf(c) : c.type,
+        applied: false,
+        check: sig,
+        spines: res.items.map(function (it) { return finalReport(it, accept, many); }),
+        without_files: res.match.spines.filter(function (m) { return !m.json; }).map(function (m) { return m.sp.name; }),
+        unused_files: res.match.extra,
+        runtime_checked: res.runtime
+      };
+      if (!res.items.length) { out.next = 'Жоден JSON не підійшов до спайнів компонента (' + spines.map(function (s) { return s.name; }).join(', ') + '). Назва файлу має збігатися зі спайном, або дай рівно один JSON для компонента з одним спайном.'; return out; }
+      var errors = 0, warns = 0, open = [];
+      res.items.forEach(function (it) {
+        errors += it.r.errors.length;
+        warns += it.r.warnings.length;
+        it.r.warnings.forEach(function (w) { if (!finalTaken(it, w, accept, many)) open.push(finalId(it, w, many)); });
+      });
+      if (errors) out.next = 'Є помилки, імпорт заблоковано. Скажи людині, що виправити в Spine, і чекай новий експорт. Не змінюй компонент чи файли, щоб обійти помилки.';
+      else if (a.apply !== true) out.next = open.length ? 'Нічого не змінено. Покажи людині кожне попередження (title і detail) та головні зміни і спитай про кожне окремо. Потім виклич import_final з apply: true, check: "' + sig + '" і accept, де лише ті id, які людина підтвердила.' : warns ? 'Нічого не змінено. Усі попередження вже в accept: якщо людина справді підтвердила кожне, виклич import_final з apply: true, check: "' + sig + '" і тим самим accept.' : 'Помилок і попереджень немає, нічого не змінено. Виклич import_final з apply: true, коли людина погодиться.';
+      else if (open.length) out.next = 'Не імпортовано: не підтверджено ' + open.join(', ') + '. Кожне попередження людина читає й підтверджує сама; не додавай id в accept без її слова.';
+      else if (warns && a.check !== sig) out.next = 'Не імпортовано: після перевірки змінилися файли або драфт, і попередження вже інші, ніж бачила людина. Покажи їй ці попередження ще раз і виклич import_final з check: "' + sig + '" та accept, які вона підтвердить.';
+      else {
+        drafts();
+        await App.fin.apply(c, res.items, 'Claude');
+        await commit();
+        App.toast('Claude імпортував фінал: ' + res.items.map(function (it) { return it.sp.name; }).join(', '));
+        out.applied = true;
+        out.next = 'Імпортовано: превʼю й експорт (zip, арт-репо) тепер беруть фінал. Переглянь анімації через preview. remove_final повертає драфт.';
+      }
+      return out;
+    },
+    remove_final: async function (a) {
+      needProject();
+      var c = findComp(a.component), only = a.spine || null;
+      if (!c) { c = S().s.components.filter(function (x) { return x.finals && x.finals[a.component]; })[0]; if (c) only = only || a.component; }
+      if (!c) throw new Error('Немає компонента «' + a.component + '». Є: ' + compList());
+      var have = Object.keys(c.finals || {});
+      if (!have.length) throw new Error('У компонента немає імпортованого фіналу');
+      if (only && have.indexOf(only) === -1) throw new Error('Фіналу для ' + only + ' немає. Фінали компонента: ' + have.join(', '));
+      drafts();
+      var gone = App.fin.remove(c, only);
+      await commit();
+      App.toast('Claude повернув драфт: ' + gone.join(', '));
+      return { removed: gone, component: compInfo(c) };
+    },
     preview: async function (a) {
       needProject();
       var st = S();
       var spines = st.plan ? st.plan.spines : [];
       var sp = spines.filter(function (s) { return s.name === (a.spine || st.pv.spine); })[0] || (a.spine ? null : spines[0]);
       if (!sp) throw new Error('Немає спайна «' + a.spine + '». Є: ' + spines.map(function (s) { return s.name; }).join(', '));
-      var anims = Object.keys(sp.json.animations), skins = sp.json.skins.map(function (s) { return s.name; });
-      if (a.animation && anims.indexOf(a.animation) === -1) throw new Error('У ' + sp.name + ' немає анімації ' + a.animation + '. Є: ' + anims.join(', '));
-      if (a.skin && skins.indexOf(a.skin) === -1) throw new Error('У ' + sp.name + ' немає скіна ' + a.skin + '. Є: ' + skins.join(', '));
-      st.pv = { spine: sp.name, anim: a.animation || null, skin: a.skin || null };
+      var fv = !a.draft && App.fin.live(sp) ? sp.final.obj : null, pj = fv || sp.json;
+      var anims = Object.keys(pj.animations || {}), skins = Array.isArray(pj.skins) ? pj.skins.map(function (s) { return s.name; }) : Object.keys(pj.skins || {});
+      if (a.animation && anims.indexOf(a.animation) === -1) throw new Error('У ' + sp.name + (fv ? ' (фінал)' : '') + ' немає анімації ' + a.animation + '. Є: ' + anims.join(', '));
+      if (a.skin && skins.indexOf(a.skin) === -1) throw new Error('У ' + sp.name + (fv ? ' (фінал)' : '') + ' немає скіна ' + a.skin + '. Є: ' + skins.join(', '));
+      st.pv = { spine: sp.name, anim: a.animation || null, skin: a.skin || null, draft: a.draft ? sp.name : null };
       drafts();
       App.renderPreview();
       App.renderComponents();
       var ok = await waitPlayer();
       await sleep(1000 * (num(a.at) ? Math.max(0, Number(a.at)) : 0.4));
       var img = ok ? shot('preview') : null;
-      return { spine: sp.name, animation: st.pv.anim, skin: st.pv.skin, animations: anims, skins: skins, note: ok ? undefined : 'Рантайм Spine не готовий, скріншота немає', images: img ? [img] : [] };
+      return { spine: sp.name, version: fv ? 'фінал аніматора' : 'драфт кита', animation: st.pv.anim, skin: st.pv.skin, animations: anims, skins: skins, note: ok ? undefined : 'Рантайм Spine не готовий, скріншота немає', images: img ? [img] : [] };
     },
     screenshot: async function (a) {
       var t = a.target || 'both';

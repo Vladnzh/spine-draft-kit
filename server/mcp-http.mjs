@@ -97,6 +97,16 @@ export function createMcpHttp({ hub, oauth, files, engine, publicUrl, log, limit
       const f = files.resolve(s.owner, a.ref, ['component', 'layout']);
       return { name: a.name, file: { blob: engine.putBlob(f.buf, 'application/json', f.name), name: f.name, path: f.name } };
     }
+    if (tool === 'import_final') {
+      const list = (Array.isArray(a.files) ? a.files : [a.files]).filter(Boolean);
+      if (!list.length) throw new Error('files порожній: залий Spine JSON, .atlas і PNG сторінок атласу через upload_files і передай їхні refs');
+      a.files = list.map(r => {
+        const f = files.resolve(s.owner, r, ['image', 'layout', 'atlas']);
+        const type = f.kind === 'atlas' ? 'text/plain' : f.kind === 'layout' ? 'application/json' : f.type;
+        return { blob: engine.putBlob(f.buf, type, f.name), name: f.name, path: String(r) };
+      });
+      return a;
+    }
     if (tool === 'sandbox_new' && typeof a.from_file === 'string' && a.from_file) {
       const f = files.resolve(s.owner, a.from_file, ['component', 'layout']);
       a.file = { blob: engine.putBlob(f.buf, 'application/json', f.name), name: f.name, path: f.name };

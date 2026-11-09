@@ -14,6 +14,7 @@
   function clone(v) { return v === undefined ? undefined : JSON.parse(JSON.stringify(v)); }
   function isObj(v) { return v !== null && typeof v === 'object' && !Array.isArray(v); }
   function slug(s) { return String(s || '').trim().toLowerCase().replace(/\.[a-z0-9]+$/, '').replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, ''); }
+  function skinSlug(s) { return String(s || '').trim().toLowerCase().replace(/[^a-z0-9_-]+/g, '_').replace(/^[_-]+|[_-]+$/g, ''); }
   function listOf(s) { return (Array.isArray(s) ? s : String(s || '').split(',')).map(function (x) { return String(x).trim(); }).filter(Boolean); }
 
   var EASE = {
@@ -309,7 +310,7 @@
       var off = sp.parent === o.chain[0] ? at : { x: 0, y: 0 };
       pts = pts.concat(corners(off.x + (sp.x || 0), off.y + (sp.y || 0), 1, 1));
     });
-    var skins = listOf(o.skins).map(slug).filter(function (s, i, a) { return s && a.indexOf(s) === i; });
+    var skins = listOf(o.skins).map(skinSlug).filter(function (s, i, a) { return s && a.indexOf(s) === i; });
     if (!skins.length) skins = ['default'];
     var skinList = skins.indexOf('default') !== -1
       ? skins.map(function (s) { return s === 'default' ? { name: 'default', attachments: att } : { name: s }; })
@@ -619,7 +620,7 @@
       name: name,
       chain: ['art', 'reel_frame'],
       slot: 'frame',
-      region: 'art/' + name.replace(/^animation_/, ''),
+      region: 'art/reels/' + name.replace(/^animation_reels_/, ''),
       att: att,
       px: p,
       src: key,
@@ -691,7 +692,7 @@
     var w = r2(b.w), h = r2(b.h), hw = r2(w / 2), hh = r2(h / 2);
     var r = r2(Math.min(hh, 0.175 * h));
     var sw = r2(h * 1.4), head = { w: r2(h * 0.9), h: r2(h * 1.5) }, glow = { w: r2(w + h * 0.8), h: r2(h * 2.2) };
-    var base = 'art/' + name.replace(/^animation_/, '') + '_bar_';
+    var base = 'art/' + name.replace(/^animation_/, '') + '/bar_';
     var bone = function (n, parent, x, y) { var o = { name: n, parent: parent }; if (r2(x || 0)) o.x = r2(x); if (r2(y || 0)) o.y = r2(y); return o; };
     var track = bone('bar_shine_track', 'bar_sweep');
     track.transform = 'noScale';
@@ -1030,7 +1031,7 @@
       json.bones.push(b);
       info[p.name] = { pv: pv, cx: par.cx + p.x, cy: par.cy + p.y };
       pts = pts.concat(corners(par.cx + p.x, par.cy + p.y, w, h));
-      var region = 'art/' + short + '_' + p.name;
+      var region = 'art/' + short + '/' + (p.name === short ? p.name + '_part' : p.name);
       var slot = { name: p.name, bone: p.name, attachment: region };
       if (p.alpha !== undefined) slot.color = 'ffffff' + hex2(p.alpha);
       if (p.blend) slot.blend = p.blend;
@@ -1101,7 +1102,7 @@
       chain: ['art'],
       at: { x: cx + ap.x, y: cy + ap.y },
       slot: 'art',
-      region: 'art/' + name.replace(/^animation_/, ''),
+      region: 'art/' + name.replace(/^animation_/, '') + '/' + name.replace(/^animation_/, ''),
       att: att,
       px: p,
       src: key,
@@ -1181,7 +1182,7 @@
     var page = pack(spine.regions, tech.padding, tech.maxPage);
     var pageName = spine.name + '.png';
     var importJson = clone(spine.json);
-    importJson.skeleton.images = './images/';
+    importJson.skeleton.images = './';
     var warnings = (spine.notes || []).slice();
     if (page.width > tech.maxPage || page.height > tech.maxPage) warnings.push('Атлас ' + page.width + '×' + page.height + ' більший за ' + tech.maxPage + ' px');
     return Object.assign({}, spine, {
@@ -1255,7 +1256,7 @@
       '',
       'ЩО В АРХІВІ',
       '  ' + folder + '   готові .json, .atlas, .png: так файли лежать в арт-репо гри',
-      '  spine-editor/<спайн>/   те саме для Spine Editor: <спайн>.json і картинки в images/'
+      '  spine-editor/   те саме для Spine Editor: <спайн>.json, картинки в art/<група>/ і shapes/'
     ].concat(plan.layouts && plan.layouts.length ? [
       '  ' + folder.replace(/spine\/$/, '') + 'layouts/   лейаути ' + plan.layouts.join(', ') + ': кістки position_*, на які гра ставить компоненти',
       '  spine-editor/layouts/   ті самі лейаути з картинками компонентів на кістках, для Spine Editor'
@@ -1263,12 +1264,13 @@
       '  kit-settings.json   налаштування кита, з яких зібрано архів',
       '',
       'ЯК ПОЧАТИ (Spine Editor ' + t.spineVersion + ')',
-      '  1. Spine → Import Data → spine-editor/<спайн>/<спайн>.json.',
-      '  2. Шлях до картинок (Images): папка images/ поруч із json.',
+      '  1. Spine → Import Data → spine-editor/<спайн>.json.',
+      '  2. Шлях до картинок (Images): папка spine-editor/, у якій лежить art/. Шлях картинки = назва регіону: art/reels/high_1.png → art/reels/high_1.',
       '  3. Збережіть проект .spine і працюйте в ньому далі.',
       '',
       'ЩО МОЖНА',
-      '  - замінити картинки своїми, назви регіонів (файлів у images/) лишаються ті самі;',
+      '  - замінити картинки своїми, назви регіонів (шляхи файлів у art/) лишаються ті самі;',
+      '  - додати нові картинки в art/<група>/ поруч зі своїми;',
       '  - змінювати рух, ключі, криві, додавати кістки, меші, ефекти;',
       '  - змінювати тривалість анімацій, погодивши з розробником (stop і spin_stop гра може чекати).',
       '',
@@ -1286,9 +1288,10 @@
       'СПАЙНИ'
     ]).concat(plan.spines.map(function (s) {
       if (!s.json) return '  ' + s.name;
-      var skins = (s.json.skins || []).map(function (k) { return k.name; });
-      var anims = Object.keys(s.json.animations || {});
-      return '  ' + s.name + '\n    анімації: ' + (anims.join(', ') || '—') + '\n    скіни: ' + (skins.join(', ') || '—');
+      var j = s.final && s.final.obj ? s.final.obj : s.json;
+      var skins = (Array.isArray(j.skins) ? j.skins : []).map(function (k) { return k.name; });
+      var anims = Object.keys(j.animations || {});
+      return '  ' + s.name + (j !== s.json ? ' (фінал аніматора, у spine-editor/ його немає)' : '') + '\n    анімації: ' + (anims.join(', ') || '—') + '\n    скіни: ' + (skins.join(', ') || '—');
     })).concat([
       '',
       'Draft Kit ' + VERSION
@@ -1432,6 +1435,453 @@
     }
   }
 
+  function atlasOf(text) {
+    var pages = [], regions = [], page = null, region = null, head = true;
+    String(text || '').replace(/^﻿/, '').split(/\r\n|\r|\n/).forEach(function (raw) {
+      var t = raw.trim();
+      if (!t) { head = true; region = null; return; }
+      if (head) { page = { name: t, f: {} }; pages.push(page); head = false; region = null; return; }
+      var i = t.indexOf(':');
+      if (i !== -1) { (region || page).f[t.slice(0, i).trim()] = t.slice(i + 1).trim(); return; }
+      region = { page: page.name, name: t, f: {} };
+      regions.push(region);
+    });
+    var nums = function (v) { return String(v === undefined ? '' : v).split(',').map(function (x) { return parseFloat(x); }).filter(function (x) { return isFinite(x); }); };
+    pages.forEach(function (p) { var s = nums(p.f.size); p.w = s[0] || 0; p.h = s[1] || 0; });
+    regions.forEach(function (r) {
+      var b = nums(r.f.bounds), xy = nums(r.f.xy), sz = nums(r.f.size);
+      var four = b.length === 4;
+      r.x = four ? b[0] : xy[0]; r.y = four ? b[1] : xy[1]; r.w = four ? b[2] : sz[0]; r.h = four ? b[3] : sz[1];
+      var rot = String(r.f.rotate === undefined ? 'false' : r.f.rotate);
+      r.rot = rot === 'true' ? 90 : rot === 'false' ? 0 : parseFloat(rot);
+      r.index = r.f.index === undefined ? -1 : parseInt(r.f.index, 10);
+    });
+    return { pages: pages, regions: regions };
+  }
+  function renamePages(text, map) {
+    var head = true;
+    return String(text || '').split(/(\r\n|\r|\n)/).map(function (part, i) {
+      if (i % 2) return part;
+      var t = part.trim();
+      if (!t) { head = true; return part; }
+      if (!head) return part;
+      head = false;
+      return map[t] ? part.replace(t, map[t]) : part;
+    }).join('');
+  }
+  function pageNames(name, pages) {
+    return pages.map(function (p, i) {
+      var ext = (/\.[a-z0-9]+$/i.exec(p.name) || ['.png'])[0].toLowerCase();
+      return name + (i ? '_' + (i + 1) : '') + ext;
+    });
+  }
+
+  function skinList(json) {
+    var s = json.skins;
+    if (Array.isArray(s)) return s.filter(isObj);
+    return isObj(s) ? Object.keys(s).map(function (n) { return { name: n, attachments: s[n] }; }) : [];
+  }
+  function regionPath(a, key) { return (a && (a.path || a.name)) || key; }
+  function attRegions(json) {
+    var out = [];
+    var add = function (n) { if (out.indexOf(n) === -1) out.push(n); };
+    skinList(json).forEach(function (s) {
+      Object.keys(s.attachments || {}).forEach(function (sl) {
+        var o = s.attachments[sl];
+        if (!isObj(o)) return;
+        Object.keys(o).forEach(function (k) {
+          var a = o[k];
+          if (!isObj(a) || ['region', 'mesh', 'linkedmesh'].indexOf(a.type || 'region') === -1) return;
+          var path = regionPath(a, k), q = a.sequence;
+          if (!isObj(q)) { add(path); return; }
+          var start = q.start === undefined ? 1 : Number(q.start), digits = Number(q.digits) || 0;
+          for (var i = 0; i < (Number(q.count) || 0); i++) { var n = String(start + i); while (n.length < digits) n = '0' + n; add(path + n); }
+        });
+      });
+    });
+    return out;
+  }
+  function oddAtts(json) {
+    var out = [];
+    skinList(json).forEach(function (s) {
+      Object.keys(s.attachments || {}).forEach(function (sl) {
+        var o = s.attachments[sl];
+        if (!isObj(o)) return;
+        Object.keys(o).forEach(function (k) {
+          var a = o[k];
+          if (!isObj(a) || ['region', 'mesh', 'linkedmesh', 'clipping'].indexOf(a.type || 'region') !== -1) return;
+          var n = typeof a.path === 'string' ? a.path : a.name ? String(a.name) : ['width', 'height', 'x', 'y'].some(function (q) { return a[q] !== undefined; }) ? k : null;
+          if (n && out.indexOf(n) === -1) out.push(n);
+        });
+      });
+    });
+    return out;
+  }
+  function spacerSlotsOf(json, key) {
+    var skins = skinList(json);
+    return (json.slots || []).filter(function (sl) {
+      if (!sl || !sl.attachment) return false;
+      if (sl.attachment === key) return true;
+      return skins.some(function (s) { var a = s.attachments && s.attachments[sl.name] && s.attachments[sl.name][sl.attachment]; return isObj(a) && regionPath(a, sl.attachment) === key; });
+    }).map(function (sl) { return sl.name; });
+  }
+  function evList(anim, json) {
+    var defs = json && isObj(json.events) ? json.events : {};
+    return (anim && Array.isArray(anim.events) ? anim.events : []).filter(isObj).map(function (e) {
+      var d = isObj(defs[e.name]) ? defs[e.name] : {};
+      var raw = Object.keys(e).filter(function (k) { return k !== 'time'; }).sort().map(function (k) { return k + '=' + JSON.stringify(e[k]); }).join(',');
+      return { name: String(e.name), int: Number(e.int !== undefined ? e.int : d.int) || 0, t: Number(e.time) || 0, raw: raw };
+    });
+  }
+  function evKey(e) { return e.name + (e.int ? '(' + e.int + ')' : ''); }
+  function evText(list) { return list.length ? list.map(function (e) { return evKey(e) + '@' + fmt(e.t); }).join(', ') : '—'; }
+  function animEmpty(anim) {
+    if (!isObj(anim)) return true;
+    return !Object.keys(anim).some(function (k) { var v = anim[k]; return Array.isArray(v) ? v.length > 0 : isObj(v) && Object.keys(v).length > 0; });
+  }
+  function countOf(json) {
+    var att = 0, mesh = 0;
+    skinList(json).forEach(function (s) { Object.keys(s.attachments || {}).forEach(function (sl) { var o = s.attachments[sl]; if (!isObj(o)) return; Object.keys(o).forEach(function (k) { att++; if (o[k] && (o[k].type === 'mesh' || o[k].type === 'linkedmesh')) mesh++; }); }); });
+    return { bones: (json.bones || []).length, slots: (json.slots || []).length, att: att, mesh: mesh, cons: (json.ik || []).length + (json.transform || []).length + (json.path || []).length, events: Object.keys(json.events || {}).length };
+  }
+
+  function fakeTex(w, h) { return { getImage: function () { return { width: w || 1, height: h || 1 }; }, setFilters: function () {}, setWraps: function () {}, dispose: function () {} }; }
+  function runtimeOf(sp, atlasText, jsonText, skinName) {
+    var atlas = new sp.TextureAtlas(atlasText || '');
+    atlas.pages.forEach(function (p) { p.setTexture(fakeTex(p.width, p.height)); });
+    var data = new sp.SkeletonJson(new sp.AtlasAttachmentLoader(atlas)).readSkeletonData(String(jsonText).replace(/^﻿/, ''));
+    var sk = new sp.Skeleton(data);
+    var skin = skinName ? data.findSkin(skinName) : null;
+    if (!skin && (!data.defaultSkin || !data.defaultSkin.attachments.some(function (a) { return a && Object.keys(a).length; }))) skin = data.skins.filter(function (s) { return s !== data.defaultSkin; })[0] || null;
+    if (skin && skin !== data.defaultSkin) sk.setSkin(skin);
+    sk.setToSetupPose();
+    sk.updateWorldTransform();
+    return { sp: sp, data: data, sk: sk };
+  }
+  function boundsOf(rt) {
+    var off = new rt.sp.Vector2(), size = new rt.sp.Vector2();
+    rt.sk.setToSetupPose();
+    rt.sk.updateWorldTransform();
+    rt.sk.getBounds(off, size, []);
+    return isFinite(size.x) && isFinite(size.y) ? { w: size.x, h: size.y } : null;
+  }
+  function rectOf(rt, name) {
+    var slot = rt.sk.findSlot(name);
+    if (!slot) return null;
+    var a = slot.getAttachment();
+    if (a && typeof a.computeWorldVertices === 'function' && a.offset) {
+      var v = new Float32Array(8);
+      a.computeWorldVertices(slot, v, 0, 2);
+      var xs = [v[0], v[2], v[4], v[6]], ys = [v[1], v[3], v[5], v[7]];
+      var x0 = Math.min.apply(null, xs), x1 = Math.max.apply(null, xs), y0 = Math.min.apply(null, ys), y1 = Math.max.apply(null, ys);
+      return { x: (x0 + x1) / 2, y: (y0 + y1) / 2, w: x1 - x0, h: y1 - y0 };
+    }
+    return { x: slot.bone.worldX, y: slot.bone.worldY, w: 0, h: 0 };
+  }
+  function poseOf(rt, anim, t) {
+    var sk = rt.sk;
+    sk.setToSetupPose();
+    anim.apply(sk, t, t, false, null, 1, rt.sp.MixBlend.setup, rt.sp.MixDirection.mixIn);
+    sk.updateWorldTransform();
+    return {
+      bones: sk.bones.map(function (b) { return [b.worldX, b.worldY, b.a, b.b, b.c, b.d]; }),
+      slots: sk.slots.map(function (s) { return [s.color.r, s.color.g, s.color.b, s.color.a, s.attachment ? s.attachment.name : '', s.bone.data.index]; })
+    };
+  }
+  function seamOf(rt, name) {
+    var anim = rt.data.findAnimation(name);
+    if (!anim || !(anim.duration > 0)) return null;
+    var a = poseOf(rt, anim, 0), b = poseOf(rt, anim, anim.duration);
+    var seen = function (s) { return !!s[4] && s[3] > 0.02; }, shown = {};
+    a.slots.concat(b.slots).forEach(function (s) { if (seen(s)) shown[s[5]] = true; });
+    var worst = null;
+    a.bones.forEach(function (p, i) {
+      if (!shown[i]) return;
+      var q = b.bones[i], move = Math.hypot(p[0] - q[0], p[1] - q[1]);
+      var d = Math.max(move, 40 * Math.max(Math.abs(p[2] - q[2]), Math.abs(p[3] - q[3]), Math.abs(p[4] - q[4]), Math.abs(p[5] - q[5])));
+      if (d > 0.5 && (!worst || d > worst.d)) worst = { d: d, what: 'кістка ' + rt.sk.bones[i].data.name + (move > 0.5 ? ' зсунута на ' + fmt(move) + ' px' : ' повернута або масштабована інакше') };
+    });
+    if (worst) return worst.what;
+    for (var i = 0; i < a.slots.length; i++) {
+      var p = a.slots[i], q = b.slots[i];
+      if (!seen(p) && !seen(q)) continue;
+      if (p[4] !== q[4]) return 'слот ' + rt.sk.slots[i].data.name + ': ' + (p[4] || '—') + ' → ' + (q[4] || '—');
+      if (Math.max(Math.abs(p[0] - q[0]), Math.abs(p[1] - q[1]), Math.abs(p[2] - q[2]), Math.abs(p[3] - q[3])) > 0.02) return 'слот ' + rt.sk.slots[i].data.name + ': колір або прозорість';
+    }
+    return null;
+  }
+
+  var FINAL_TEXT = {
+    json: ['Немає JSON спайна', ''],
+    skeleton: ['Це не файл Spine', ''],
+    version: ['Інша версія Spine', 'Експортуйте з Spine {v}: гра і валідатор арт-репо приймають лише її'],
+    nonessential: ['Експортовано з Nonessential data', 'Вимкніть Nonessential data в експорті: валідатор арт-репо відхиляє skeleton.images і skeleton.audio'],
+    'draft-hash': ['Це чернетка з кита, а не експорт аніматора', 'Файл ще не проходив через Spine Editor'],
+    'skin-missing': ['Немає скінів драфту', 'Гра вмикає скін за назвою: без нього «Skin not found» і гра зависає'],
+    'skin-extra': ['Нові скіни', 'Їх немає в драфті: гра про них не знає, а валідатор арт-репо порівнює скіни з референсом (validator/reference/spines.json)'],
+    'anim-missing': ['Немає анімацій драфту', 'Гра викликає їх за назвою: без них «Animation not found»'],
+    'anim-extra': ['Нові анімації', 'Їх немає в драфті: гра їх не викличе, поки розробник не додасть, а валідатор арт-репо порівнює список анімацій з референсом'],
+    'anim-order': ['Інший порядок анімацій', 'Spine експортує за абеткою, а валідатор арт-репо порівнює порядок з референсом: оновіть референс або порядок у компоненті'],
+    'anim-empty': ['Порожні анімації', 'У драфті в них є рух, у фіналі немає жодного ключа'],
+    duration: ['Тривалість змінено понад {tol}%', 'Гра може чекати кінця анімації (in, out, stop, win): погодьте нову тривалість з розробником'],
+    'event-missing': ['Немає подій драфту', 'Гра чекає ці події: без них логіка зависне або не спрацює'],
+    'event-extra': ['Нові події', 'Їх немає в драфті: гра їх не слухає, а валідатор арт-репо порівнює події з референсом'],
+    'event-time': ['Події зсунуто в часі', 'Гра зреагує на них в інший момент (звук, зупинка, наступний крок)'],
+    'event-order': ['Інший порядок подій', 'Валідатор арт-репо порівнює порядок подій з референсом'],
+    'event-fields': ['Ключі подій записано інакше', 'Поля int, float, string чи гучність відрізняються від драфту: валідатор арт-репо порівнює ключі подій з референсом дослівно, а гра може читати float чи string'],
+    'spacer-missing': ['Немає спейсерів', 'Гра ставить сюди текст або символи за назвою слота'],
+    'spacer-kind': ['Слоти більше не спейсери', 'У сетапі слот показує інше вкладення, ніж {sp}: гра не знайде місце під текст, валідатор арт-репо теж'],
+    'spacer-extra': ['Нові спейсери', 'Їх немає в драфті: гра не покладе туди текст, а валідатор арт-репо порівнює спейсери з референсом'],
+    'spacer-moved': ['Спейсери зсунуто', 'Текст або символ стане в інше місце, ніж у драфті'],
+    'slots-missing': ['Немає слотів драфту', 'Якщо гра звертається до них за назвою, вона зламається'],
+    'regions-missing': ['Немає картинок драфту', 'Регіони з драфту прибрано або перейменовано: якщо гра міняє їх за назвою, вона зламається'],
+    root: ['Кістку root зсунуто або масштабовано', 'Гра ставить спайн на кістку лейаута через root: компонент зʼїде'],
+    size: ['Інший розмір у сетапі', 'Лейаути й позиції в грі розраховані на розмір драфту: перевірте масштаб'],
+    seam: ['Цикли зі швом', 'Гра крутить ці анімації по колу: кінець не збігається з початком, буде ривок'],
+    'atlas-missing': ['Немає атласу', 'Додайте {n}.atlas і сторінки .png з того самого експорту'],
+    'atlas-parse': ['Атлас порожній або не читається', ''],
+    'atlas-index': ['Атлас з індексами', 'Пакуйте з useIndexes: false, інакше low_5 стане кадром 5 регіону low'],
+    'page-missing': ['Немає сторінок атласу', 'Додайте ці PNG з того самого експорту'],
+    'page-size': ['Розмір сторінки не збігається з атласом', 'Сторінка з іншого експорту: експортуйте атлас і сторінки разом'],
+    'page-big': ['Сторінки більші за {max} px', 'На слабких пристроях вони можуть не завантажитися: поставте Max {max} у Pack settings'],
+    'page-huge': ['Сторінки більші за 8192 px', 'Таку текстуру не покаже більшість GPU, і командний сервер її не прийме: поставте Max {max} у Pack settings'],
+    'page-broken': ['Сторінки атласу не відкриваються як картинки', 'Файл пошкоджений або це не PNG, JPEG чи WebP: експортуйте ще раз'],
+    'page-clash': ['Назви сторінок атласу зайняті іншими спайнами', 'У zip і арт-репо вони перетруть одна одну: перейменуйте один зі спайнів у киті'],
+    'region-bounds': ['Регіони за межами сторінки', 'Атлас пошкоджений або сторінка з іншого експорту'],
+    'region-missing': ['В атласі немає картинок спайна', 'Спайн не завантажиться в грі'],
+    'att-space': ['Пробіл у назві картинки', 'Валідатор арт-репо це відхиляє'],
+    'att-ref': ['Референсна картинка в експорті', 'Приберіть txt/references з експорту'],
+    'att-validator': ['Вкладення, які валідатор арт-репо шукає в атласі', 'Це не картинки (point, bounding box чи path з координатами або назвою), але валідатор арт-репо вважає їх картинками і може відхилити експорт'],
+    broken: ['Файл Spine пошкоджений', 'Перевірка не змогла його прочитати: експортуйте ще раз'],
+    runtime: ['Рантайм Spine не читає фінал', 'Так само впаде і гра'],
+    'file-json': ['Інша назва JSON', 'При експорті кит запише його як {n}.json'],
+    'file-atlas': ['Інша назва атласу', 'При експорті кит запише його як {n}.atlas'],
+    'page-rename': ['Сторінки атласу буде перейменовано', 'Так вони не перетруться сторінками інших спайнів в арт-репо'],
+    'extra-files': ['Файли не використано', ''],
+    'no-runtime': ['Рантайм Spine не завантажився', 'Не перевірено, чи рантайм (а з ним і гра) прочитає файл, позиції спейсерів, розмір у сетапі й шви циклів']
+  };
+
+  function finalCheck(input, draft, opts) {
+    try { return finalRun(input, draft, opts); }
+    catch (e) {
+      var t = FINAL_TEXT.broken;
+      return { spine: draft.name, ok: false, errors: [{ id: 'broken', title: t[0], detail: String((e && e.message) || e) + '. ' + t[1] }], warnings: [], notes: [], diff: { anims: [], skins: [], spacers: [], skel: [], regions: { add: [], del: [] }, files: [] }, rename: {}, sum: null };
+    }
+  }
+  function finalRun(input, draft, opts) {
+    opts = opts || {};
+    var tech = Object.assign({}, TECH, opts.tech || {});
+    var name = draft.name, dj = draft.json;
+    var contract = draft.contract || contractEntry(draft, tech);
+    var frame = 1 / (tech.fps || 30) + EPS;
+    var out = { spine: name, ok: false, errors: [], warnings: [], notes: [], diff: { anims: [], skins: [], spacers: [], skel: [], regions: { add: [], del: [] }, files: [] }, rename: {}, sum: null };
+    var bag = {}, order = [];
+    var put = function (level, id, item) {
+      if (!bag[id]) { bag[id] = { level: level, items: [] }; order.push(id); }
+      if (item !== undefined && bag[id].items.indexOf(item) === -1) bag[id].items.push(item);
+    };
+    var list = function (a, n) { n = n || 10; return a.slice(0, n).join(', ') + (a.length > n ? ' і ще ' + (a.length - n) : ''); };
+    var sub = function (s) { return String(s).replace(/\{v\}/g, tech.spineVersion).replace(/\{tol\}/g, Math.round(tech.timingTolerance * 100)).replace(/\{max\}/g, tech.maxPage).replace(/\{sp\}/g, tech.spacer).replace(/\{n\}/g, name); };
+    var finish = function () {
+      order.forEach(function (id) {
+        var b = bag[id], t = FINAL_TEXT[id] || [id, ''];
+        var long = b.items.some(function (x) { return String(x).length > 40; }) || b.items.length > 6;
+        var f = { id: id, title: sub(t[0]) + (b.items.length && !long ? ': ' + list(b.items) : b.items.length > 1 ? ' (' + b.items.length + ')' : ''), detail: (long ? b.items.join('; ') + '. ' : '') + sub(t[1]) };
+        (b.level === 'error' ? out.errors : b.level === 'warning' ? out.warnings : out.notes).push(f);
+      });
+      out.ok = !out.errors.length;
+      return out;
+    };
+    var ji = input.json || null;
+    if (!ji || (typeof ji.text !== 'string' && !isObj(ji.obj))) { put('error', 'json', name + '.json'); return finish(); }
+    var json = ji.obj;
+    if (!json) {
+      try { json = JSON.parse(ji.text.replace(/^﻿/, '')); } catch (e) { put('error', 'json', (ji.name || name + '.json') + ' не читається: ' + ((e && e.message) || e)); return finish(); }
+    }
+    if (!isObj(json) || !isObj(json.skeleton)) { put('error', 'skeleton', (ji.name || name + '.json') + ': немає skeleton'); return finish(); }
+    var sk = json.skeleton;
+    var fa = isObj(json.animations) ? json.animations : {};
+    var da = isObj(dj.animations) ? dj.animations : {};
+    if (sk.spine !== tech.spineVersion) put('error', 'version', (sk.spine || 'без версії') + ' замість ' + tech.spineVersion);
+    if (sk.images || sk.audio) put('error', 'nonessential');
+    if (typeof sk.hash === 'string' && sk.hash.indexOf('draft-') === 0) put('warning', 'draft-hash');
+
+    var fSkins = skinList(json).map(function (s) { return s.name; });
+    contract.skins.forEach(function (n) { if (fSkins.indexOf(n) === -1) put('error', 'skin-missing', n); });
+    fSkins.forEach(function (n) { if (contract.skins.indexOf(n) === -1) put('warning', 'skin-extra', n); });
+    contract.skins.concat(fSkins.filter(function (n) { return contract.skins.indexOf(n) === -1; })).forEach(function (n) {
+      out.diff.skins.push({ name: n, st: fSkins.indexOf(n) === -1 ? 'del' : contract.skins.indexOf(n) === -1 ? 'add' : 'same' });
+    });
+
+    var cNames = contract.animations.map(function (a) { return a.name; });
+    var fNames = Object.keys(fa);
+    contract.animations.forEach(function (a) {
+      var f = fa[a.name];
+      var line = { name: a.name, loop: !!a.loop, a: { d: a.duration, ev: evText(evList(da[a.name], dj)) }, b: null, st: 'del', notes: [] };
+      out.diff.anims.push(line);
+      if (!f) { put('error', 'anim-missing', a.name); return; }
+      var d = durationOf(f);
+      var fe = evList(f, json), de = evList(da[a.name], dj);
+      line.b = { d: d, ev: evText(fe) };
+      line.st = 'same';
+      if (animEmpty(f) && !animEmpty(da[a.name])) { put('warning', 'anim-empty', a.name); line.notes.push('порожня'); }
+      if (a.duration && Math.abs(d - a.duration) > frame) {
+        line.notes.push('тривалість ' + fmt(a.duration) + ' → ' + fmt(d) + ' с');
+        if (Math.abs(d - a.duration) / a.duration > tech.timingTolerance) put('warning', 'duration', a.name + ' ' + fmt(a.duration) + ' → ' + fmt(d) + ' с');
+      }
+      var used = fe.map(function () { return false; }), seq = [];
+      de.forEach(function (e) {
+        var i = fe.findIndex(function (x, k) { return !used[k] && evKey(x) === evKey(e); });
+        if (i === -1) { put('error', 'event-missing', a.name + ': ' + evKey(e) + '@' + fmt(e.t)); return; }
+        used[i] = true;
+        seq.push(i);
+        if (Math.abs(fe[i].t - e.t) > frame) put('warning', 'event-time', a.name + ': ' + evKey(e) + ' ' + fmt(e.t) + ' → ' + fmt(fe[i].t) + ' с');
+        if (fe[i].raw !== e.raw) put('warning', 'event-fields', a.name + ': ' + evKey(e));
+      });
+      if (seq.some(function (v, k) { return k && v < seq[k - 1]; })) put('warning', 'event-order', a.name + ': ' + evText(fe));
+      fe.forEach(function (e, k) { if (!used[k]) put('warning', 'event-extra', a.name + ': ' + evKey(e) + '@' + fmt(e.t)); });
+      if (line.a.ev !== line.b.ev) line.notes.push('події');
+      if (!opts.quick && !opts.lite && canon(f) !== canon(da[a.name] || {})) line.notes.push('ключі змінено');
+      if (line.notes.length) line.st = 'chg';
+    });
+    fNames.forEach(function (n) {
+      if (cNames.indexOf(n) !== -1) return;
+      var f = fa[n];
+      out.diff.anims.push({ name: n, a: null, b: { d: durationOf(f), ev: evText(evList(f, json)) }, st: 'add', notes: [] });
+      put('warning', 'anim-extra', n);
+    });
+    var common = fNames.filter(function (n) { return cNames.indexOf(n) !== -1; });
+    var cCommon = cNames.filter(function (n) { return fNames.indexOf(n) !== -1; });
+    if (canon(common) !== canon(cCommon)) put('warning', 'anim-order', 'драфт: ' + list(cCommon, 12) + ' · фінал: ' + list(common, 12));
+
+    var dSp = spacerSlotsOf(dj, tech.spacer), fSp = spacerSlotsOf(json, tech.spacer);
+    var fSlots = (json.slots || []).map(function (s) { return s && s.name; });
+    var dDeco = contract.decorationSpacers || [], fDeco = spacerSlots(json, tech.spacer);
+    dSp.forEach(function (n) {
+      if (fSlots.indexOf(n) === -1) put('error', 'spacer-missing', n);
+      else if (fSp.indexOf(n) === -1) put('warning', 'spacer-kind', n);
+      else if (dDeco.indexOf(n) !== -1 && fDeco.indexOf(n) === -1) put('warning', 'spacer-kind', n);
+    });
+    fDeco.forEach(function (n) { if (dDeco.indexOf(n) === -1) put('warning', 'spacer-extra', n); });
+    var spNames = dSp.concat(fSp.filter(function (n) { return dSp.indexOf(n) === -1; }));
+
+    var goneSlots = (dj.slots || []).map(function (s) { return s.name; }).filter(function (n) { return fSlots.indexOf(n) === -1 && dSp.indexOf(n) === -1; });
+    goneSlots.forEach(function (n) { put('warning', 'slots-missing', n); });
+
+    var root0 = (dj.bones || [])[0] || {}, root1 = (json.bones || [])[0] || {};
+    [['x', 0], ['y', 0], ['rotation', 0], ['scaleX', 1], ['scaleY', 1], ['shearX', 0], ['shearY', 0]].forEach(function (k) {
+      var a = root0[k[0]] === undefined ? k[1] : Number(root0[k[0]]), b = root1[k[0]] === undefined ? k[1] : Number(root1[k[0]]);
+      if (root1.name && Math.abs(a - b) > 0.001) put('warning', 'root', k[0] + ' ' + fmt(a) + ' → ' + fmt(b));
+    });
+
+    var dAtt = attRegions(dj), fAtt = attRegions(json);
+    out.diff.regions.del = dAtt.filter(function (a) { return fAtt.indexOf(a) === -1 && a !== tech.spacer; });
+    out.diff.regions.add = fAtt.filter(function (a) { return dAtt.indexOf(a) === -1; });
+    out.diff.regions.del.forEach(function (a) { put('warning', 'regions-missing', a); });
+    var odd = oddAtts(json).filter(function (a) { return fAtt.indexOf(a) === -1; });
+    fAtt.concat(odd).forEach(function (a) {
+      if (a.indexOf(' ') !== -1) put('error', 'att-space', a);
+      if (a.indexOf('txt/references/') !== -1) put('error', 'att-ref', a);
+    });
+
+    var dc = countOf(dj), fc = countOf(json);
+    var row = function (k, a, b) { out.diff.skel.push({ k: k, a: String(a), b: String(b), st: String(a) === String(b) ? 'same' : 'chg' }); };
+    row('Версія Spine', dj.skeleton.spine, sk.spine || '—');
+    row('Кістки', dc.bones, fc.bones);
+    row('Слоти', dc.slots, fc.slots);
+    row('Вкладення', dc.att, fc.att);
+    row('Картинки (регіони)', dAtt.length, fAtt.length);
+    row('Меші', dc.mesh, fc.mesh);
+    row('Констрейнти', dc.cons, fc.cons);
+    row('Події', dc.events, fc.events);
+
+    if (opts.quick) return finish();
+
+    var ai = input.atlas || null, at = null;
+    if (ji.name && ji.name !== name + '.json') put('info', 'file-json', ji.name);
+    out.diff.files.push({ k: 'JSON', v: (ji.name || name + '.json') + (ji.name && ji.name !== name + '.json' ? ' → ' + name + '.json' : '') });
+    if (!ai || typeof ai.text !== 'string') { if (fAtt.length) put('error', 'atlas-missing'); }
+    else {
+      at = atlasOf(ai.text);
+      if (ai.name && ai.name !== name + '.atlas') put('info', 'file-atlas', ai.name);
+      out.diff.files.push({ k: 'Атлас', v: (ai.name || name + '.atlas') + (ai.name && ai.name !== name + '.atlas' ? ' → ' + name + '.atlas' : '') });
+      if (!at.pages.length) put('error', 'atlas-parse', ai.name || name + '.atlas');
+      var want = pageNames(name, at.pages);
+      var rename = at.pages.some(function (p, i) { return p.name !== want[i]; });
+      var pages = input.pages || {};
+      at.pages.forEach(function (p, i) {
+        var got = pages[p.name], moved = rename && p.name !== want[i];
+        if (moved) { out.rename[p.name] = want[i]; put('info', 'page-rename', p.name + ' → ' + want[i]); }
+        out.diff.files.push({ k: 'Сторінка ' + (i + 1), v: p.name + (moved ? ' → ' + want[i] : '') + (p.w ? ' · ' + p.w + '×' + p.h : '') + (got ? '' : ' · немає файлу') });
+        if (opts.taken && opts.taken[want[i]]) put('error', 'page-clash', want[i] + ' (' + opts.taken[want[i]] + ')');
+        if (!got) { put('error', 'page-missing', p.name); return; }
+        if (got.w === 0 && got.h === 0) { put('error', 'page-broken', got.name || p.name); return; }
+        if (p.w && got.w && (p.w !== got.w || p.h !== got.h)) put('error', 'page-size', p.name + ': атлас ' + p.w + '×' + p.h + ', PNG ' + got.w + '×' + got.h);
+        var pw = p.w || got.w, ph = p.h || got.h;
+        if (Math.max(pw || 0, ph || 0) > 8192) put('error', 'page-huge', want[i] + ' ' + pw + '×' + ph);
+        else if (Math.max(pw || 0, ph || 0) > tech.maxPage) put('warning', 'page-big', want[i] + ' ' + pw + '×' + ph);
+        at.regions.filter(function (r) { return r.page === p.name; }).forEach(function (r) {
+          var turned = r.rot === 90 || r.rot === 270, w = turned ? r.h : r.w, h = turned ? r.w : r.h;
+          if ([r.x, r.y, w, h].every(isFinite) && pw && ph && (r.x < 0 || r.y < 0 || r.x + w > pw || r.y + h > ph)) put('error', 'region-bounds', r.name);
+        });
+      });
+      at.regions.filter(function (r) { return r.index >= 0; }).forEach(function (r) { put('warning', 'atlas-index', r.name + '#' + r.index); });
+      var rNames = at.regions.map(function (r) { return r.name; });
+      rNames.forEach(function (n) { if (n.indexOf(' ') !== -1) put('error', 'att-space', n); });
+      fAtt.filter(function (a) { return rNames.indexOf(a) === -1; }).forEach(function (a) { put('error', 'region-missing', a); });
+      odd.filter(function (a) { return rNames.indexOf(a) === -1; }).forEach(function (a) { put('warning', 'att-validator', a); });
+    }
+    (input.extra || []).filter(Boolean).forEach(function (n) { put('info', 'extra-files', n); });
+
+    var sp = opts.spine, rtF = null, rtD = null;
+    var setup = contract.skins.filter(function (n) { return n !== 'default' && fSkins.indexOf(n) !== -1; })[0] || null;
+    if (!sp) put(opts.gate ? 'warning' : 'info', 'no-runtime');
+    else {
+      if (at ? at.pages.length : !fAtt.length) {
+        try { rtF = runtimeOf(sp, at ? ai.text : '', ji.text || JSON.stringify(json), setup); }
+        catch (e) {
+          var msg = String((e && e.message) || e);
+          if (!(bag['region-missing'] && /Region not found/i.test(msg))) put('error', 'runtime', msg);
+        }
+      }
+      try { rtD = runtimeOf(sp, draft.atlasText || '', draft.jsonText || JSON.stringify(dj), setup); } catch (e) { rtD = null; }
+    }
+    var bA = rtD ? boundsOf(rtD) : null, bB = rtF ? boundsOf(rtF) : null;
+    if (!bA) bA = { w: Number(dj.skeleton.width) || 0, h: Number(dj.skeleton.height) || 0 };
+    if (!bB) bB = { w: Number(sk.width) || 0, h: Number(sk.height) || 0 };
+    row('Розмір у сетапі', Math.round(bA.w) + '×' + Math.round(bA.h), Math.round(bB.w) + '×' + Math.round(bB.h));
+    if (bA.w > 0 && bA.h > 0 && bB.w > 0 && bB.h > 0 && (Math.abs(bB.w / bA.w - 1) > 0.25 || Math.abs(bB.h / bA.h - 1) > 0.25)) put('warning', 'size', Math.round(bA.w) + '×' + Math.round(bA.h) + ' → ' + Math.round(bB.w) + '×' + Math.round(bB.h));
+    spNames.forEach(function (n) {
+      var a = rtD ? rectOf(rtD, n) : null, b = rtF ? rectOf(rtF, n) : null;
+      var st = dSp.indexOf(n) === -1 ? 'add' : fSlots.indexOf(n) === -1 ? 'del' : fSp.indexOf(n) === -1 ? 'kind' : 'same';
+      if (st === 'same' && a && b) {
+        var dist = Math.hypot(b.x - a.x, b.y - a.y);
+        var grow = Math.max(a.w ? Math.abs(b.w / a.w - 1) : 0, a.h ? Math.abs(b.h / a.h - 1) : 0);
+        if (dist > 2 || grow > 0.05) {
+          st = 'moved';
+          put('warning', 'spacer-moved', n + ' ' + fmt(a.x) + ', ' + fmt(a.y) + ' → ' + fmt(b.x) + ', ' + fmt(b.y) + (grow > 0.05 ? ' (' + fmt(a.w) + '×' + fmt(a.h) + ' → ' + fmt(b.w) + '×' + fmt(b.h) + ')' : ''));
+        }
+      }
+      out.diff.spacers.push({ name: n, st: st, a: a, b: b });
+    });
+    if (rtF) contract.animations.forEach(function (a) {
+      if (!a.loop || !fa[a.name]) return;
+      var bad = seamOf(rtF, a.name);
+      if (bad) put('warning', 'seam', a.name + ': ' + bad);
+    });
+    if (at) row('Сторінки атласу', (draft.page ? 1 : 0), at.pages.length);
+    out.sum = {
+      anims: fNames.map(function (n) { return [n, durationOf(fa[n])]; }),
+      skins: fSkins,
+      spacers: fSp,
+      w: Math.round(bB.w), h: Math.round(bB.h),
+      bones: fc.bones, slots: fc.slots, regions: fAtt.length,
+      pages: at ? at.pages.map(function (p) { var g = (input.pages || {})[p.name] || {}; return [out.rename[p.name] || p.name, p.w || g.w || 0, p.h || g.h || 0]; }) : [],
+      version: sk.spine || '', hash: sk.hash || ''
+    };
+    return finish();
+  }
+
   function pngSize(bytes) {
     if (!bytes || bytes.length < 24 || bytes[0] !== 0x89 || bytes[1] !== 0x50) return null;
     var u32 = function (o) { return ((bytes[o] << 24) >>> 0) + (bytes[o + 1] << 16) + (bytes[o + 2] << 8) + bytes[o + 3]; };
@@ -1443,6 +1893,7 @@
     TECH: TECH,
     PRESETS: PRESETS,
     slug: slug,
+    skinSlug: skinSlug,
     spacerItem: spacerItem,
     listOf: listOf,
     normPart: normPart,
@@ -1466,6 +1917,9 @@
     findWindow: findWindow,
     readme: readme,
     checkExport: checkExport,
+    finalCheck: finalCheck,
+    atlasOf: atlasOf,
+    renamePages: renamePages,
     durationOf: durationOf,
     pngSize: pngSize,
     roundTo: roundTo

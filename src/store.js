@@ -52,6 +52,9 @@
     get: function (id) {
       return run('readonly', function (st) { return st ? st.get(id) : { result: memory[id] }; });
     },
+    peek: function (id) {
+      return run('readonly', function (st) { return st ? st.get(id) : { result: memory[id] }; });
+    },
     put: function (rec) {
       memory[rec.id] = rec;
       return run('readwrite', function (st) { return st ? st.put(rec) : null; }).catch(function () { persistent = false; });
