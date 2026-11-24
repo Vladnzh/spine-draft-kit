@@ -86,7 +86,7 @@ ADMIN_EMAILS=<хто адмін кита>
 
 | Змінна | Що | Типово |
 |---|---|---|
-| `PUBLIC_URL` | зовнішня адреса, `https://spine-kit.<домен>`. Запити з іншим `Host` отримують 421 | обовʼязкова |
+| `PUBLIC_URL` | зовнішня адреса: `https://spine-kit.<домен>` або зі шляхом, `https://services.<домен>/spine-kit` (див. «Під шляхом»). Запити з іншим `Host` отримують 421 | обовʼязкова |
 | `PORT` | порт у контейнері | `8080` |
 | `HOST` | адреса, яку слухає сервер | `0.0.0.0` |
 | `DATA_DIR` | папка даних | `/data` |
@@ -148,6 +148,34 @@ server {
 - `Host` має збігатися з хостом із `PUBLIC_URL`, інакше сервер відповідає 421.
 - `/healthz` не перевіряє `Host`, тож його можна смикати напряму.
 - Внутрішній порт рушія (`ENGINE_PORT`) слухає лише `127.0.0.1` у контейнері. Його не можна публікувати.
+
+### Під шляхом (`/spine-kit`)
+
+Кит може жити не на окремому піддомені, а під шляхом спільного хоста, наприклад `PUBLIC_URL=https://services.example.com/spine-kit`. Тоді всі адреси кита (сторінка, `/api`, `/auth`, `/mcp`, `/oauth`, `/vendor`) отримують цей префікс. Проксі може передавати шлях як є або зрізати `/spine-kit`: кит приймає обидва варіанти.
+
+```nginx
+location ~ ^/spine-kit/(api/events|mcp)$ {
+  proxy_pass http://127.0.0.1:8080;
+  proxy_buffering off;
+  proxy_cache off;
+  proxy_read_timeout 3600s;
+  proxy_send_timeout 3600s;
+}
+
+location /spine-kit/ {
+  proxy_pass http://127.0.0.1:8080;
+  proxy_read_timeout 300s;
+}
+
+location ^~ /.well-known/oauth-authorization-server/spine-kit { proxy_pass http://127.0.0.1:8080; }
+location ^~ /.well-known/oauth-protected-resource/spine-kit { proxy_pass http://127.0.0.1:8080; }
+```
+
+- Заголовки ті самі, що вище: збережений `Host`, `X-Forwarded-Proto`, `X-Forwarded-For`.
+- Два маршрути `/.well-known/...` лежать у корені хоста, поза `/spine-kit`. Їх читає Claude Code, коли підключається по OAuth: за стандартом (RFC 8414) метадані сервера авторизації з адресою `https://services.example.com/spine-kit` шукаються саме там. Без них OAuth-підключення може не знайти сервер. Персональний токен (Connect → «Персональний токен») працює і без них.
+- Redirect URI у SSO: `https://services.example.com/spine-kit/auth/callback`.
+- Кука сесії — `__Secure-kit_sid` з `Path=/spine-kit`, тож іншим сервісам на цьому хості вона не надсилається.
+- Кит ділить origin з іншими сервісами хоста. Якщо в одному з них знайдеться XSS, він зможе діяти в киті від імені користувача. Окремий піддомен ізолює краще.
 
 ## Ресурси
 
@@ -241,6 +269,7 @@ spec:
 - `readOnlyRootFilesystem` працює, якщо `/tmp` — `emptyDir`: там живе профіль Chromium рушія. Перевірено в Docker з `--read-only --tmpfs /tmp --cap-drop ALL --security-opt no-new-privileges`.
 - `fsGroup: 1000` робить том записуваним для `node`.
 - Ingress-nginx: анотації `nginx.ingress.kubernetes.io/proxy-buffering: "off"`, `proxy-read-timeout: "3600"`, `proxy-send-timeout: "3600"`, `proxy-body-size: 256m`. Вони діють на весь ingress, і це нормально.
+- Під шляхом (`PUBLIC_URL=https://services.example.com/spine-kit`): у ingress три шляхи з `pathType: Prefix` на сервіс кита — `/spine-kit`, `/.well-known/oauth-authorization-server/spine-kit`, `/.well-known/oauth-protected-resource/spine-kit`. `rewrite-target` не потрібен.
 
 ## Бекап і відновлення
 

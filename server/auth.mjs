@@ -8,7 +8,7 @@ const EMAIL = /^[^\s@<>"']{1,64}@[^\s@<>"']{1,190}$/;
 
 const hash = s => createHash('sha256').update(s).digest('hex');
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
-const safeNext = n => typeof n === 'string' && /^\/(?![\/\\])/.test(n) ? n : '/';
+const safeNext = (n, base = '') => typeof n === 'string' && /^\/(?![\/\\])/.test(n) && (!base || n === base || n.startsWith(base + '/')) ? n : base + '/';
 
 export function readBody(req, limit) {
   return new Promise((resolve, reject) => {
@@ -38,11 +38,13 @@ p{margin:0;overflow-wrap:anywhere}.box form{background:none;padding:0;width:auto
 export function createAuth({ data, mode, publicUrl, admins, oidc: oc, log }) {
   const dev = mode === 'dev';
   const secure = new URL(publicUrl).protocol === 'https:';
-  const cookie = secure ? '__Host-kit_sid' : 'kit_sid';
-  const flowCookie = secure ? '__Host-kit_oidc' : 'kit_oidc';
+  const base = new URL(publicUrl).pathname.replace(/\/+$/, '');
+  const prefix = !secure ? '' : base ? '__Secure-' : '__Host-';
+  const cookie = prefix + 'kit_sid';
+  const flowCookie = prefix + 'kit_oidc';
   const origin = new URL(publicUrl).origin;
   const audit = (type, o) => log && log.audit(type, o);
-  const oidc = !dev && oc ? createOidc({ issuer: oc.issuer, clientId: oc.clientId, clientSecret: oc.clientSecret, scopes: oc.scopes, redirectUri: origin + '/auth/callback' }) : null;
+  const oidc = !dev && oc ? createOidc({ issuer: oc.issuer, clientId: oc.clientId, clientSecret: oc.clientSecret, scopes: oc.scopes, redirectUri: origin + base + '/auth/callback' }) : null;
   const flows = new Map();
   const sessions = new Map();
   for (const s of data.readJson('auth/sessions.json') || []) if (s && s.h && s.user) sessions.set(s.h, s);
@@ -70,7 +72,7 @@ export function createAuth({ data, mode, publicUrl, admins, oidc: oc, log }) {
   };
   const addCookie = (res, name, value, age) => {
     const prev = res.getHeader('set-cookie');
-    res.setHeader('set-cookie', [].concat(prev || [], `${name}=${value}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${age}${secure ? '; Secure' : ''}`));
+    res.setHeader('set-cookie', [].concat(prev || [], `${name}=${value}; Path=${base || '/'}; HttpOnly; SameSite=Lax; Max-Age=${age}${secure ? '; Secure' : ''}`));
   };
   const setCookie = (res, value, age) => addCookie(res, cookie, value, age);
   const readCookie = (req, name) => {
@@ -83,8 +85,8 @@ export function createAuth({ data, mode, publicUrl, admins, oidc: oc, log }) {
     res.end(PAGE(title, body));
   };
   const box = (h, text, action) => `<div class="box"><h1>${esc(h)}</h1>${text ? `<p>${esc(text)}</p>` : ''}${action || ''}</div>`;
-  const again = '<a class="btn" href="/auth/login">Увійти</a>';
-  const outForm = '<form method="post" action="/auth/logout" class="plain"><button>Вийти</button></form>';
+  const again = `<a class="btn" href="${base}/auth/login">Увійти</a>`;
+  const outForm = `<form method="post" action="${base}/auth/logout" class="plain"><button>Вийти</button></form>`;
   const sweep = () => {
     const now = Date.now();
     for (const [k, f] of flows) if (now - f.t > FLOW) flows.delete(k);
@@ -112,7 +114,7 @@ export function createAuth({ data, mode, publicUrl, admins, oidc: oc, log }) {
   const handle = async (req, res, url) => {
     const path = url.pathname;
     if (path === '/auth/login' && req.method === 'GET' && !dev) {
-      const next = safeNext(url.searchParams.get('next'));
+      const next = safeNext(url.searchParams.get('next'), base);
       sweep();
       const state = random(), nonce = random(), bind = random(), p = pkce();
       flows.set(state, { nonce, verifier: p.verifier, next, bind: hash(bind), t: Date.now() });
@@ -169,9 +171,9 @@ export function createAuth({ data, mode, publicUrl, admins, oidc: oc, log }) {
     if (path === '/auth/bye' && req.method === 'GET') return html(res, 200, 'Вихід · Draft Kit', box('Ви вийшли', '', again));
     if (path === '/auth/done' && req.method === 'GET') return html(res, 200, 'Вхід · Draft Kit', box('Вхід виконано', 'Поверніться у вкладку з китом — зміни дійдуть самі.', ''));
     if (path === '/auth/login' && req.method === 'GET') {
-      const next = safeNext(url.searchParams.get('next'));
+      const next = safeNext(url.searchParams.get('next'), base);
       res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
-      res.end(PAGE('Вхід · Draft Kit', `<form method="post" action="/auth/dev"><h1>Draft Kit · вхід для розробки</h1><label>Імʼя<input name="name" required maxlength="80" autocomplete="name"></label><label>Email<input name="email" type="email" required maxlength="200" autocomplete="email"></label><input type="hidden" name="next" value="${esc(next)}"><button>Увійти</button></form>`));
+      res.end(PAGE('Вхід · Draft Kit', `<form method="post" action="${base}/auth/dev"><h1>Draft Kit · вхід для розробки</h1><label>Імʼя<input name="name" required maxlength="80" autocomplete="name"></label><label>Email<input name="email" type="email" required maxlength="200" autocomplete="email"></label><input type="hidden" name="next" value="${esc(next)}"><button>Увійти</button></form>`));
       return;
     }
     if (path === '/auth/dev' && req.method === 'POST' && dev) {
@@ -182,7 +184,7 @@ export function createAuth({ data, mode, publicUrl, admins, oidc: oc, log }) {
       if (!EMAIL.test(email)) { res.writeHead(400, { 'content-type': 'text/plain; charset=utf-8' }); res.end('Поганий email'); return; }
       login(res, { email, name });
       audit('login', { email, name, dev: true, ip: ipOf(req) });
-      res.writeHead(303, { location: safeNext(form.get('next')) });
+      res.writeHead(303, { location: safeNext(form.get('next'), base) });
       res.end();
       return;
     }
@@ -195,7 +197,7 @@ export function createAuth({ data, mode, publicUrl, admins, oidc: oc, log }) {
       if (id) { sessions.delete(hash(id)); save(); }
       if (s) audit('logout', { email: s.user.email, ip: ipOf(req) });
       setCookie(res, '', 0);
-      res.writeHead(303, { location: '/auth/bye' });
+      res.writeHead(303, { location: base + '/auth/bye' });
       res.end();
       return;
     }

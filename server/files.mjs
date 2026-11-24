@@ -13,7 +13,7 @@ const cleanName = n => String(n || '').split(/[\\/]/).pop().replace(/[\x00-\x1f"
 const q = s => "'" + String(s).replace(/'/g, "'\\''") + "'";
 
 export function createFiles({ data, publicUrl, maxImageMb = 64, log, limiter }) {
-  const origin = new URL(publicUrl).origin;
+  const origin = new URL(publicUrl).origin + new URL(publicUrl).pathname.replace(/\/+$/, '');
   const maxImage = maxImageMb * MB;
   const LIMIT = { image: maxImage, layout: 32 * MB, component: 200 * MB, atlas: 16 * MB };
   const ups = new Map();

@@ -22,13 +22,14 @@ const size = m => `${m.w}x${m.h}`;
 
 export function createMcpHttp({ hub, oauth, files, engine, publicUrl, log, limiter, library }) {
   const origin = new URL(publicUrl).origin;
+  const site = origin + new URL(publicUrl).pathname.replace(/\/+$/, '');
   const sessions = new Map();
   const rate = limiter ? limiter(10, 20) : () => 0;
   const audit = (type, o) => log && log.audit(type, o);
-  const instructions = httpInstructions(origin);
+  const instructions = httpInstructions(site);
   const listed = listTools(HTTP_TOOLS);
 
-  const projectUrl = id => `${origin}/p/${id}`;
+  const projectUrl = id => `${site}/p/${id}`;
   const agents = id => {
     const now = Date.now();
     const out = new Map();
@@ -140,7 +141,7 @@ export function createMcpHttp({ hub, oauth, files, engine, publicUrl, log, limit
       const doc = s.project && hub.get(s.project);
       if (s.project && !doc) s.project = null;
       const viewing = viewingOf(s);
-      const out = { server: origin, user: s.owner, client: s.client, project: doc ? { id: doc.id, name: doc.settings.game || '', grid: `${doc.settings.reels}x${doc.settings.rows}`, url: projectUrl(doc.id), version: doc.v } : null, viewing };
+      const out = { server: site, user: s.owner, client: s.client, project: doc ? { id: doc.id, name: doc.settings.game || '', grid: `${doc.settings.reels}x${doc.settings.rows}`, url: projectUrl(doc.id), version: doc.v } : null, viewing };
       if (doc) out.in_project = hub.presenceOf(doc.id).map(p => ({ kind: p.kind, name: p.name, email: p.email, busy: p.busy || undefined }));
       else out.hint = 'Проект не вибрано: list_projects, спитай людину, потім open_project або create_project.' + viewHint(viewing);
       return out;

@@ -16,7 +16,8 @@ const MPORT = Number(process.env.MOCK_PORT) || 5192;
 const EPORT = Number(process.env.ENGINE_PORT) || 5189;
 const CPORT = Number(process.env.CHROME_PORT) || 9391;
 const DPORT = Number(process.env.ENGINE_DEBUG_PORT) || 9392;
-const BASE = `http://localhost:${PORT}`;
+const BASE = `http://localhost:${PORT}${process.env.KIT_BASE || ''}`;
+const ORIGIN = new URL(BASE).origin;
 const RESOURCE = BASE + '/mcp';
 const REDIRECT = 'http://127.0.0.1:5188/callback';
 
@@ -124,7 +125,7 @@ const authorize = async (j, user, clientId, opts = {}) => {
   const req = /name="req" value="([^"]+)"/.exec(page.text);
   const csrf = /name="csrf" value="([^"]+)"/.exec(page.text);
   if (!req || !csrf) return { page };
-  const res = await form('/oauth/authorize', { req: req[1], csrf: opts.csrf || csrf[1], decision: opts.deny ? 'deny' : 'allow' }, { cookie: cookieHdr(j), origin: BASE });
+  const res = await form('/oauth/authorize', { req: req[1], csrf: opts.csrf || csrf[1], decision: opts.deny ? 'deny' : 'allow' }, { cookie: cookieHdr(j), origin: ORIGIN });
   const loc = res.headers.get('location') || '';
   const u = loc ? new URL(loc) : null;
   const code = u && u.searchParams.get('code');
@@ -478,7 +479,7 @@ const B = client(null);
   await walk(j, `${BASE}/auth/login?next=/`);
   const s = await (await fetch(BASE + '/api/session', { headers: { cookie: cookieHdr(j) } })).json();
   secrets.add(s.csrf);
-  const h = { cookie: cookieHdr(j), origin: BASE, 'x-kit-csrf': s.csrf, 'content-type': 'application/json' };
+  const h = { cookie: cookieHdr(j), origin: ORIGIN, 'x-kit-csrf': s.csrf, 'content-type': 'application/json' };
   const mk = await (await fetch(BASE + '/api/mcp/tokens', { method: 'POST', headers: h, body: '{}' })).json();
   secrets.add(mk.token);
   ok('personal token: created once with the command', /^skp_/.test(mk.token) && mk.command === `claude mcp add --transport http spine-kit ${RESOURCE} --header "Authorization: Bearer ${mk.token}"`, JSON.stringify(mk).slice(0, 200));
@@ -499,10 +500,10 @@ const B = client(null);
   await P.init();
   const list = await (await fetch(BASE + '/api/mcp/clients', { headers: { cookie: h.cookie } })).json();
   ok('Connect list shows the token', list.some(c => c.id === mk.id && c.kind === 'personal' && c.exp > Date.now()), JSON.stringify(list));
-  const del = await fetch(BASE + '/api/mcp/clients/' + mk.id, { method: 'DELETE', headers: { cookie: h.cookie, origin: BASE, 'x-kit-csrf': s.csrf } });
+  const del = await fetch(BASE + '/api/mcp/clients/' + mk.id, { method: 'DELETE', headers: { cookie: h.cookie, origin: ORIGIN, 'x-kit-csrf': s.csrf } });
   const pu = await P.rpc('tools/list', {});
   ok('«Відключити» revokes it', del.status === 200 && pu.status === 401, `${del.status} ${pu.status}`);
-  const noCsrf = await fetch(BASE + '/api/mcp/tokens', { method: 'POST', headers: { cookie: h.cookie, origin: BASE, 'content-type': 'application/json' }, body: '{}' });
+  const noCsrf = await fetch(BASE + '/api/mcp/tokens', { method: 'POST', headers: { cookie: h.cookie, origin: ORIGIN, 'content-type': 'application/json' }, body: '{}' });
   ok('creating a token needs CSRF', noCsrf.status === 403);
 }
 

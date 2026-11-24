@@ -3,6 +3,8 @@
   var tag = typeof document !== 'undefined' ? document.querySelector('meta[name="spine-kit-mode"]') : null;
   var MODE = tag && /^(server|engine|view)$/.test(tag.content) ? tag.content : null;
   if (!MODE) { root.SpineKitSync = { mode: function () { return null; } }; return; }
+  var baseTag = document.querySelector('meta[name="spine-kit-base"]');
+  var BASE = baseTag && /^(\/[A-Za-z0-9._~-]+)+$/.test(baseTag.content) ? baseTag.content : '';
 
   var P = root.SpineKitPatch;
   var App = null;
@@ -69,7 +71,7 @@
   }
 
   async function relogin() {
-    var r = await fetch('/api/session', { cache: 'no-store' });
+    var r = await fetch(BASE + '/api/session', { cache: 'no-store' });
     if (r.status === 401) { setAuth(true); var e = new Error('Сесія завершилась'); e.status = 401; throw e; }
     if (!r.ok) { var e2 = new Error('/api/session ' + r.status); e2.status = r.status; throw e2; }
     var s = await r.json();
@@ -90,7 +92,7 @@
       var headers = {};
       if (write) headers['x-kit-csrf'] = csrf;
       if (type) headers['content-type'] = type;
-      return fetch(path, { method: method, headers: headers, body: body, cache: 'no-store', keepalive: !!opts.keepalive && (!body || body.length < 60000) });
+      return fetch(BASE + path, { method: method, headers: headers, body: body, cache: 'no-store', keepalive: !!opts.keepalive && (!body || body.length < 60000) });
     };
     var r = await send();
     for (var n = 0; r.status === 429 && n < 30; n++) { await sleep(1000 * Math.min(60, Number(r.headers.get('retry-after')) || 1)); r = await send(); }
@@ -468,7 +470,7 @@
   function connect() {
     if (MODE === 'view') return;
     if (es) { es.close(); es = null; }
-    var url = '/api/events' + (pid ? '?project=' + encodeURIComponent(pid) + '&since=' + lastV : '');
+    var url = BASE + '/api/events' + (pid ? '?project=' + encodeURIComponent(pid) + '&since=' + lastV : '');
     var src = new EventSource(url);
     es = src;
     var on = function (name, fn) { src.addEventListener(name, function (e) { if (es === src) fn(JSON.parse(e.data)); }); };
@@ -532,12 +534,12 @@
       b.className = 'sk-banner view';
       b.appendChild(el('span', { text: 'Версія від ' + stamp(viewInfo.entry.t) + ' · ' + viewInfo.entry.label }));
       b.appendChild(el('button', { type: 'button', class: 'btn sm primary', text: 'Відновити', onclick: viewRestore }));
-      b.appendChild(el('button', { type: 'button', class: 'btn sm', text: 'Закрити', onclick: function () { window.close(); location.href = '/p/' + viewInfo.id; } }));
+      b.appendChild(el('button', { type: 'button', class: 'btn sm', text: 'Закрити', onclick: function () { window.close(); location.href = BASE + '/p/' + viewInfo.id; } }));
     } else if (authLost) {
       on = true;
       b.className = 'sk-banner bad';
       b.appendChild(el('span', { text: 'Сесія завершилась' }));
-      b.appendChild(el('button', { type: 'button', class: 'btn sm primary', text: 'Увійти', onclick: function () { window.open('/auth/login?next=' + encodeURIComponent('/auth/done'), '_blank'); } }));
+      b.appendChild(el('button', { type: 'button', class: 'btn sm primary', text: 'Увійти', onclick: function () { window.open(BASE + '/auth/login?next=' + encodeURIComponent(BASE + '/auth/done'), '_blank'); } }));
     } else if (hc.at) {
       on = true;
       b.className = 'sk-banner';
@@ -590,7 +592,7 @@
   function cmdRow(text) { return el('div', { class: 'lk-cmd' }, [el('code', { text: text }), copyBtn(text)]); }
   function renderConnect(body) {
     body.textContent = '';
-    var cmd = 'claude mcp add --transport http spine-kit ' + (mcpUrl || location.origin + '/mcp');
+    var cmd = 'claude mcp add --transport http spine-kit ' + (mcpUrl || location.origin + BASE + '/mcp');
     body.appendChild(el('div', { class: 'lk-step' }, [el('b', { text: '1. Додай кит у Claude Code (один раз)' }), cmdRow(cmd)]));
     body.appendChild(el('div', { class: 'lk-step' }, [el('b', { text: '2. Увійди' }), el('p', {}, ['Далі в Claude Code: ', el('code', { text: '/mcp' }), ' → spine-kit → Authenticate. Відкриється вхід і сторінка «Дозволити».'])]));
     body.appendChild(el('div', { class: 'lk-step' }, [el('b', { text: '3. Попроси Claude' }), el('p', { text: '«Створи проект і заповни його артом з /шлях/до/арту». Claude сам заллє файли, а зміни зʼявляться тут наживо з підписом «Claude · ' + ((me && me.name) || 'ваше імʼя') + '».' })]));
@@ -654,7 +656,7 @@
     b.hidden = false;
   }
   function logout() {
-    var f = el('form', { method: 'post', action: '/auth/logout', hidden: true }, [el('input', { type: 'hidden', name: 'csrf', value: csrf })]);
+    var f = el('form', { method: 'post', action: BASE + '/auth/logout', hidden: true }, [el('input', { type: 'hidden', name: 'csrf', value: csrf })]);
     document.body.appendChild(f);
     f.submit();
   }
@@ -830,7 +832,7 @@
   async function viewRestore() {
     try {
       await postJson('/api/projects/' + viewInfo.id + '/restore', { entry: viewInfo.entry.id, scope: viewInfo.entry.scope });
-      location.href = '/p/' + viewInfo.id;
+      location.href = BASE + '/p/' + viewInfo.id;
     } catch (x) { toast('Не вдалося відновити: ' + x.message); }
   }
 
@@ -919,7 +921,9 @@
   }
 
   function pathId() {
-    var m = /^\/p\/([A-Za-z0-9_-]{1,64})$/.exec(location.pathname);
+    var path = location.pathname;
+    if (BASE && path.indexOf(BASE + '/') === 0) path = path.slice(BASE.length);
+    var m = /^\/p\/([A-Za-z0-9_-]{1,64})$/.exec(path);
     return m ? m[1] : null;
   }
 
@@ -928,7 +932,7 @@
     mount();
     var s;
     try { s = await getJson('/api/session'); }
-    catch (e) { location.href = '/auth/login?next=' + encodeURIComponent(location.pathname + location.search); return new Promise(function () {}); }
+    catch (e) { location.href = BASE + '/auth/login?next=' + encodeURIComponent(location.pathname + location.search); return new Promise(function () {}); }
     me = s.user;
     role = s.role;
     csrf = s.csrf;
@@ -951,7 +955,7 @@
     return last;
   }
   function opened(id) {
-    if (MODE !== 'view' && location.pathname !== '/p/' + id) history.replaceState(null, '', '/p/' + id);
+    if (MODE !== 'view' && location.pathname !== BASE + '/p/' + id) history.replaceState(null, '', BASE + '/p/' + id);
     if (MODE === 'view') return;
     serial(async function () {
       if (pid !== id) return;
@@ -968,7 +972,7 @@
     hc.at = null;
     renderBanner();
     renderPresence();
-    if (MODE !== 'view' && location.pathname !== '/') history.replaceState(null, '', '/');
+    if (MODE !== 'view' && location.pathname !== BASE + '/') history.replaceState(null, '', BASE + '/');
     connect();
   }
   function step(dir) {
@@ -984,6 +988,7 @@
 
   root.SpineKitSync = {
     mode: function () { return MODE; },
+    base: BASE,
     start: start,
     wanted: wanted,
     opened: opened,

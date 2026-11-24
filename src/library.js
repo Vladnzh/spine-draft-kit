@@ -66,7 +66,7 @@
   }
   function thumbUrl(m) {
     if (!m || !m.thumb) return '';
-    if (m.thumb.sha) return '/api/blobs/' + m.thumb.sha;
+    if (m.thumb.sha) return ((root.SpineKitSync && root.SpineKitSync.base) || '') + '/api/blobs/' + m.thumb.sha;
     return urls[m.id] ? urls[m.id].url : '';
   }
   function tell() { listeners.forEach(function (fn) { try { fn(cache || []); } catch (e) { return; } }); }

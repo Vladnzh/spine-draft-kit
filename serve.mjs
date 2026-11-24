@@ -67,6 +67,9 @@ function start() {
   let pubUrl;
   try { pubUrl = new URL(cfg.publicUrl); } catch { die(`Поганий PUBLIC_URL: ${cfg.publicUrl}`); }
   if (pubUrl.protocol !== 'https:' && !(pubUrl.protocol === 'http:' && LOOP.has(pubUrl.hostname.replace(/^\[|\]$/g, '')))) die('PUBLIC_URL має бути https:// (http дозволений лише для localhost)');
+  if (pubUrl.search || pubUrl.hash || pubUrl.username || !/^(\/[A-Za-z0-9._~-]+)*\/?$/.test(pubUrl.pathname)) die(`Поганий шлях у PUBLIC_URL: ${cfg.publicUrl} (лише /назва або /назва/назва, без ? і #)`);
+  cfg.base = pubUrl.pathname.replace(/\/+$/, '');
+  cfg.publicUrl = pubUrl.origin + cfg.base;
   let oidc = null;
   if (cfg.auth === 'oidc') {
     oidc = {

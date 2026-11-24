@@ -47,6 +47,15 @@ const out = (res, r, ok = 200) => r && r.error ? json(res, r.code || 400, { erro
 
 export function createHttp({ data, hub, auth, cfg, page, log, oauth, mcp, files, library, sandbox }) {
   const pub = new URL(cfg.publicUrl);
+  const base = pub.pathname.replace(/\/+$/, '');
+  const site = pub.origin + base;
+  const unbase = path => {
+    if (!base) return path;
+    const wk = /^(\/\.well-known\/oauth-(?:protected-resource|authorization-server))(\/.*)$/.exec(path);
+    if (wk && (wk[2] === base || wk[2].startsWith(base + '/'))) return wk[1] + wk[2].slice(base.length);
+    if (path === base || path.startsWith(base + '/')) return path.slice(base.length) || '/';
+    return path;
+  };
   const reloads = new Set();
   const maxImage = (Number(cfg.maxImageMb) || 64) * MB;
   const audit = (type, o) => log && log.audit(type, o);
@@ -85,11 +94,12 @@ export function createHttp({ data, hub, auth, cfg, page, log, oauth, mcp, files,
     let html = page();
     if (!html) { res.writeHead(503, { 'content-type': 'text/plain; charset=utf-8' }); res.end('Сторінка не зібрана: node build.mjs'); return; }
     const key = html.length + ':' + mode;
+    const b = mode === 'engine' ? '' : base;
     let hit = pages.get(key);
     if (!hit || hit.src !== html) {
-      let out = html.replace('<meta charset="utf-8">', `<meta charset="utf-8"><meta name="spine-kit-mode" content="${mode}">`);
-      for (const v of vendor()) if (v.ok) out = out.split(`'${v.url}'`).join(`'/vendor/${v.file}'`);
-      if (cfg.dev && mode !== 'engine') out = out.replace('</body>', `<script>new EventSource('/__reload').onmessage=()=>location.reload()</script></body>`);
+      let out = html.replace('<meta charset="utf-8">', `<meta charset="utf-8"><meta name="spine-kit-mode" content="${mode}">${b ? `<meta name="spine-kit-base" content="${b}">` : ''}`);
+      for (const v of vendor()) if (v.ok) out = out.split(`'${v.url}'`).join(`'${b}/vendor/${v.file}'`);
+      if (cfg.dev && mode !== 'engine') out = out.replace('</body>', `<script>new EventSource('${b}/__reload').onmessage=()=>location.reload()</script></body>`);
       hit = { src: html, out, csp: pageCsp(out) };
       if (pages.size > 8) pages.clear();
       pages.set(key, hit);
@@ -106,7 +116,7 @@ export function createHttp({ data, hub, auth, cfg, page, log, oauth, mcp, files,
 
     if (path.startsWith('/api/mcp/') && oauth && !s.engine) return oauth.api(req, res, url, s);
 
-    if (path === '/api/session' && m === 'GET') return json(res, 200, { user: s.user, role: s.role, csrf: s.csrf, mcpUrl: pub.origin + '/mcp' });
+    if (path === '/api/session' && m === 'GET') return json(res, 200, { user: s.user, role: s.role, csrf: s.csrf, mcpUrl: site + '/mcp' });
 
     if (path === '/api/events' && m === 'GET') {
       const project = url.searchParams.get('project');
@@ -252,6 +262,7 @@ export function createHttp({ data, hub, auth, cfg, page, log, oauth, mcp, files,
   const handle = async (req, res) => {
     let url;
     try { url = new URL(req.url, pub.origin); } catch { res.writeHead(400); return res.end(); }
+    if (base) url.pathname = unbase(url.pathname);
     const path = url.pathname;
     security(res);
     if (path === '/healthz') { res.writeHead(200, { 'content-type': 'text/plain' }); return res.end('ok'); }
@@ -294,7 +305,7 @@ export function createHttp({ data, hub, auth, cfg, page, log, oauth, mcp, files,
       return api(req, res, url, s);
     }
     if (req.method === 'GET' && (path === '/' || /^\/p\/[A-Za-z0-9_-]{1,64}$/.test(path))) {
-      if (!s) { res.writeHead(303, { location: '/auth/login?next=' + encodeURIComponent(path + url.search) }); return res.end(); }
+      if (!s) { res.writeHead(303, { location: base + '/auth/login?next=' + encodeURIComponent(base + path + url.search) }); return res.end(); }
       return sendPage(res, url.searchParams.has('v') && path !== '/' ? 'view' : 'server');
     }
     res.writeHead(404, { 'content-type': 'text/plain' });

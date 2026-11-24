@@ -33,7 +33,9 @@ const parseUri = s => { try { const u = new URL(String(s)); return u.hash ? null
 
 export function createOAuth({ data, publicUrl, auth, log, extraRedirects = [], limiter, regPerHour = 10 }) {
   const origin = new URL(publicUrl).origin;
-  const resource = origin + '/mcp';
+  const base = new URL(publicUrl).pathname.replace(/\/+$/, '');
+  const site = origin + base;
+  const resource = site + '/mcp';
   const audit = (type, o) => log && log.audit(type, o);
   const extra = extraRedirects.map(strip).filter(Boolean);
   const regRate = limiter ? limiter(regPerHour / 3600, regPerHour) : () => 0;
@@ -128,13 +130,13 @@ export function createOAuth({ data, publicUrl, auth, log, extraRedirects = [], l
     return { access_token: access, token_type: 'Bearer', expires_in: ACCESS_TTL / 1000, refresh_token: refresh, scope: 'kit' };
   };
 
-  const metaResource = () => ({ resource, authorization_servers: [origin], bearer_methods_supported: ['header'], scopes_supported: ['kit'], resource_name: 'Spine Draft Kit' });
+  const metaResource = () => ({ resource, authorization_servers: [site], bearer_methods_supported: ['header'], scopes_supported: ['kit'], resource_name: 'Spine Draft Kit' });
   const metaServer = () => ({
-    issuer: origin,
-    authorization_endpoint: origin + '/oauth/authorize',
-    token_endpoint: origin + '/oauth/token',
-    registration_endpoint: origin + '/oauth/register',
-    revocation_endpoint: origin + '/oauth/revoke',
+    issuer: site,
+    authorization_endpoint: site + '/oauth/authorize',
+    token_endpoint: site + '/oauth/token',
+    registration_endpoint: site + '/oauth/register',
+    revocation_endpoint: site + '/oauth/revoke',
     response_types_supported: ['code'],
     grant_types_supported: ['authorization_code', 'refresh_token'],
     code_challenge_methods_supported: ['S256'],
@@ -177,7 +179,7 @@ export function createOAuth({ data, publicUrl, auth, log, extraRedirects = [], l
   const back = (res, uri, params) => {
     const u = new URL(uri);
     for (const [k, v] of Object.entries(params)) if (v !== undefined && v !== null && v !== '') u.searchParams.set(k, v);
-    u.searchParams.set('iss', origin);
+    u.searchParams.set('iss', site);
     res.writeHead(303, { location: u.href, 'cache-control': 'no-store' });
     res.end();
   };
@@ -196,13 +198,13 @@ export function createOAuth({ data, publicUrl, auth, log, extraRedirects = [], l
     if (!resourceOk(q.get('resource'))) return back(res, redirect, { error: 'invalid_target', error_description: 'resource має бути ' + resource, state });
     const s = auth.session(req);
     if (!s) {
-      res.writeHead(303, { location: '/auth/login?next=' + encodeURIComponent(url.pathname + url.search), 'cache-control': 'no-store' });
+      res.writeHead(303, { location: base + '/auth/login?next=' + encodeURIComponent(base + url.pathname + url.search), 'cache-control': 'no-store' });
       return res.end();
     }
     const id = randomBytes(18).toString('base64url');
     requests.set(id, { t: Date.now(), client_id: client.client_id, redirect, state, challenge: q.get('code_challenge'), resource: q.get('resource') || resource, email: s.user.email });
     const to = new URL(redirect).origin;
-    html(res, 200, 'Підключення · Draft Kit', `<form class="box" method="post" action="/oauth/authorize">
+    html(res, 200, 'Підключення · Draft Kit', `<form class="box" method="post" action="${base}/oauth/authorize">
 <h1>Підключити Claude?</h1>
 <p><b>${esc(client.client_name)}</b> хоче працювати зі Spine Draft Kit від імені <b>${esc(s.user.email)}</b>.</p>
 <p><small>Він бачитиме й змінюватиме всі проекти, як і ви. Кожна його зміна в історії буде підписана «Claude · ${esc(s.user.name || s.user.email)}». Відключити можна в киті: Connect → Відключити.</small></p>
@@ -318,7 +320,7 @@ export function createOAuth({ data, publicUrl, auth, log, extraRedirects = [], l
     if (now - f.last > MIN) { f.last = now; const c = clients.get(f.client_id); if (c) c.last = now; save(); }
     return { user: { email: f.email, name: f.name || f.email.split('@')[0] }, family: f.id, client: f.client_name || f.label || 'Claude' };
   };
-  const challenge = err => `Bearer resource_metadata="${origin}/.well-known/oauth-protected-resource"${err && err !== 'missing' ? ', error="invalid_token", error_description="' + (err === 'expired' ? 'token expired' : 'token invalid') + '"' : ''}`;
+  const challenge = err => `Bearer resource_metadata="${site}/.well-known/oauth-protected-resource"${err && err !== 'missing' ? ', error="invalid_token", error_description="' + (err === 'expired' ? 'token expired' : 'token invalid') + '"' : ''}`;
 
   const listFor = (email, all) => [...families.values()].filter(f => all || f.email === email).sort((a, b) => b.last - a.last).map(f => ({
     id: f.id, kind: f.kind, name: f.kind === 'personal' ? f.label || 'Персональний токен' : f.client_name, email: f.email, created: f.created, last: f.last,
