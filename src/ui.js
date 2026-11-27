@@ -75,7 +75,7 @@
   function forgetComponentImages(c, keepFinals) {
     var st = imgs('c:' + c.id);
     forgetImage('c:' + c.id);
-    Object.keys(st.images).concat(Object.keys(st.blobs)).forEach(function (k) { if (k.indexOf('p:' + c.id + ':') === 0 || (!keepFinals && k.indexOf('f:' + c.id + ':') === 0)) forgetImage(k); });
+    Object.keys(st.images).concat(Object.keys(st.blobs)).forEach(function (k) { if (k.indexOf('p:' + c.id + ':') === 0 || k.indexOf('s:' + c.id + ':') === 0 || (!keepFinals && k.indexOf('f:' + c.id + ':') === 0)) forgetImage(k); });
   }
   function movePartImage(c, from, to) {
     var a = partKey(c, from), b = partKey(c, to);
@@ -87,6 +87,11 @@
 
   var COMP_KIT = 'spine-draft-kit/component@1';
   function compImageKeys(c) {
+    if (c.raw) {
+      var files = { 'spine:json': 's:' + c.id + ':json', 'spine:atlas': 's:' + c.id + ':atlas' };
+      (c.raw.pages || []).forEach(function (n) { files['page:' + n] = 's:' + c.id + ':page:' + n; });
+      return files;
+    }
     var out = { main: 'c:' + c.id };
     (c.parts || []).forEach(function (p) { if (p && p.name) out['part:' + p.name] = partKey(c, p.name); });
     return out;
@@ -672,8 +677,9 @@
   }
 
   function px(key) {
+    if (key.indexOf('gl:') === 0) { var gl = glintOf(key); return gl ? { w: gl.w, h: gl.h, cw: gl.cw, ch: gl.ch, ox: gl.ox, oy: gl.oy, empty: gl.empty, sum: gl.sum } : null; }
     var im = imgs(key).images[key];
-    if (im) return { w: im.w, h: im.h, win: im.win || null, uploaded: true };
+    if (im) return { w: im.w, h: im.h, win: im.win || null, uploaded: true, sum: im.sum };
     var g = geo();
     if (key.indexOf('sym:') === 0) return { w: Math.round(0.86 * g.W), h: Math.round(0.86 * g.H) };
     if (key.indexOf('blur:') === 0) {
@@ -979,8 +985,77 @@
     return cv;
   }
 
+  var derived = new WeakMap();
+  function derivedOf(src, id, make) {
+    var m = derived.get(src);
+    if (!m) { m = {}; derived.set(src, m); }
+    return m[id] || (m[id] = make());
+  }
+  function drawGlint(src, i, n, angle, level, scale, sum) {
+    var W = Math.max(2, Math.round(src.width * scale)), H = Math.max(2, Math.round(src.height * scale));
+    var c = el('canvas', { width: W, height: H }), x = c.getContext('2d', { willReadFrequently: true });
+    x.imageSmoothingQuality = 'high';
+    x.drawImage(src, 0, 0, W, H);
+    var img = x.getImageData(0, 0, W, H), d = img.data;
+    var rad = angle * Math.PI / 180, cs = Math.cos(rad), sn = Math.sin(rad), span = Math.abs(W * cs) + Math.abs(H * sn) || 1;
+    var mid = (i + 0.5) / n, half = 1 / n, x0 = W, y0 = H, x1 = -1, y1 = -1;
+    for (var py = 0; py < H; py++) {
+      for (var qx = 0; qx < W; qx++) {
+        var o = (py * W + qx) * 4, a = d[o + 3];
+        if (!a) continue;
+        var lit = level > 0 ? Math.max(0, Math.min(1, ((0.2126 * d[o] + 0.7152 * d[o + 1] + 0.0722 * d[o + 2]) / 255 - level + 0.12) / 0.24)) : 1;
+        var u = ((qx + 0.5 - W / 2) * cs + (py + 0.5 - H / 2) * sn) / span + 0.5;
+        a = Math.round(a * lit * lit * (3 - 2 * lit) * (n > 1 ? Math.max(0, 1 - Math.abs(u - mid) / half) : 1));
+        d[o + 3] = a;
+        if (a > 2) { if (qx < x0) x0 = qx; if (qx > x1) x1 = qx; if (py < y0) y0 = py; if (py > y1) y1 = py; }
+      }
+    }
+    if (x1 < 0) return { canvas: el('canvas', { width: 1, height: 1 }), w: 1, h: 1, cw: 1, ch: 1, ox: 0, oy: 0, empty: true, sum: sum };
+    var cw = x1 - x0 + 1, ch = y1 - y0 + 1, out = el('canvas', { width: cw, height: ch });
+    out.getContext('2d').putImageData(img, -x0, -y0, x0, y0, cw, ch);
+    return { canvas: out, w: cw, h: ch, cw: cw / scale, ch: ch / scale, ox: ((x0 + x1 + 1) / 2 - W / 2) / scale, oy: ((y0 + y1 + 1) / 2 - H / 2) / scale, empty: false, sum: sum };
+  }
+  function glintOf(key) {
+    var f = key.split(':'), srcKey = f.slice(6).join(':'), src = art(srcKey);
+    if (!src) return null;
+    var im = imgs(srcKey).images[srcKey];
+    return derivedOf(src, f.slice(0, 6).join(':'), function () { return drawGlint(src, Number(f[1]), Number(f[2]), Number(f[3]), Number(f[4]), Number(f[5]), im && im.sum ? f.slice(0, 6).join(':') + '|' + im.sum : undefined); });
+  }
+  function frameOf(key) {
+    var f = key.split(':'), src = art(f.slice(4).join(':'));
+    if (!src) return null;
+    return derivedOf(src, f.slice(0, 4).join(':'), function () {
+      var cols = Number(f[2]), fw = Math.max(1, Math.floor(src.width / cols)), fh = Math.max(1, Math.floor(src.height / Number(f[3])));
+      var c = el('canvas', { width: fw, height: fh });
+      c.getContext('2d').drawImage(src, (Number(f[1]) % cols) * fw, Math.floor(Number(f[1]) / cols) * fh, fw, fh, 0, 0, fw, fh);
+      return c;
+    });
+  }
+  async function sheetFrom(key, files, opts) {
+    var o = opts || {}, max = Math.max(2, Math.min(64, Number(o.max_frames) || 16)), side = Math.max(16, Math.min(1024, Number(o.max_px) || 256));
+    var list = files.every(function (f) { return f && f.name; }) ? files.slice().sort(function (a, b) { return String(a.name).localeCompare(String(b.name), undefined, { numeric: true }); }) : files;
+    var step = Math.ceil(list.length / max), frames = [];
+    for (var i = 0; i < list.length; i += step) {
+      var url = URL.createObjectURL(list[i]);
+      try { frames.push((await canvasFromUrl(url)).canvas); } finally { URL.revokeObjectURL(url); }
+    }
+    var fw = Math.max.apply(null, frames.map(function (c) { return c.width; })), fh = Math.max.apply(null, frames.map(function (c) { return c.height; }));
+    var s = Math.min(1, side / Math.max(fw, fh)), cw = Math.max(1, Math.round(fw * s)), ch = Math.max(1, Math.round(fh * s));
+    var cols = Math.ceil(Math.sqrt(frames.length)), rows = Math.ceil(frames.length / cols);
+    var cv = el('canvas', { width: cols * cw, height: rows * ch }), x = cv.getContext('2d');
+    x.imageSmoothingQuality = 'high';
+    frames.forEach(function (f, j) {
+      var w = Math.round(f.width * s), h = Math.round(f.height * s);
+      x.drawImage(f, (j % cols) * cw + Math.round((cw - w) / 2), Math.floor(j / cols) * ch + Math.round((ch - h) / 2), w, h);
+    });
+    await setImage(key, await canvasBlob(cv), (o.name || 'frames') + '_sheet.png');
+    return { cols: cols, rows: rows, count: frames.length, w: fw, h: fh, step: step };
+  }
+
   var artCache = {};
   function art(key) {
+    if (key.indexOf('gl:') === 0) { var gl = glintOf(key); return gl ? gl.canvas : null; }
+    if (key.indexOf('fr:') === 0) return frameOf(key);
     var im = imgs(key).images[key];
     if (im) return im.canvas;
     if (key.indexOf('blur:') === 0) { var sc = art('sym:' + key.slice(5)); return sc ? drawBlur(sc) : null; }
@@ -1062,21 +1137,26 @@
     for (var i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
     return new Blob([bytes], { type: m[1] || 'image/png' });
   }
+  async function imageSum(blob, canvas) {
+    var bytes = new Uint8Array(await blob.arrayBuffer()), a = 2166136261, b = 2538058380;
+    for (var i = 0; i < bytes.length; i++) { a = Math.imul(a ^ bytes[i], 16777619); b = Math.imul(b ^ bytes[i], 2246822519); }
+    return bytes.length + ':' + canvas.width + 'x' + canvas.height + ':' + (a >>> 0).toString(16) + (b >>> 0).toString(16);
+  }
   async function setImage(key, source, fileName) {
     var blob = typeof source === 'string' ? dataUrlBlob(source) : source;
     var url = URL.createObjectURL(blob);
     var r;
     try { r = await canvasFromUrl(url); } finally { URL.revokeObjectURL(url); }
-    var im = { canvas: r.canvas, w: r.canvas.width, h: r.canvas.height, fileName: fileName || '' };
+    var im = { canvas: r.canvas, w: r.canvas.width, h: r.canvas.height, fileName: fileName || '', sum: await imageSum(blob, r.canvas) };
     if (key === 'frame_above') im.win = windowOf(r.canvas);
     var st = imgs(key);
     st.images[key] = im;
     st.blobs[key] = blob;
     return r.natural;
   }
-  function isSbKey(k) { return /^(c|p):sb/.test(String(k || '')); }
+  function isSbKey(k) { return /^(c|p|s):sb/.test(String(k || '')); }
   function imgs(k) { return isSbKey(k) ? sb.store : state; }
-  function forgetImage(key) { var st = imgs(key); delete st.images[key]; delete st.blobs[key]; delete fin.text[key]; delete fin.parsed[key]; delete fin.drift[key]; }
+  function forgetImage(key) { var st = imgs(key); delete st.images[key]; delete st.blobs[key]; delete fin.text[key]; delete fin.parsed[key]; delete fin.drift[key]; delete sb.text[key]; }
   function dropImage(key) {
     forgetImage(key);
     changed({ render: true, images: true });
@@ -1134,13 +1214,15 @@
     input.addEventListener('change', function () { var fs = Array.prototype.slice.call(input.files || []); input.value = ''; if (fs.length) onFiles(fs); });
     return [input, el('label', { class: 'btn sm', for: id, text: label })];
   }
-  function dropTarget(node, onFiles) {
+  function dropTarget(node, onFiles, deep) {
     node.addEventListener('dragover', function (e) { e.preventDefault(); node.classList.add('over'); });
     node.addEventListener('dragleave', function () { node.classList.remove('over'); });
-    node.addEventListener('drop', function (e) {
+    node.addEventListener('drop', async function (e) {
       e.preventDefault();
       node.classList.remove('over');
-      var fs = Array.prototype.slice.call((e.dataTransfer && e.dataTransfer.files) || []);
+      var dt = e.dataTransfer, fs = Array.prototype.slice.call((dt && dt.files) || []), entries = [];
+      if (deep) Array.prototype.forEach.call((dt && dt.items) || [], function (it) { var en = it.kind === 'file' && it.webkitGetAsEntry ? it.webkitGetAsEntry() : null; if (en) entries.push(en); });
+      if (entries.some(function (en) { return en.isDirectory; })) { try { fs = await finWalk(entries); } catch (err) { entries = []; } }
       if (fs.length) onFiles(fs);
     });
   }
@@ -1392,17 +1474,18 @@
   function infoBtn(key) { return el('button', { type: 'button', class: 'info', 'data-info': key, 'aria-label': 'Що таке: ' + Info.title(key), text: 'i' }); }
 
   var KEY_ICON = '<path d="M12 3.5 20.5 12 12 20.5 3.5 12Z"/>';
-  var BAR_PARTS = ['bar', 'bar_fill', 'bar_shine', 'bar_head', 'bar_glow', 'bar_clip', 'bar_flash'];
+  var BAR_PARTS = ['bar', 'bar_fill', 'bar_shine', 'bar_head', 'bar_glow', 'bar_flash'];
+  var BAR_BONES = ['bar_grow', 'bar_sweep'];
   var kd = { c: null, row: null, bound: false };
   function spacerSlots(c) { return K.listOf(c.spacers).map(function (s) { return K.spacerItem(s).split('@')[0]; }).filter(Boolean); }
   function barOn(c) { return !!String(c.bar || '').trim(); }
   function partReserved(c) {
     var out = ['root', 'art'];
     spacerSlots(c).forEach(function (s) { out.push(s, s + '_bone'); });
-    return barOn(c) ? out.concat(BAR_PARTS) : out;
+    return barOn(c) ? out.concat(BAR_PARTS, BAR_BONES) : out;
   }
   function keyTargets(c) {
-    var out = ['art'].concat((c.parts || []).map(function (p) { return p ? K.slug(p.name) : ''; }), spacerSlots(c), barOn(c) ? BAR_PARTS.filter(function (n) { return n !== 'bar_clip'; }) : [], ['all']);
+    var out = ['art'].concat((c.parts || []).map(function (p) { return p ? K.slug(p.name) : ''; }), spacerSlots(c), barOn(c) ? BAR_PARTS : [], ['all']);
     return out.filter(function (n, i) { return n && out.indexOf(n) === i; });
   }
   function keysOf(row) {
@@ -1699,8 +1782,12 @@
     var why = !n ? 'Порожня назва' : partReserved(c).indexOf(n) !== -1 ? 'Назва ' + n + ' зарезервована' : !partFree(c, n, p) ? 'Частина ' + n + ' вже є' : '';
     if (why) { input.value = old; toast(why); return; }
     movePartImage(c, old, n);
-    (c.parts || []).forEach(function (x) { if (x && x.parent === old) x.parent = n; });
-    (c.anims || []).forEach(function (a) { renameTarget(a, old, n); });
+    (c.parts || []).forEach(function (x) { if (x && x.parent === old) x.parent = n; if (x && x.glint && x.glint.of === old) x.glint.of = n; });
+    (c.anims || []).forEach(function (a) {
+      renameTarget(a, old, n);
+      var ks = keysOf(a);
+      Object.keys(ks || {}).forEach(function (t) { if (Array.isArray(ks[t])) ks[t].forEach(function (key) { if (key && key.show === old) key.show = n; }); });
+    });
     p.name = n;
     state.selPart[c.id] = n;
     changed({ render: true, images: true });
@@ -1752,15 +1839,28 @@
     var p = (c.parts || []).filter(function (x) { return x && x.name === sel; })[0];
     if (!p) return null;
     var k = partKey(c, p.name), im = imgs(k).images[k];
-    var after = function (natural) { p.w = natural.w; p.h = natural.h; };
-    var pick = fileButton('', 'image/png,image/webp,image/jpeg', false, function (fs) { addImageFile(k, fs[0], after); });
+    var after = function (natural) { p.w = p.sheet ? Math.floor(natural.w / p.sheet.cols) : natural.w; p.h = p.sheet ? Math.floor(natural.h / p.sheet.rows) : natural.h; };
+    var take = async function (fs) {
+      if (fs.length < 2) { addImageFile(k, fs[0], after); return; }
+      try {
+        var m = await sheetFrom(k, fs, { name: p.name });
+        delete p.glint;
+        delete p.slot;
+        p.sheet = { cols: m.cols, rows: m.rows, count: m.count };
+        p.w = m.w;
+        p.h = m.h;
+        p.fps = Math.max(1, Math.round(24 / m.step));
+        changed({ render: true, images: true });
+      } catch (e) { toast('Не вдалося скласти кадри в сиквенцію'); }
+    };
+    var pick = fileButton('', 'image/png,image/webp,image/jpeg', true, take);
     var what = (im ? 'Замінити' : 'Додати') + ' картинку';
     pick[1].className = 'btn icon';
     pick[1].title = what;
     pick[1].setAttribute('aria-label', what);
     pick[1].innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + ICONS.upload + '</svg>';
     var pic = el('label', { class: 'pic', for: pick[1].htmlFor, title: what + ' (або перетягни файл)' }, [el('img', { alt: '', src: thumb(art(k)) })]);
-    dropTarget(pic, function (fs) { addImageFile(k, fs[0], after); });
+    dropTarget(pic, take);
     var nameIn = el('input', { type: 'text', value: p.name, spellcheck: 'false', autocomplete: 'off', 'aria-label': 'Назва частини' });
     nameIn.addEventListener('change', function () { renamePart(c, p, nameIn); });
     var kids = partKids(c, p.name), par = p.parent || 'art';
@@ -1777,25 +1877,54 @@
       changed();
     } });
     var color = el('input', { type: 'color', value: '#' + partHex(p), 'aria-label': 'Колір частини', oninput: function (e) { p.color = e.target.value.slice(1).toLowerCase(); changed(); }, onchange: function () { changed({ render: true }); } });
+    var kind = p.bone ? 'bone' : p.glint ? 'glint' : p.sheet ? 'sheet' : '';
+    var num = function (label, value, attrs, set) {
+      return box(label, el('input', Object.assign({ type: 'number', value: String(value), step: 'any', 'aria-label': label, onchange: function (e) { if (e.target.value !== '' && isFinite(Number(e.target.value))) { set(Number(e.target.value)); changed({ render: true }); } } }, attrs || {})));
+    };
+    var kindPick = pickField('Тип', 'Тип частини', [['', 'Картинка'], ['bone', 'Кістка без картинки'], ['glint', 'Блік з арту'], ['sheet', 'Сиквенція кадрів']], kind, function (v) {
+      delete p.bone;
+      delete p.glint;
+      delete p.sheet;
+      if (v === 'bone') p.bone = true;
+      if (v === 'glint') p.glint = { of: 'art' };
+      if (v === 'sheet') p.sheet = { cols: 1, rows: 1, count: 1 };
+    }, 'kinds');
+    var texPick = pickField('Текстура', 'Масштаб текстури частини', [['1', 'Як показано'], ['0.75', '75 %'], ['0.5', 'Удвічі менша'], ['0.25', 'Учетверо менша']], String(p.tex || 1), function (v) { if (Number(v) < 1) p.tex = Number(v); else delete p.tex; });
+    var slotIn = el('input', { type: 'text', value: p.slot || '', spellcheck: 'false', autocomplete: 'off', placeholder: 'eyes', 'aria-label': 'Слот варіантів', onchange: function (e) { var v = K.slug(e.target.value); if (v) p.slot = v; else delete p.slot; changed({ render: true }); } });
+    var extra = kind === 'glint' ? [
+      pickField('Джерело', 'Картинка, з якої вирізається блік', [['art', 'Основна картинка']].concat((c.parts || []).filter(function (x) { return x && x !== p && !x.bone && !x.glint && !x.slot && !x.sheet; }).map(function (x) { return [x.name, x.name]; })), p.glint.of || 'art', function (v) { p.glint.of = v; }),
+      num('Смуг', p.glint.bands || 3, { min: '1', max: '6', step: '1' }, function (v) { p.glint.bands = v; }),
+      num('Кут', p.glint.angle === undefined ? 20 : p.glint.angle, null, function (v) { p.glint.angle = v; }),
+      num('Яскравість від', p.glint.level === undefined ? 0.6 : p.glint.level, { min: '0', max: '0.95', step: '0.05' }, function (v) { p.glint.level = v; }),
+      num('Крок, с', p.glint.step === undefined ? 0.06 : p.glint.step, { min: '0', max: '1', step: '0.01' }, function (v) { p.glint.step = v; })
+    ] : kind === 'sheet' ? [
+      num('Колонок', p.sheet.cols, { min: '1', max: '32', step: '1' }, function (v) { p.sheet.cols = v; }),
+      num('Рядків', p.sheet.rows, { min: '1', max: '32', step: '1' }, function (v) { p.sheet.rows = v; }),
+      num('Кадрів', p.sheet.count, { min: '1', step: '1' }, function (v) { p.sheet.count = v; }),
+      num('Кадрів за секунду', p.fps || 24, { min: '1', max: '60', step: '1' }, function (v) { p.fps = v; }),
+      pickField('Програвання', 'Режим сиквенції', [['loop', 'По колу'], ['once', 'Один раз'], ['pingpong', 'Туди й назад']], p.play || 'loop', function (v) { if (v === 'loop') delete p.play; else p.play = v; }),
+      texPick
+    ] : kind === '' ? [box('Слот варіантів', slotIn), texPick] : [];
     return el('div', { class: 'sym-edit part-edit' }, [
-      el('div', { class: 'sym-pics' }, [el('div', { class: 'sym-pic' }, [pic, el('div', { class: 'pic-act' }, [pick[0], pick[1], im ? iconBtn('pic-del', 'Прибрати картинку частини', ICONS.x, function () { dropImage(k); }) : null])])]),
+      kind === 'bone' || kind === 'glint' ? null : el('div', { class: 'sym-pics' }, [el('div', { class: 'sym-pic' }, [pic, el('div', { class: 'pic-act' }, [pick[0], pick[1], im ? iconBtn('pic-del', 'Прибрати картинку частини', ICONS.x, function () { dropImage(k); }) : null])])]),
       el('div', { class: 'grid' }, [
         el('div', { class: 'row' }, [
           el('div', { class: 'field' }, [el('span', { class: 'lbl', text: 'Назва' }), nameIn]),
           pickField('Батько', 'Батько частини', parents, par, function (v) { p.parent = v; })
         ]),
-        el('div', { class: 'row' }, [
+        el('div', { class: 'row' }, [kindPick].concat(extra)),
+        kind === 'glint' ? null : el('div', { class: 'row' }, [
           numPair(el('span', {}, ['Центр X, Y ', el('span', { class: 'hint', text: 'від батька, y угору' })]), p.x || 0, p.y || 0, function (v) { p.x = Number(v) || 0; changed(); }, function (v) { p.y = Number(v) || 0; changed(); }, ['X', 'Y', ',']),
-          numPair('Розмір', w, h, function (v) { if (Number(v) > 0) p.w = Number(v); else delete p.w; changed(); }, function (v) { if (Number(v) > 0) p.h = Number(v); else delete p.h; changed(); }, ['Ширина', 'Висота']),
-          pivotField(p, 'Опорна точка частини'),
+          kind === 'bone' ? null : numPair('Розмір', w, h, function (v) { if (Number(v) > 0) p.w = Number(v); else delete p.w; changed(); }, function (v) { if (Number(v) > 0) p.h = Number(v); else delete p.h; changed(); }, ['Ширина', 'Висота']),
+          kind === 'bone' ? null : pivotField(p, 'Опорна точка частини'),
           box('Поворот', rot, '°')
         ]),
-        el('div', { class: 'row' }, [
+        kind === 'bone' ? null : el('div', { class: 'row' }, [
           pickField('Шар', 'Шар частини', [['', 'Над картинкою'], ['behind', 'Під картинкою']], p.behind === true ? 'behind' : '', function (v) { if (v) p.behind = true; else delete p.behind; }),
           pickField('Змішування', 'Змішування частини', [['normal', 'Звичайне'], ['additive', 'Додавання'], ['multiply', 'Множення'], ['screen', 'Екран']], K.BLENDS.indexOf(p.blend) > 0 ? p.blend : 'normal', function (v) { if (v === 'normal') delete p.blend; else p.blend = v; }),
-          box('Прозорість на старті', alpha)
+          kind === 'glint' ? null : box('Прозорість на старті', alpha)
         ]),
-        el('div', { class: 'row' }, [
+        kind === 'bone' || kind === 'glint' ? null : el('div', { class: 'row' }, [
           pickField('Заглушка', 'Заглушка частини', [['', 'Картка з назвою'], ['rect', 'Прямокутник'], ['circle', 'Коло'], ['ring', 'Кільце'], ['glow', 'Світіння'], ['star', 'Зірка']], K.SHAPES.indexOf(p.shape) > 0 ? p.shape : '', function (v) { if (v) p.shape = v; else delete p.shape; }),
           box('Колір', color, p.color ? el('button', { type: 'button', class: 'btn ghost sm', text: 'Скинути', 'aria-label': 'Скинути колір частини', onclick: function () { delete p.color; changed({ render: true }); } }) : null)
         ]),
@@ -1828,6 +1957,7 @@
         listField('Спейсери', c.spacers, function (v) { c.spacers = v; changed(); }, 'txt_amount', 'spacers')
       ]),
       imageRow(key, null, function (natural) { fitSize(c, natural); }),
+      el('div', { class: 'row', style: 'align-items: center; gap: 4px;' }, [el('label', { class: 'switch' }, [el('input', { type: 'checkbox', checked: c.bone === true, onchange: function (e) { if (e.target.checked) c.bone = true; else delete c.bone; changed({ render: true }); } }), 'Без основної картинки, лише кістка'])]),
       el('div', { class: 'row' }, [
         numPair('Розмір у грі, px', c.w, c.h, function (v) { c.w = Number(v); changed(); }, function (v) { c.h = Number(v); changed(); }, ['Ширина', 'Висота'], 'custom'),
         numPair('Центр X, Y', c.x || 0, c.y || 0, function (v) { c.x = Number(v); changed(); }, function (v) { c.y = Number(v); changed(); }, ['X', 'Y', ',']),
@@ -2775,6 +2905,7 @@
   function regionCanvas(src, w, h) {
     var c = el('canvas', { width: w, height: h });
     var x = c.getContext('2d');
+    x.imageSmoothingQuality = 'high';
     if (src === 'white') { x.fillStyle = '#fff'; x.fillRect(0, 0, w, h); }
     else if (src && src !== 'clear') { var a = typeof src === 'string' ? art(src) : src; if (a) x.drawImage(a, 0, 0, w, h); }
     return c;
@@ -2782,6 +2913,7 @@
   function pageCanvas(page) {
     var c = el('canvas', { width: page.width, height: page.height });
     var x = c.getContext('2d');
+    x.imageSmoothingQuality = 'high';
     page.placements.forEach(function (p) {
       if (p.src === 'white') { x.fillStyle = '#fff'; x.fillRect(p.x, p.y, p.w, p.h); }
       else if (p.src && p.src !== 'clear') { var a = typeof p.src === 'string' ? art(p.src) : p.src; if (a) x.drawImage(a, p.x, p.y, p.w, p.h); }
@@ -3033,6 +3165,22 @@
     if (pj) Object.keys(pj.animations || {}).forEach(function (n) {
       chips.appendChild(el('button', { type: 'button', class: 'chip', 'aria-pressed': String(n === state.pv.anim), text: n, onclick: function () { state.pv.anim = n; renderPreview(); } }));
     });
+    optBox($('pv-opt'), sp && !finShown(sp) ? sp : null);
+  }
+  function optBox(box, sp) {
+    var a = sp && sp.audit;
+    if (!box) return;
+    box.textContent = '';
+    box.hidden = !a;
+    if (!a) return;
+    box.appendChild(el('div', { class: 'opt-line', text: [
+      a.slots + ' ' + plural(a.slots, 'слот', 'слоти', 'слотів'),
+      a.masks + ' ' + plural(a.masks, 'маска', 'маски', 'масок'),
+      '≈' + a.draw_calls + ' draw calls',
+      a.keys + ' ' + plural(a.keys, 'ключ', 'ключі', 'ключів'),
+      'атлас ' + a.atlas
+    ].join(' · ') }));
+    if (a.notes.length) box.appendChild(el('ul', { class: 'opt-notes' }, a.notes.map(function (t) { return el('li', { text: t }); })));
   }
 
   function renderSide() {
@@ -3274,7 +3422,7 @@
   function curLayout() { var l = lays().list; if (lay.cur >= l.length) lay.cur = 0; return l[lay.cur] || null; }
   function curAspect(L) { var a = lay.scr[L.name]; return a > 0 ? a : L.w / L.h; }
   function compOn(t) { var c = state.s.components.filter(function (k) { return k.type === t; })[0]; return !!(c && c.on !== false); }
-  function spineOf(c) { return 'animation_' + (K.slug(c.name).replace(/^animation_/, '') || 'element'); }
+  function spineOf(c) { return c.raw ? c.raw.name : 'animation_' + (K.slug(c.name).replace(/^animation_/, '') || 'element'); }
   function layZ(c) {
     var n = spineOf(c).replace(/^animation_/, '');
     for (var i = 0; i < LAY_Z.length; i++) if (LAY_Z[i][0].test(n)) return LAY_Z[i][1];
@@ -3384,10 +3532,10 @@
         items.push({ clip: pts, end: a.end, slot: s.name });
         return;
       }
-      var key = !a.type && src[a.path || s.attachment];
+      var key = !a.type && src[a.sequence ? s.attachment + (a.sequence.start || 0) : a.path || s.attachment];
       if (!key || key === 'clear') return;
-      var ax = a.x || 0, ay = a.y || 0, w = a.width, h = a.height;
-      var t = [m[0], -m[2], -m[1], m[3], m[0] * ax + m[1] * ay + m[4], -(m[2] * ax + m[3] * ay + m[5])];
+      var ax = a.x || 0, ay = a.y || 0, w = a.width, h = a.height, ar = (a.rotation || 0) * Math.PI / 180, ca = Math.cos(ar), sa = Math.sin(ar);
+      var t = [m[0] * ca + m[1] * sa, -(m[2] * ca + m[3] * sa), -(m[1] * ca - m[0] * sa), m[3] * ca - m[2] * sa, m[0] * ax + m[1] * ay + m[4], -(m[2] * ax + m[3] * ay + m[5])];
       var alpha = s.color ? parseInt(s.color.slice(6, 8) || 'ff', 16) / 255 : 1;
       items.push({ slot: s.name, key: key, t: t, w: w, h: h, alpha: alpha, blend: BLEND_OP[s.blend] || '' });
       if (!(alpha > 0)) return;
@@ -4391,7 +4539,7 @@
 
   var Lib = window.SpineKitLibrary;
   var SbStore = window.SpineKitSandboxStore;
-  var sb = { items: [], store: { images: {}, blobs: {} }, saved: {}, ready: false, loadErr: '', saveTimer: null, flushing: null, again: false, cur: null, anim: null, skin: null, speed: 1, playing: true, loop: true, bones: false, cam: null, camFor: null, zoomTxt: '', plan: null, player: null, scrub: false, t: 0, d: 0, confirm: null, conTimer: null, libDel: null, libBusy: '', libErr: '', libLoading: false, q: '' };
+  var sb = { items: [], store: { images: {}, blobs: {} }, text: {}, rawSp: {}, rawErr: {}, pics: {}, saved: {}, ready: false, loadErr: '', saveTimer: null, flushing: null, again: false, cur: null, anim: null, skin: null, speed: 1, playing: true, loop: true, bones: false, cam: null, camFor: null, zoomTxt: '', plan: null, player: null, scrub: false, t: 0, d: 0, confirm: null, conTimer: null, libDel: null, libBusy: '', libErr: '', libLoading: false, q: '' };
   var SB_MOVED = 'spine-draft-kit.sandbox-moved';
   var SB_PREF = 'spine-draft-kit.sandbox';
   var SB_TPL = ['custom', 'character', 'logo', 'popup', 'infopanel', 'background'];
@@ -4453,13 +4601,13 @@
     if (!Array.isArray(c.anims)) c.anims = frameAnims();
     return c;
   }
-  function sbKeyOf(id, role) { return role === 'main' ? 'c:' + id : 'p:' + id + ':' + role.slice(5); }
+  function sbKeyOf(id, role) { return role === 'main' ? 'c:' + id : role.indexOf('part:') === 0 ? 'p:' + id + ':' + role.slice(5) : 's:' + id + ':' + (role.indexOf('spine:') === 0 ? role.slice(6) : role); }
   async function sbImages(id, images) {
     var roles = Object.keys(images || {});
     for (var i = 0; i < roles.length; i++) {
       var x = images[roles[i]];
-      if (!x || !x.blob || (roles[i] !== 'main' && roles[i].indexOf('part:') !== 0)) continue;
-      try { await setImage(sbKeyOf(id, roles[i]), x.blob, x.name || ''); } catch (e) { continue; }
+      if (!x || !x.blob || !/^(main$|part:|spine:(json|atlas)$|page:)/.test(roles[i])) continue;
+      try { await sbPutFile(sbKeyOf(id, roles[i]), x.blob, x.name || ''); } catch (e) { continue; }
     }
   }
   function sbSig(c) {
@@ -4483,6 +4631,10 @@
     catch (e) { sb.loadErr = e.message; return false; }
     sb.store.images = {};
     sb.store.blobs = {};
+    sb.text = {};
+    sb.rawSp = {};
+    sb.rawErr = {};
+    sb.pics = {};
     sb.items = recs.map(sbClean);
     for (var i = 0; i < recs.length; i++) await sbImages(recs[i].id, recs[i].images);
     sb.saved = {};
@@ -4497,6 +4649,10 @@
     sb.items = [];
     sb.store.images = {};
     sb.store.blobs = {};
+    sb.text = {};
+    sb.rawSp = {};
+    sb.rawErr = {};
+    sb.pics = {};
     sb.saved = {};
     sb.again = false;
     sb.ready = false;
@@ -4578,11 +4734,11 @@
       } else { c = next; sb.items.push(c); }
       var want = {}, roles = Object.keys(ev.rec.images || {});
       roles.forEach(function (role) { want[sbKeyOf(c.id, role)] = true; });
-      Object.keys(sb.store.images).concat(Object.keys(sb.store.blobs)).forEach(function (k) { if ((k === 'c:' + c.id || k.indexOf('p:' + c.id + ':') === 0) && !want[k]) forgetImage(k); });
+      Object.keys(sb.store.images).concat(Object.keys(sb.store.blobs)).forEach(function (k) { if ((k === 'c:' + c.id || k.indexOf('p:' + c.id + ':') === 0 || k.indexOf('s:' + c.id + ':') === 0) && !want[k]) forgetImage(k); });
       for (var i = 0; i < roles.length; i++) {
         var x = ev.rec.images[roles[i]], k = sbKeyOf(c.id, roles[i]);
         if (!x || !x.blob || sb.store.blobs[k] === x.blob) continue;
-        try { await setImage(k, x.blob, x.name || ''); } catch (e) { continue; }
+        try { await sbPutFile(k, x.blob, x.name || ''); } catch (e) { continue; }
       }
       sb.saved[c.id] = sbSig(c);
     }
@@ -4597,14 +4753,250 @@
     renderSandbox();
   }
 
+  var SB_SPINE = '<circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/><path d="m8.5 8.5 7 7"/>';
+  var SB_SPINE_EXT = '.json,.atlas,.txt,.png,.jpg,.jpeg,.webp,.zip';
+  async function sbPutFile(key, blob, name) {
+    if (key.indexOf('s:') !== 0) return setImage(key, blob, name);
+    var im = { fileName: name || '', w: 0, h: 0 };
+    if (/^s:[^:]+:page:/.test(key)) {
+      var s = K.pngSize(new Uint8Array(await blob.slice(0, 32).arrayBuffer()));
+      if (s) { im.w = s.width; im.h = s.height; }
+      else { try { var bm = await createImageBitmap(blob); im.w = bm.width; im.h = bm.height; bm.close(); } catch (e) { im.w = 0; im.h = 0; } }
+    } else sb.text[key] = await blob.text();
+    sb.store.images[key] = im;
+    sb.store.blobs[key] = blob;
+    return null;
+  }
+  function sbRawSpine(c) {
+    var pre = 's:' + c.id + ':', jt = sb.text[pre + 'json'], at = sb.text[pre + 'atlas'];
+    if (typeof jt !== 'string' || typeof at !== 'string') { sb.rawErr[c.id] = 'немає JSON або атласу'; return null; }
+    var pages = ((c.raw && c.raw.pages) || []).map(function (n) { return { name: n, key: pre + 'page:' + n }; });
+    var sig = pages.map(function (p) { return p.key + ':' + imgRev(p.key); }).join(',') + '|' + JSON.stringify((state.s && state.s.tech) || {});
+    var hit = sb.rawSp[c.id];
+    if (hit && hit.jt === jt && hit.at === at && hit.sig === sig) return hit.sp;
+    var sizes = {}, sp = null;
+    pages.forEach(function (p) { var im = sb.store.images[p.key]; if (im && im.w && sb.store.blobs[p.key]) sizes[p.name] = { width: im.w, height: im.h }; });
+    try { sp = K.rawSpine({ name: c.raw.name, jsonText: jt, atlasText: at, pages: sizes }, state.s && state.s.tech); delete sb.rawErr[c.id]; }
+    catch (e) { sb.rawErr[c.id] = String((e && e.message) || e); }
+    if (sp) { sp.pages = pages; sp.comp = c.id; }
+    sb.rawSp[c.id] = { jt: jt, at: at, sig: sig, sp: sp };
+    return sp;
+  }
+  async function sbRawPicMake(id, blob) {
+    try {
+      var bm = await createImageBitmap(blob);
+      var k = Math.min(1, 128 / Math.max(bm.width, bm.height, 1));
+      var cv = el('canvas', { width: Math.max(1, Math.round(bm.width * k)), height: Math.max(1, Math.round(bm.height * k)) });
+      cv.getContext('2d').drawImage(bm, 0, 0, cv.width, cv.height);
+      bm.close();
+      if (sb.pics[id] && sb.pics[id].blob === blob) { sb.pics[id].canvas = cv; if (sbShown()) renderSbItems(); }
+    } catch (e) { return; }
+  }
+  function sbRawPic(c) {
+    var blob = sb.store.blobs['s:' + c.id + ':page:' + (((c.raw && c.raw.pages) || [])[0] || '')];
+    var hit = sb.pics[c.id];
+    if (hit && hit.blob === blob) return hit.canvas;
+    if (!blob) return null;
+    sb.pics[c.id] = { blob: blob, canvas: null };
+    sbRawPicMake(c.id, blob);
+    return null;
+  }
+  function sbSpineJson(x) {
+    if (!x || x.kind !== 'json' || typeof x.text !== 'string') return false;
+    try { var o = JSON.parse(x.text.replace(/^\uFEFF/, '')); return !!o && typeof o === 'object' && !!o.skeleton && Array.isArray(o.bones); } catch (e) { return false; }
+  }
+  function sbRawGroups(list) {
+    var lc = function (s) { return String(s || '').toLowerCase(); };
+    var dir = function (x) { return String(x.path || '').replace(/[^\/]*$/, ''); };
+    var atlases = list.filter(function (x) { return x.kind === 'atlas'; }), images = list.filter(function (x) { return x.kind === 'image'; }), used = [];
+    var near = function (pool, name, at) {
+      var hits = pool.filter(function (x) { return used.indexOf(x) === -1 && lc(x.name) === lc(name); });
+      return hits.filter(function (x) { return dir(x) === dir(at); })[0] || hits[0] || null;
+    };
+    var out = list.filter(sbSpineJson).map(function (j) {
+      var base = j.name.replace(/\.json$/i, '');
+      var a = near(atlases, base + '.atlas', j) || near(atlases, base + '.atlas.txt', j);
+      if (a) used.push(a);
+      return { name: base, json: j, atlas: a, pages: {}, lost: [] };
+    });
+    var bare = out.filter(function (g) { return !g.atlas; }), free = atlases.filter(function (x) { return used.indexOf(x) === -1; });
+    if (bare.length === 1 && free.length === 1) bare[0].atlas = free[0];
+    out.forEach(function (g) {
+      if (!g.atlas) return;
+      K.atlasOf(g.atlas.text).pages.forEach(function (p) {
+        var hits = images.filter(function (x) { return lc(x.name) === lc(p.name); });
+        var f = hits.filter(function (x) { return dir(x) === dir(g.atlas); })[0] || hits[0];
+        if (f) g.pages[p.name] = f; else g.lost.push(p.name);
+      });
+    });
+    return out;
+  }
+  function sbRawWhy(g) { return g.name + ': ' + (!g.atlas ? 'немає .atlas' : 'бракує ' + g.lost.join(', ')); }
+  async function sbRawPut(c, g) {
+    var pre = 's:' + c.id + ':';
+    Object.keys(sb.store.blobs).concat(Object.keys(sb.store.images)).forEach(function (k) { if (k.indexOf(pre) === 0) forgetImage(k); });
+    await sbPutFile(pre + 'json', g.json.blob, g.json.name);
+    await sbPutFile(pre + 'atlas', g.atlas.blob, g.atlas.name);
+    var names = Object.keys(g.pages);
+    for (var i = 0; i < names.length; i++) await sbPutFile(pre + 'page:' + names[i], g.pages[names[i]].blob, names[i]);
+    c.raw = { name: g.name, pages: names, at: Date.now() };
+    delete sb.rawSp[c.id];
+  }
+  async function sbFromSpine(files, opts) {
+    opts = opts || {};
+    var groups = sbRawGroups(opts.list || await finRead(files));
+    if (!groups.length) throw new Error('Серед файлів немає Spine JSON: потрібні <спайн>.json, .atlas і .png сторінки атласу');
+    var ok = groups.filter(function (g) { return g.atlas && !g.lost.length; }), bad = groups.filter(function (g) { return !g.atlas || g.lost.length; }).map(sbRawWhy);
+    if (!ok.length) throw new Error('Не вистачає файлів. ' + bad.join('; '));
+    var room = Math.max(0, 60 - sbItems().length), take = ok.slice(0, Math.min(12, room));
+    if (!take.length) throw new Error('У пісочниці вже 60 елементів: приберіть зайві');
+    var made = [];
+    for (var i = 0; i < take.length; i++) {
+      var c = { id: sbNewId(), type: 'custom', label: opts.label && take.length === 1 ? String(opts.label).trim() : take[i].name.replace(/^animation_/, ''), name: take[i].name, anims: [] };
+      await sbRawPut(c, take[i]);
+      sbItems().push(c);
+      made.push(c);
+    }
+    sb.cur = made[made.length - 1].id;
+    sb.anim = null;
+    sb.skin = null;
+    sb.playing = true;
+    changed({ render: true, now: true });
+    return { items: made, skipped: bad.concat(ok.slice(take.length).map(function (g) { return g.name + ': не влізло за раз (до 12 спайнів)'; })) };
+  }
+  async function sbRawReplace(c, files) {
+    var list = await finRead(files), pre = 's:' + c.id + ':';
+    var lc = function (s) { return String(s || '').toLowerCase(); };
+    if (list.filter(sbSpineJson).length > 1) throw new Error('Тут кілька Spine JSON: для заміни дайте файли одного спайна');
+    var old = function (kind, key, name) {
+      var blob = sb.store.blobs[key];
+      if (blob) list.push({ kind: kind, name: name, path: '~/' + name, blob: blob, text: sb.text[key] });
+    };
+    if (!list.some(sbSpineJson)) old('json', pre + 'json', c.raw.name + '.json');
+    if (!list.some(function (x) { return x.kind === 'atlas'; })) old('atlas', pre + 'atlas', c.raw.name + '.atlas');
+    (c.raw.pages || []).forEach(function (n) { if (!list.some(function (x) { return x.kind === 'image' && lc(x.name) === lc(n); })) old('image', pre + 'page:' + n, n); });
+    var g = sbRawGroups(list)[0];
+    if (!g) throw new Error('Серед файлів немає Spine JSON, .atlas чи сторінок атласу цього спайна');
+    if (!g.atlas || g.lost.length) throw new Error('Не вистачає файлів. ' + sbRawWhy(g));
+    g.name = c.raw.name;
+    await sbRawPut(c, g);
+    changed({ render: true, now: true });
+    return c;
+  }
+  function sbSpineToast(r) {
+    toast('Відкрито в пісочниці: ' + r.items.map(spineOf).join(', ') + (r.skipped.length ? '. Пропущено: ' + r.skipped.join('; ') : ''));
+  }
+  function sbSpineBtn() {
+    var input = el('input', { type: 'file', class: 'file', multiple: true, accept: SB_SPINE_EXT });
+    input.addEventListener('change', async function () {
+      var fs = Array.prototype.slice.call(input.files || []);
+      input.value = '';
+      if (!fs.length) return;
+      try { sbSpineToast(await sbFromSpine(fs)); } catch (e) { toast(e.message); }
+    });
+    var b = labelBtn('Готовий спайн', SB_SPINE, { type: 'button', class: 'btn sm', title: 'Експорт зі Spine: .json, .atlas і .png або .zip', onclick: function () { input.click(); } });
+    return el('span', {}, [input, b]);
+  }
+  function sbnSpine() {
+    var input = el('input', { type: 'file', class: 'file', multiple: true, accept: SB_SPINE_EXT, tabindex: '-1', 'aria-hidden': 'true' });
+    input.addEventListener('change', async function () {
+      var fs = Array.prototype.slice.call(input.files || []);
+      input.value = '';
+      if (!fs.length) return;
+      try { sbSpineToast(await sbFromSpine(fs)); closeSbNew(); } catch (e) { toast(e.message); }
+    });
+    return [input, sbnItem(sbnIco(SB_SPINE), 'Готовий спайн', 'Експорт зі Spine: .json, .atlas і .png сторінки або .zip. Папку можна перетягнути на превʼю', '', function () { input.click(); })];
+  }
+  function sbBytes(b) {
+    var n = b ? b.size : 0;
+    return n >= 1048576 ? String(Math.round(n / 104857.6) / 10).replace('.', ',') + ' МБ' : Math.max(1, Math.round(n / 1024)) + ' КБ';
+  }
+  function sbRawBody(c) {
+    var sp = sbRawSpine(c), pre = 's:' + c.id + ':';
+    var pick = fileButton('Замінити файли', SB_SPINE_EXT, true, async function (fs) {
+      try { await sbRawReplace(c, fs); toast('Файли оновлено: ' + c.raw.name); } catch (e) { toast(e.message); }
+    });
+    var kids = [
+      el('div', { class: 'row' }, [textField('Назва', c.label, null, function (v) { c.label = v.trim() || c.raw.name; changed(); renderSbItems(); })]),
+      el('p', { class: 'note', text: 'Готовий спайн кіт не змінює: показує, перевіряє й віддає файли як є. Доробити його може Claude (править JSON і завантажує знову) або аніматор у Spine.' })
+    ];
+    if (!sp) return el('div', { class: 'comp-body sb-raw' }, kids.concat([el('p', { class: 'note', text: 'Файли не читаються: ' + (sb.rawErr[c.id] || 'невідома помилка') }), el('div', { class: 'row' }, pick)]));
+    var st = sp.stats, at = st.attachments;
+    var n = function (v, a, b, d) { return v + ' ' + plural(v, a, b, d); };
+    var facts = [n(st.bones, 'кістка', 'кістки', 'кісток'), n(st.slots, 'слот', 'слоти', 'слотів'), n(st.skins, 'скін', 'скіни', 'скінів'), n(st.animations, 'анімація', 'анімації', 'анімацій')];
+    if (st.constraints) facts.push(n(st.constraints, 'констрейнт', 'констрейнти', 'констрейнтів'));
+    var files = [[sp.name + '.json', sbBytes(sb.store.blobs[pre + 'json'])], [sp.name + '.atlas', sbBytes(sb.store.blobs[pre + 'atlas'])]].concat(sp.pages.map(function (p) {
+      var im = sb.store.images[p.key];
+      return [p.name, (im && im.w ? im.w + '×' + im.h + ' · ' : '') + sbBytes(sb.store.blobs[p.key])];
+    }));
+    kids.push(
+      el('div', { class: 'sub', text: 'Спайн' }),
+      el('div', { class: 'sb-facts' }, [
+        el('p', { class: 'note', text: sp.name + ' · Spine ' + (st.version || '—') }),
+        el('p', { class: 'note', text: facts.join(' · ') }),
+        el('p', { class: 'note', text: 'Картинки ' + at.region + ' · сітки ' + at.mesh + ' · маски ' + at.clipping + (at.other ? ' · інше ' + at.other : '') })
+      ]),
+      el('div', { class: 'sub', text: 'Файли' }),
+      finTable(['Файл', 'Розмір'], files.map(function (f) { return el('tr', {}, [el('td', { text: f[0] }), el('td', { text: f[1] })]); })),
+      el('div', { class: 'row' }, pick)
+    );
+    if (sp.findings.length) kids.push(el('div', { class: 'sub', text: 'Перевірка для арт-репо' }), el('ul', { class: 'fin-list' }, sp.findings.map(function (f) { return finItem(f, f.level); })));
+    kids.push(
+      el('div', { class: 'sub', text: 'Анімації' }),
+      finTable(['Анімація', 'Тривалість', 'Події'], sp.contract.animations.map(function (a) {
+        return el('tr', {}, [el('td', { text: a.name }), el('td', { text: sbFmt(a.duration) + ' с' }), el('td', { text: (a.events || []).map(function (e) { return e.name; }).join(', ') || '—' })]);
+      }))
+    );
+    return el('div', { class: 'comp-body sb-raw' }, kids);
+  }
+  async function sbZip(c) {
+    if (!window.JSZip) throw new Error(state.lib.zip === 'fail' ? 'JSZip не завантажився з cdnjs.cloudflare.com' : 'Ще завантажую JSZip, спробуйте за мить');
+    var zip = new window.JSZip(), name, root;
+    if (c.raw) {
+      var rs = sbRawSpine(c);
+      if (!rs) throw new Error('файли спайна не читаються');
+      name = rs.name;
+      root = name + '-spine/';
+      zip.file(root + name + '.json', sb.store.blobs['s:' + c.id + ':json']);
+      zip.file(root + name + '.atlas', sb.store.blobs['s:' + c.id + ':atlas']);
+      rs.pages.forEach(function (p) { if (sb.store.blobs[p.key]) zip.file(root + p.name, sb.store.blobs[p.key]); });
+    } else {
+      var plan = K.planAll(Object.assign({}, state.s, { components: [c] }), px), sp = plan.spines[0];
+      if (!sp) throw new Error('немає що експортувати');
+      name = sp.name;
+      root = name + '-spine/';
+      var folder = String(plan.tech.folder || '').replace(/^\/+/, '').replace(/\/?$/, '/');
+      if (folder === '/') folder = '';
+      zip.file(root + folder + sp.name + '.json', sp.jsonText);
+      zip.file(root + folder + sp.name + '.atlas', sp.atlasText);
+      zip.file(root + folder + sp.pageName, await canvasBlob(pageCanvas(sp.page)));
+      var ed = root + 'spine-editor/';
+      zip.file(ed + sp.name + '.json', sp.importJsonText);
+      for (var j = 0; j < sp.regions.length; j++) {
+        var r = sp.regions[j];
+        zip.file(ed + r.name + '.png', await canvasBlob(regionCanvas(r.src, r.w, r.h)));
+      }
+      if (sp.warnings && sp.warnings.length) zip.file(root + 'WARNINGS.txt', sp.warnings.join('\n'));
+    }
+    return { name: name + '-spine.zip', spine: name, blob: await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' }) };
+  }
+  async function sbSpineExport(c) {
+    try { var z = await sbZip(c); await saveFile(z.name, z.blob); } catch (e) { toast('Архів не зібрався: ' + ((e && e.message) || e)); }
+  }
+  function sbRmBtn(box, c) {
+    if (sb.confirm === c.id) box.appendChild(el('button', { type: 'button', class: 'btn sm sb-del', text: 'Точно прибрати?', onclick: function () { sbRemoveClick(c); } }));
+    else box.appendChild(iconBtn('ghost sb-rm', 'Прибрати з пісочниці', ICONS.trash, function () { sbRemoveClick(c); }));
+  }
   function sbPlanOf(c) {
     if (!c || !state.s) return null;
+    if (c.raw) return sbRawSpine(c);
     try { return K.planAll(Object.assign({}, state.s, { components: [c] }), px).spines[0] || null; } catch (e) { return null; }
   }
   function sbBuild() {
     var c = sbCur();
     sb.plan = null;
     if (!c || !state.s) return null;
+    if (c.raw) { var rs = sbRawSpine(c); sb.plan = rs ? { spines: [rs] } : null; return rs; }
     try { sb.plan = K.planAll(Object.assign({}, state.s, { components: [c] }), px); } catch (e) { toast('Пісочниця: не вдалося зібрати: ' + e.message); }
     return sbSpine();
   }
@@ -4613,6 +5005,7 @@
   var imgIds = new WeakMap(), imgSeq = 0;
   function imgRev(k) {
     var im = imgs(k).images[k];
+    if (im && !im.canvas) return 'b' + blobRev(imgs(k).blobs[k]);
     if (!im || !im.canvas) return '-';
     var id = imgIds.get(im.canvas);
     if (!id) { imgSeq += 1; id = imgSeq; imgIds.set(im.canvas, id); }
@@ -4624,6 +5017,7 @@
   }
   function sbDispose() {
     if (sb.player && sb.player.player) { try { sb.player.player.dispose(); } catch (e) { /* already gone */ } }
+    if (sb.player && sb.player.urls) sb.player.urls.forEach(function (u) { URL.revokeObjectURL(u); });
     sb.player = null;
     var st = $('sb-stage');
     if (st) st.textContent = '';
@@ -4799,27 +5193,36 @@
     var c = sbCur(), sp = sbSpine();
     if (!c) { sbDispose(); return; }
     if (sb.camFor !== c.id) { sb.cam = null; sb.camFor = c.id; }
-    if (!sp) { sbMsg('Не вдалося зібрати спайн.'); return; }
-    var anims = Object.keys(sp.json.animations);
-    if (!anims.length) { sbMsg('У компонента немає анімацій: додайте рядок в «Анімаціях».'); return; }
+    if (!sp) { sbMsg(c.raw ? 'Файли спайна не читаються: ' + (sb.rawErr[c.id] || 'немає JSON або атласу') : 'Не вдалося зібрати спайн.'); return; }
+    var anims = Object.keys(sp.json.animations || {});
+    if (!anims.length) { sbMsg(c.raw ? 'У спайні немає анімацій.' : 'У компонента немає анімацій: додайте рядок в «Анімаціях».'); return; }
     if (anims.indexOf(sb.anim) === -1) sb.anim = ['idle', 'loop_1', 'win', 'in'].filter(function (n) { return anims.indexOf(n) !== -1; })[0] || anims[0];
-    var skins = sp.json.skins.map(function (s) { return s.name; });
+    var skins = skinNames(sp.json);
     if (skins.indexOf(sb.skin) === -1) sb.skin = skins.indexOf('default') !== -1 ? 'default' : skins[0];
     var key = sbKey(c, sp);
     var rec = sb.player;
     if (rec && rec.key === key) { if (rec.ready && rec.anim !== sb.anim) sbPlay(sb.anim); return; }
     if (state.lib.spine !== 'ok') { sbMsg(state.lib.spine === 'fail' ? 'Рантайм Spine не завантажився з cdn.jsdelivr.net.' : 'Завантажую рантайм Spine…'); return; }
+    var lost = sp.raw ? sp.pages.filter(function (p) { return !sb.store.blobs[p.key]; }).map(function (p) { return p.name; }) : [];
+    if (lost.length) { sbMsg('Бракує сторінок атласу: ' + lost.join(', ')); return; }
     sbDispose();
-    var b = previewBundle(sp);
-    var raw = {};
-    raw[b.name + '.json'] = 'data:application/json;base64,' + b64(b.jsonText);
-    raw[b.name + '.atlas'] = 'data:text/plain;base64,' + b64(b.atlasText);
-    raw[b.pageName] = pageCanvas(b.page).toDataURL('image/png');
+    var raw = {}, urls = [], fname = sp.name;
+    if (sp.raw) {
+      raw[fname + '.json'] = 'data:application/json;base64,' + b64(sp.jsonText);
+      raw[fname + '.atlas'] = 'data:text/plain;base64,' + b64(sp.atlasText);
+      sp.pages.forEach(function (p) { var u = URL.createObjectURL(sb.store.blobs[p.key]); urls.push(u); raw[p.name] = u; });
+    } else {
+      var b = previewBundle(sp);
+      fname = b.name;
+      raw[b.name + '.json'] = 'data:application/json;base64,' + b64(b.jsonText);
+      raw[b.name + '.atlas'] = 'data:text/plain;base64,' + b64(b.atlasText);
+      raw[b.pageName] = pageCanvas(b.page).toDataURL('image/png');
+    }
     var div = el('div', { class: 'pc' });
     $('sb-stage').appendChild(div);
     var cfg = {
-      jsonUrl: b.name + '.json',
-      atlasUrl: b.name + '.atlas',
+      jsonUrl: fname + '.json',
+      atlasUrl: fname + '.atlas',
       rawDataURIs: raw,
       animation: sb.anim,
       skin: sb.skin,
@@ -4827,7 +5230,7 @@
       showLoading: false,
       alpha: true,
       backgroundColor: '00000000',
-      premultipliedAlpha: false,
+      premultipliedAlpha: !!sp.raw && /^\s*pma\s*:\s*true\s*$/im.test(sp.atlasText),
       preserveDrawingBuffer: true,
       defaultMix: 0,
       viewport: { padLeft: '8%', padRight: '8%', padTop: '8%', padBottom: '8%', transitionTime: 0 },
@@ -4842,8 +5245,8 @@
       },
       error: function (p, msg) { if (sb.player && sb.player.player === p) sbMsg('Превʼю не запустилося: ' + msg); }
     };
-    try { sb.player = { player: new window.spine.SpinePlayer(div, cfg), key: key, ready: false, anim: null }; }
-    catch (e) { sbMsg('Превʼю не запустилося: ' + e.message); }
+    try { sb.player = { player: new window.spine.SpinePlayer(div, cfg), key: key, ready: false, anim: null, urls: urls }; }
+    catch (e) { urls.forEach(function (u) { URL.revokeObjectURL(u); }); sbMsg('Превʼю не запустилося: ' + e.message); }
     renderSbTransport();
   }
   async function sbWait() {
@@ -4865,10 +5268,10 @@
         el('small', { text: t.name })
       ]);
     }));
-    var more = el('div', { class: 'row', style: 'justify-content: center;' }, [sbFromProjectBtn('З чернеток'), sbFileBtn()]);
+    var more = el('div', { class: 'row', style: 'justify-content: center;' }, [sbFromProjectBtn('З чернеток'), sbFileBtn(), sbSpineBtn()]);
     return el('div', { class: 'sb-start' }, [
       el('h3', { text: 'Пісочниця порожня' }),
-      el('p', { text: 'Ваш особистий верстак: його бачите лише ви і ваш Claude, він той самий у всіх проектах і не йде в чернетки чи експорт. Почніть із шаблону, відкрийте компонент з бібліотеки або попросіть Claude.' }),
+      el('p', { text: 'Ваш особистий верстак: його бачите лише ви і ваш Claude, він той самий у всіх проектах і не йде в чернетки чи експорт. Почніть із шаблону, відкрийте компонент з бібліотеки чи готовий спайн або попросіть Claude.' }),
       tpls,
       more,
       el('p', {}, ['Наприклад: ', el('code', { text: '«Зроби в пісочниці колектор монет: in, idle, add, win»' })])
@@ -4946,7 +5349,7 @@
       list.replaceChildren.apply(list, [
         sbnItem(sbnIco(SB_PLUS), 'Новий', 'З шаблону: свій, персонаж, логотип, попап, інфопанель, фон', '', function () { sbnGo('new'); }),
         sbnItem(sbnIco(SB_BOX), 'З проекту', 'Копія компонента з чернеток цього чи іншого проекту', '', function () { sbnGo('projects'); })
-      ].concat(sbnFile()));
+      ].concat(sbnSpine(), sbnFile()));
       return;
     }
     if (step === 'new') {
@@ -5109,7 +5512,7 @@
     }
     var sel = el('select', { 'aria-label': 'Компонент у пісочниці' });
     list.forEach(function (c) {
-      sel.appendChild(el('option', { value: c.id, text: c.label || spineOf(c), 'data-img': thumb(art('c:' + c.id)), 'data-sub': spineOf(c) + (c.lib ? ' · у бібліотеці' : '') }));
+      sel.appendChild(el('option', { value: c.id, text: c.label || spineOf(c), 'data-img': thumb(c.raw ? sbRawPic(c) : art('c:' + c.id)), 'data-sub': spineOf(c) + (c.raw ? ' · готовий спайн' : c.lib ? ' · у бібліотеці' : '') }));
     });
     var pick = dropdown(sel);
     pick.classList.add('sb-pick');
@@ -5124,7 +5527,7 @@
       if (nb) { nb.focus({ preventScroll: true }); nb.click(); }
     };
     box.appendChild(pick);
-    if (cur) box.appendChild(iconBtn('sb-ren-btn', 'Перейменувати', ICONS.pencil, function () { sbRenameStart(cur); }));
+    if (cur && !cur.raw) box.appendChild(iconBtn('sb-ren-btn', 'Перейменувати', ICONS.pencil, function () { sbRenameStart(cur); }));
     box.appendChild(el('button', { type: 'button', class: 'btn sm', 'aria-haspopup': 'dialog', text: '+ Новий', onclick: openSbNew }));
   }
   function renderSbAnims() {
@@ -5132,7 +5535,7 @@
     box.textContent = '';
     var sp = sbCur() ? sbSpine() : null;
     if (!sp) return;
-    Object.keys(sp.json.animations).forEach(function (n) {
+    Object.keys(sp.json.animations || {}).forEach(function (n) {
       box.appendChild(el('button', { type: 'button', class: 'chip', 'aria-pressed': String(n === sb.anim), title: sbFmt(K.durationOf(sp.json.animations[n])) + ' с', text: n, onclick: function () { sb.anim = n; sb.playing = true; sbPlay(n); renderSbAnims(); } }));
     });
   }
@@ -5150,7 +5553,7 @@
     ['sb-zoom-out', 'sb-zoom-v', 'sb-zoom-in', 'sb-center'].forEach(function (id) { $(id).disabled = !ready; });
     $('sb-loop').checked = sb.loop;
     $('sb-bones').checked = sb.bones;
-    var sp = sbCur() ? sbSpine() : null, skins = sp ? sp.json.skins.map(function (s) { return s.name; }) : [];
+    var sp = sbCur() ? sbSpine() : null, skins = sp ? skinNames(sp.json) : [];
     var sel = $('sb-skin');
     var now = Array.prototype.map.call(sel.options, function (o) { return o.value; });
     if (now.join('|') !== skins.join('|')) { sel.textContent = ''; skins.forEach(function (n) { sel.appendChild(el('option', { value: n, text: n })); }); }
@@ -5162,6 +5565,13 @@
     box.textContent = '';
     var c = sbCur();
     if (!c) return;
+    if (c.raw) {
+      box.appendChild(labelBtn('Експорт .zip', ICONS.download, { type: 'button', class: 'btn sm', title: 'json, atlas і png як є', onclick: function () { sbSpineExport(c); } }));
+      box.appendChild(el('span', { class: 'sb-gap' }));
+      box.appendChild(el('span', { class: 'note', text: 'Готовий спайн · лише перегляд' }));
+      sbRmBtn(box, c);
+      return;
+    }
     var meta = c.lib ? (Lib.cached() || []).filter(function (m) { return m.id === c.lib; })[0] : null;
     var mine = !!meta && Lib.canEdit(meta);
     var busy = !!sb.libBusy;
@@ -5180,8 +5590,7 @@
     box.appendChild(el('span', { class: 'sb-gap' }));
     if (sb.libBusy) box.appendChild(el('span', { class: 'note', text: sb.libBusy }));
     else if (meta) box.appendChild(el('span', { class: 'note', text: mine ? 'Є в бібліотеці' : 'З бібліотеки · ' + ((meta.by && (meta.by.name || meta.by.email)) || '') }));
-    if (sb.confirm === c.id) box.appendChild(el('button', { type: 'button', class: 'btn sm sb-del', text: 'Точно прибрати?', onclick: function () { sbRemoveClick(c); } }));
-    else box.appendChild(iconBtn('ghost sb-rm', 'Прибрати з пісочниці', ICONS.trash, function () { sbRemoveClick(c); }));
+    sbRmBtn(box, c);
   }
   function renderSbStage() {
     var stage = $('sb-stage');
@@ -5200,6 +5609,7 @@
     renderSbAnims();
     renderSbTransport();
     renderSbActs();
+    optBox($('sb-opt'), c ? sbSpine() : null);
   }
   function sbBody(c) {
     var key = 'c:' + c.id;
@@ -5213,6 +5623,7 @@
         listField('Спейсери', c.spacers, function (v) { c.spacers = v; changed(); }, 'txt_amount', 'spacers')
       ]),
       imageRow(key, null, function (natural) { fitSize(c, natural); }),
+      el('div', { class: 'row', style: 'align-items: center; gap: 4px;' }, [el('label', { class: 'switch' }, [el('input', { type: 'checkbox', checked: c.bone === true, onchange: function (e) { if (e.target.checked) c.bone = true; else delete c.bone; changed({ render: true }); } }), 'Без основної картинки, лише кістка'])]),
       el('div', { class: 'row' }, [
         numPair('Розмір у грі, px', c.w, c.h, function (v) { c.w = Number(v); changed(); }, function (v) { c.h = Number(v); changed(); }, ['Ширина', 'Висота'], 'custom'),
         pivotField(c, 'Опорна точка компонента', true),
@@ -5234,8 +5645,10 @@
     var active = inside && ae.getAttribute('aria-label');
     var caret = inside && typeof ae.selectionStart === 'number' ? [ae.selectionStart, ae.selectionEnd] : null;
     box.textContent = '';
+    var tog = $('h-sb-edit').querySelector('.lay-tog');
+    if (tog && tog.lastChild) tog.lastChild.textContent = c && c.raw ? 'Спайн' : 'Компонент';
     if (!c) { box.appendChild(el('p', { class: 'note', text: 'Тут будуть налаштування компонента: картинка, частини, анімації з ключами.' })); return; }
-    box.appendChild(sbBody(c));
+    box.appendChild(c.raw ? sbRawBody(c) : sbBody(c));
     if (active) {
       var again = box.querySelector('[aria-label="' + active.replace(/"/g, '\\"') + '"]');
       if (again) again.focus({ preventScroll: true });
@@ -5420,30 +5833,6 @@
       await saveFile((m.name || 'component') + '.component.json', new Blob([text], { type: 'application/json' }));
     } catch (e) { toast('Не вдалося зберегти: ' + e.message); }
   }
-  async function sbSpineExport(c) {
-    if (!window.JSZip) { toast(state.lib.zip === 'fail' ? 'JSZip не завантажився з cdnjs.cloudflare.com' : 'Ще завантажую JSZip, спробуйте за мить'); return; }
-    var plan;
-    try { plan = K.planAll(Object.assign({}, state.s, { components: [c] }), px); } catch (e) { toast('Не вдалося зібрати: ' + e.message); return; }
-    var sp = plan.spines[0];
-    if (!sp) { toast('Немає що експортувати'); return; }
-    try {
-      var zip = new window.JSZip();
-      var root = sp.name + '-spine/';
-      var folder = String(plan.tech.folder || '').replace(/^\/+/, '').replace(/\/?$/, '/');
-      if (folder === '/') folder = '';
-      zip.file(root + folder + sp.name + '.json', sp.jsonText);
-      zip.file(root + folder + sp.name + '.atlas', sp.atlasText);
-      zip.file(root + folder + sp.pageName, await canvasBlob(pageCanvas(sp.page)));
-      var ed = root + 'spine-editor/';
-      zip.file(ed + sp.name + '.json', sp.importJsonText);
-      for (var j = 0; j < sp.regions.length; j++) {
-        var r = sp.regions[j];
-        zip.file(ed + r.name + '.png', await canvasBlob(regionCanvas(r.src, r.w, r.h)));
-      }
-      if (sp.warnings && sp.warnings.length) zip.file(root + 'WARNINGS.txt', sp.warnings.join('\n'));
-      await saveFile(sp.name + '-spine.zip', await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' }));
-    } catch (e) { toast('Архів не зібрався: ' + ((e && e.message) || e)); }
-  }
   async function sbExport(c) {
     try {
       var r = await exportComponent(c);
@@ -5511,6 +5900,8 @@
   function sbRemove(c) {
     sb.items = sb.items.filter(function (x) { return x !== c; });
     forgetComponentImages(c);
+    delete sb.rawSp[c.id];
+    delete sb.pics[c.id];
     if (sb.cur === c.id) { sb.cur = null; sb.anim = null; sb.skin = null; }
     sb.confirm = null;
     changed({ render: true, images: true, now: true });
@@ -5547,10 +5938,10 @@
     if (c.id !== sb.cur) { sb.cur = c.id; sb.anim = null; sb.skin = null; }
     var sp0 = sbPlanOf(c);
     if (!sp0) throw new Error('Спайн не зібрався');
-    var all = Object.keys(sp0.json.animations);
+    var all = Object.keys(sp0.json.animations || {});
     var names = Array.isArray(o.animations) && o.animations.length ? o.animations.filter(function (n, i, l) { return l.indexOf(n) === i; }) : !o.animation || o.animation === 'all' ? all : [o.animation];
     names.forEach(function (n) { if (all.indexOf(n) === -1) throw new Error('У ' + spineOf(c) + ' немає анімації ' + n + '. Є: ' + all.join(', ')); });
-    var skins = sp0.json.skins.map(function (s) { return s.name; });
+    var skins = skinNames(sp0.json);
     if (o.skin && skins.indexOf(o.skin) === -1) throw new Error('Немає скіна ' + o.skin + '. Є: ' + skins.join(', '));
     if (o.skin) sb.skin = o.skin;
     if (names.length === 1) sb.anim = names[0];
@@ -5558,7 +5949,7 @@
     if (state.view !== 'sandbox') showView('sandbox');
     else renderSandbox();
     var sp = sbSpine() || sp0;
-    var info = { item: c.id, spine: spineOf(c), skin: sb.skin, animations: all.map(function (n) { return { name: n, duration: K.roundTo(K.durationOf(sp.json.animations[n]), 3) }; }), warnings: sp.warnings };
+    var info = { item: c.id, spine: spineOf(c), skin: sb.skin, animations: all.map(function (n) { return { name: n, duration: K.roundTo(K.durationOf(sp.json.animations[n]), 3) }; }), warnings: sp.warnings, optimization: sp.audit };
     if (!await sbWait()) return Object.assign(info, { note: 'Рантайм Spine не готовий, кадрів немає', images: [] });
     var p = sb.player.player, cv = p.canvas;
     if (!cv || !cv.width || !cv.height) return Object.assign(info, { note: 'Сцена не має розміру', images: [] });
@@ -5626,6 +6017,16 @@
     return Object.assign(info, { shown: rows.map(function (r) { return { name: r.name, at: r.times }; }), images: sheets });
   }
   function sbInfo(c, full) {
+    if (c.raw) {
+      var rs = sbRawSpine(c), pre = 's:' + c.id + ':';
+      var ro = { id: c.id, label: c.label, spine: spineOf(c), kind: 'spine', anims: rs ? rs.contract.animations.map(function (a) { return a.name; }) : [], library: null };
+      if (!full) return ro;
+      ro.note = 'Готовий спайн (імпорт): кіт його не редагує. Щоб змінити, візьми файли через sandbox_export, відредагуй JSON і поверни їх через sandbox_update from_spine.';
+      ro.files = { json: (sb.store.images[pre + 'json'] || {}).fileName || null, atlas: (sb.store.images[pre + 'atlas'] || {}).fileName || null, pages: (c.raw.pages || []).slice() };
+      if (rs) ro.spine_info = Object.assign({}, rs.stats, { skins: rs.contract.skins, animations: rs.contract.animations, slots: (rs.json.slots || []).map(function (s) { return s.name; }), findings: rs.findings, warnings: rs.warnings, optimization: rs.audit });
+      else ro.error = sb.rawErr[c.id] || 'файли не читаються';
+      return ro;
+    }
     var o = { id: c.id, label: c.label, spine: spineOf(c), size: (Number(c.w) || 0) + 'x' + (Number(c.h) || 0), parts: (c.parts || []).map(function (p) { return p.name; }), anims: (c.anims || []).map(function (a) { return a.name + (a.keys ? ' (ключі)' : ''); }), library: c.lib || null };
     if (!full) return o;
     var sp = sbPlanOf(c);
@@ -5633,7 +6034,7 @@
     Object.keys(keys).forEach(function (r) { var im = imgs(keys[r]).images[keys[r]]; images[r] = im ? im.fileName || true : false; });
     o.settings = clone(c);
     o.images = images;
-    if (sp) o.spine_info = { skins: sp.json.skins.map(function (s) { return s.name; }), animations: Object.keys(sp.json.animations).map(function (n) { return { name: n, duration: K.roundTo(K.durationOf(sp.json.animations[n]), 3) }; }), slots: sp.json.slots.map(function (s) { return s.name; }), warnings: sp.warnings };
+    if (sp) o.spine_info = { skins: sp.json.skins.map(function (s) { return s.name; }), animations: Object.keys(sp.json.animations).map(function (n) { return { name: n, duration: K.roundTo(K.durationOf(sp.json.animations[n]), 3) }; }), slots: sp.json.slots.map(function (s) { return s.name; }), warnings: sp.warnings, optimization: sp.audit };
     return o;
   }
 
@@ -5686,14 +6087,21 @@
     });
     $('view-sandbox').appendChild(file);
     dropTarget($('sb-stage'), async function (fs) {
+      if (fs.some(function (x) { return /\.(zip|atlas|atlas\.txt)$/i.test(x.name) || (/\.json$/i.test(x.name) && !/\.component\.json$/i.test(x.name)); })) {
+        try {
+          var list = await finRead(fs);
+          if (sbRawGroups(list).length) { sbSpineToast(await sbFromSpine(null, { list: list })); return; }
+        } catch (e) { toast(e.message); return; }
+      }
       var f = fs.filter(function (x) { return /\.json$/i.test(x.name); })[0];
       if (f) { try { await sbFromFile(f); } catch (e) { toast(e.message); } return; }
       var c = sbCur();
       var pics = fs.filter(function (x) { return /^image\//.test(x.type); });
+      if (c && c.raw && pics.length) { toast('Це готовий спайн: щоб оновити його файли, натисніть «Замінити файли»'); return; }
       if (!c || !pics.length) return;
       if (pics.length === 1 && !sb.store.images['c:' + c.id]) addImageFile('c:' + c.id, pics[0], function (natural) { fitSize(c, natural); });
       else addPartFiles(c, pics);
-    });
+    }, true);
     $('sb-stage').addEventListener('keydown', function (e) {
       if (e.target !== $('sb-stage')) return;
       if (e.key === ' ') { e.preventDefault(); sbToggle(); }
@@ -6281,7 +6689,7 @@
   var App = {
     K: K, state: state, A: A, defaults: defaults, newId: newId, templates: TEMPLATES, fromTemplate: fromTemplate, fitSize: fitSize,
     partKey: partKey, movePartImage: movePartImage, forgetComponentImages: forgetComponentImages, exportComponent: exportComponent, importComponent: importComponent, COMP_KIT: COMP_KIT,
-    setImage: setImage, forgetImage: forgetImage, moveSymbolImages: moveSymbolImages, forgetSymbolImages: forgetSymbolImages, changed: changed, saveNow: saveNow, flush: flush, saveProject: saveProject,
+    setImage: setImage, sheetFrom: sheetFrom, forgetImage: forgetImage, moveSymbolImages: moveSymbolImages, forgetSymbolImages: forgetSymbolImages, changed: changed, saveNow: saveNow, flush: flush, saveProject: saveProject,
     renderGame: renderGame, renderComponents: renderComponents, renderPreview: renderPreview, renderWizard: renderWizard,
     openProject: openProject, createProject: createProject, startSpin: startSpin, buildZip: buildZip, toast: toast, panel: panel,
     applyRemote: applyRemote, histParts: histParts, setProjects: setProjects, clearProject: clearProject, hist: hist, dirty: function () { return hist.dirty; },
@@ -6295,6 +6703,7 @@
       flush: sbFlush,
       forget: sbForget,
       fromTemplate: sbFromTemplate, fromComp: sbFromComp, fromLib: sbFromLib, fromData: function (data, opts) { return importComponent(data, Object.assign({}, opts || {}, { sandbox: true })); },
+      fromSpine: sbFromSpine, setSpine: sbRawReplace, zip: sbZip,
       save: sbSave, toProject: sbToProject, remove: sbRemove, render: renderSandbox
     },
     lib: { api: Lib, add: libToProject },

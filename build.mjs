@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const src = f => readFileSync(join(HERE, 'src', f), 'utf8');
+const VERSION = JSON.parse(readFileSync(join(HERE, 'package.json'), 'utf8')).version;
 const fill = (s, token, code, name) => {
   if (!s.includes(token)) throw new Error(`token ${token} missing`);
   if (/<\/script/i.test(code)) throw new Error(`${name} contains </script`);
@@ -18,6 +19,7 @@ page = fill(page, '/*@SPIN@*/', src('spin.js'), 'spin');
 page = fill(page, '/*@LINK@*/', src('link.js'), 'link');
 page = fill(page, '/*@LAYOUTS@*/', src('layouts.js'), 'layouts');
 page = fill(page, '/*@UI@*/', src('ui.js'), 'ui');
+page = fill(page, '@VERSION@', VERSION, 'version');
 if (!page.startsWith('<title>Draft Kit</title>')) throw new Error('page must start with the title');
 mkdirSync(join(HERE, 'dist'), { recursive: true });
 writeFileSync(join(HERE, 'dist', 'spine-draft-kit.html'), page);

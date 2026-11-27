@@ -75,6 +75,7 @@ button:disabled, input:disabled { cursor: default; }
 .brand i { display: inline-grid; grid-template-columns: repeat(3, 6px); gap: 2px; }
 .brand i b { width: 6px; height: 6px; border-radius: 2px; background: rgb(var(--ink-rgb) / 0.3); }
 .brand i b:nth-child(5) { background: var(--brand); }
+.brand-ver { margin-left: -4px; padding-top: 2px; font: 500 12px/1 var(--f-text); letter-spacing: 0; color: rgb(var(--ink-rgb) / 0.4); font-variant-numeric: tabular-nums; }
 
 .tabs, .presets { display: flex; gap: 4px; padding: 4px; border-radius: 9999px; background: rgb(var(--ink-rgb) / 0.06); flex: none; }
 .tab, .preset { display: inline-flex; align-items: center; height: 36px; padding: 0 12px; border: 0; border-radius: 9999px; background: none; color: rgb(var(--ink-rgb) / 0.6); font: 500 15px/1 var(--f-text); white-space: nowrap; transition: background-color 150ms var(--ease), color 150ms var(--ease); }
@@ -407,6 +408,10 @@ details.tech[open] > summary { margin-bottom: 12px; }
 .pv-final[hidden] { display: none; }
 .pv-final-t { font: 500 13px/1.35 var(--f-text); color: var(--success); }
 .pv-final-t.bad { color: var(--warning); }
+.opt { display: grid; gap: 6px; padding: 0 4px; }
+.opt[hidden] { display: none; }
+.opt-line { font: 500 13px/1.35 var(--f-text); color: rgb(var(--ink-rgb) / 0.6); }
+.opt-notes { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: 13px; line-height: 1.35; color: var(--warning); }
 .fin-dlg { width: min(780px, calc(100% - 32px)); }
 .fin-body { display: grid; gap: 14px; padding: 12px 24px 8px; }
 .fin-lead { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin: 0; }
@@ -843,7 +848,9 @@ details.tech[open] > summary { margin-bottom: 12px; }
   .sb-edit .field.pick .dd { width: 100%; }
   .sb-edit .sym-edit { grid-template-columns: minmax(0, 1fr); }
 }
-.sb-edit > .note, .sb-lib > .note { margin: 0; font-size: 14px; color: rgb(var(--ink-rgb) / 0.6); }
+.sb-edit > .note, .sb-lib > .note, .sb-raw .note { margin: 0; font-size: 14px; color: rgb(var(--ink-rgb) / 0.6); }
+.sb-raw .sb-facts { display: grid; gap: 4px; }
+.sb-raw .fin-tw { margin-top: 0; }
 .sb-lib { display: grid; gap: 12px; }
 .sb-lib input[type="text"] { width: 100%; height: 44px; }
 .lib-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(148px, 1fr)); gap: 10px; }
@@ -968,7 +975,7 @@ details.tech[open] > summary { margin-bottom: 12px; }
 
 <div class="app">
   <aside class="panel panel-l sidebar" id="sidebar" aria-label="Проекти">
-    <div class="sb-brand"><span class="brand"><i aria-hidden="true"><b></b><b></b><b></b><b></b><b></b><b></b><b></b><b></b><b></b></i>Draft Kit</span><button class="link-btn" type="button" id="link-btn" aria-haspopup="dialog" data-state="off"><i aria-hidden="true"></i><span id="link-txt">Connect</span></button></div>
+    <div class="sb-brand"><span class="brand"><i aria-hidden="true"><b></b><b></b><b></b><b></b><b></b><b></b><b></b><b></b><b></b></i>Draft Kit<small class="brand-ver" title="Версія Draft Kit">v@VERSION@</small></span><button class="link-btn" type="button" id="link-btn" aria-haspopup="dialog" data-state="off"><i aria-hidden="true"></i><span id="link-txt">Connect</span></button></div>
     <div class="sb-projects" id="sb-projects">
       <div class="sb-head"><h2>Проекти</h2><button class="info" type="button" data-info="projects" aria-label="Що таке проекти">i</button></div>
       <ul class="plist" id="plist"></ul>
@@ -1047,6 +1054,7 @@ details.tech[open] > summary { margin-bottom: 12px; }
           <div class="pv-final" id="pv-final" hidden></div>
           <div class="stage" id="stage"><div class="stage-msg">Завантажую рантайм Spine…</div></div>
           <div class="chips" id="pv-anims"></div>
+          <div class="opt" id="pv-opt" hidden></div>
         </div>
         <ul class="card warns" id="warns"></ul>
       </aside>
@@ -1152,6 +1160,7 @@ details.tech[open] > summary { margin-bottom: 12px; }
         </div>
         <div class="chips" id="sb-anims"></div>
         <div class="sb-acts" id="sb-acts"></div>
+        <div class="opt" id="sb-opt" hidden></div>
       </div>
       <div class="sb-side">
         <section class="card lay-card" aria-labelledby="h-sb-edit">

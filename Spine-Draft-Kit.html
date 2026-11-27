@@ -75,6 +75,7 @@ button:disabled, input:disabled { cursor: default; }
 .brand i { display: inline-grid; grid-template-columns: repeat(3, 6px); gap: 2px; }
 .brand i b { width: 6px; height: 6px; border-radius: 2px; background: rgb(var(--ink-rgb) / 0.3); }
 .brand i b:nth-child(5) { background: var(--brand); }
+.brand-ver { margin-left: -4px; padding-top: 2px; font: 500 12px/1 var(--f-text); letter-spacing: 0; color: rgb(var(--ink-rgb) / 0.4); font-variant-numeric: tabular-nums; }
 
 .tabs, .presets { display: flex; gap: 4px; padding: 4px; border-radius: 9999px; background: rgb(var(--ink-rgb) / 0.06); flex: none; }
 .tab, .preset { display: inline-flex; align-items: center; height: 36px; padding: 0 12px; border: 0; border-radius: 9999px; background: none; color: rgb(var(--ink-rgb) / 0.6); font: 500 15px/1 var(--f-text); white-space: nowrap; transition: background-color 150ms var(--ease), color 150ms var(--ease); }
@@ -407,6 +408,10 @@ details.tech[open] > summary { margin-bottom: 12px; }
 .pv-final[hidden] { display: none; }
 .pv-final-t { font: 500 13px/1.35 var(--f-text); color: var(--success); }
 .pv-final-t.bad { color: var(--warning); }
+.opt { display: grid; gap: 6px; padding: 0 4px; }
+.opt[hidden] { display: none; }
+.opt-line { font: 500 13px/1.35 var(--f-text); color: rgb(var(--ink-rgb) / 0.6); }
+.opt-notes { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: 13px; line-height: 1.35; color: var(--warning); }
 .fin-dlg { width: min(780px, calc(100% - 32px)); }
 .fin-body { display: grid; gap: 14px; padding: 12px 24px 8px; }
 .fin-lead { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin: 0; }
@@ -843,7 +848,9 @@ details.tech[open] > summary { margin-bottom: 12px; }
   .sb-edit .field.pick .dd { width: 100%; }
   .sb-edit .sym-edit { grid-template-columns: minmax(0, 1fr); }
 }
-.sb-edit > .note, .sb-lib > .note { margin: 0; font-size: 14px; color: rgb(var(--ink-rgb) / 0.6); }
+.sb-edit > .note, .sb-lib > .note, .sb-raw .note { margin: 0; font-size: 14px; color: rgb(var(--ink-rgb) / 0.6); }
+.sb-raw .sb-facts { display: grid; gap: 4px; }
+.sb-raw .fin-tw { margin-top: 0; }
 .sb-lib { display: grid; gap: 12px; }
 .sb-lib input[type="text"] { width: 100%; height: 44px; }
 .lib-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(148px, 1fr)); gap: 10px; }
@@ -968,7 +975,7 @@ details.tech[open] > summary { margin-bottom: 12px; }
 
 <div class="app">
   <aside class="panel panel-l sidebar" id="sidebar" aria-label="Проекти">
-    <div class="sb-brand"><span class="brand"><i aria-hidden="true"><b></b><b></b><b></b><b></b><b></b><b></b><b></b><b></b><b></b></i>Draft Kit</span><button class="link-btn" type="button" id="link-btn" aria-haspopup="dialog" data-state="off"><i aria-hidden="true"></i><span id="link-txt">Connect</span></button></div>
+    <div class="sb-brand"><span class="brand"><i aria-hidden="true"><b></b><b></b><b></b><b></b><b></b><b></b><b></b><b></b><b></b></i>Draft Kit<small class="brand-ver" title="Версія Draft Kit">v2.0.0</small></span><button class="link-btn" type="button" id="link-btn" aria-haspopup="dialog" data-state="off"><i aria-hidden="true"></i><span id="link-txt">Connect</span></button></div>
     <div class="sb-projects" id="sb-projects">
       <div class="sb-head"><h2>Проекти</h2><button class="info" type="button" data-info="projects" aria-label="Що таке проекти">i</button></div>
       <ul class="plist" id="plist"></ul>
@@ -1047,6 +1054,7 @@ details.tech[open] > summary { margin-bottom: 12px; }
           <div class="pv-final" id="pv-final" hidden></div>
           <div class="stage" id="stage"><div class="stage-msg">Завантажую рантайм Spine…</div></div>
           <div class="chips" id="pv-anims"></div>
+          <div class="opt" id="pv-opt" hidden></div>
         </div>
         <ul class="card warns" id="warns"></ul>
       </aside>
@@ -1152,6 +1160,7 @@ details.tech[open] > summary { margin-bottom: 12px; }
         </div>
         <div class="chips" id="sb-anims"></div>
         <div class="sb-acts" id="sb-acts"></div>
+        <div class="opt" id="sb-opt" hidden></div>
       </div>
       <div class="sb-side">
         <section class="card lay-card" aria-labelledby="h-sb-edit">
@@ -1592,7 +1601,7 @@ details.tech[open] > summary { margin-bottom: 12px; }
       if (!sp.name || json.animations[sp.name]) return;
       json.animations[sp.name] = buildAnimation(sp, sp.ctx || o.ctx);
     });
-    var regions = [{ name: o.region, w: o.px.w, h: o.px.h, src: o.src }];
+    var regions = [{ name: o.region, w: o.px.w, h: o.px.h, src: o.src, sum: o.px.sum }];
     if ((o.spacers || []).length) regions.push({ name: tech.spacer, w: 1, h: 1, src: 'clear' });
     return { name: o.name, json: withEvents(json), regions: regions, loops: o.specs.filter(function (s) { return s.loop; }).map(function (s) { return s.name; }) };
   }
@@ -1925,7 +1934,7 @@ details.tech[open] > summary { margin-bottom: 12px; }
       else if (r4(v) !== 1) { o.x = r4(v); o.y = r4(v); }
       var n = keys[i + 1], e = k[2];
       if (n && e === 'stepped') o.curve = 'stepped';
-      else if (n && e) {
+      else if (n && e && r4(n[1]) !== r4(v)) {
         var ch = function (v0, v1) { return [r4(k[0] + (n[0] - k[0]) * e[0]), r4(v0 + (v1 - v0) * e[1]), r4(k[0] + (n[0] - k[0]) * e[2]), r4(v0 + (v1 - v0) * e[3])]; };
         var cx = ch(v, n[1]);
         o.curve = kind === 'alpha' ? cx : kind === 'x' ? cx.concat(ch(0, 0)) : kind === 'sx' ? cx.concat(ch(1, 1)) : cx.concat(cx);
@@ -1959,64 +1968,88 @@ details.tech[open] > summary { margin-bottom: 12px; }
 
   function pulseKeys(t, from, peak, at, end, e) { return [[t, from, e || BAR_OUT], [t + at, peak, e || BAR_OUT], [t + end, from]]; }
 
+  function barMesh(tw, h, cap, G, F) {
+    var hh = r2(h / 2), u = r4(cap / tw);
+    var cols = [[G, 0, 0], [G, cap, u], [F, -cap, r4(1 - u)], [F, 0, 1]], back = cols.slice().reverse();
+    var flat = function (rows) { return [].concat.apply([], rows); };
+    return {
+      type: 'mesh',
+      uvs: flat(cols.map(function (c) { return [c[2], 0]; }).concat(back.map(function (c) { return [c[2], 1]; }))),
+      triangles: [0, 1, 6, 0, 6, 7, 1, 2, 5, 1, 5, 6, 2, 3, 4, 2, 4, 5],
+      vertices: flat(cols.map(function (c) { return [1, c[0], c[1], hh, 1]; }).concat(back.map(function (c) { return [1, c[0], c[1], -hh, 1]; }))),
+      hull: 8,
+      edges: [0, 2, 2, 4, 4, 6, 6, 8, 8, 10, 10, 12, 12, 14, 14, 0, 2, 12, 4, 10],
+      width: tw,
+      height: h
+    };
+  }
+
+  function barTracks(fr, w, cap) {
+    var f0 = 2 * cap / w, keys = [];
+    fr.forEach(function (k, i) {
+      var n = fr[i + 1];
+      if (!n || (k[1] - f0) * (n[1] - f0) >= 0) { keys.push(k); return; }
+      var up = n[1] > k[1];
+      keys.push([k[0], k[1], up ? undefined : k[2]], [k[0] + (n[0] - k[0]) * (f0 - k[1]) / (n[1] - k[1]), f0, up ? k[2] : undefined]);
+    });
+    var lean = function (list) {
+      return list.filter(function (k, i) { var p = list[i - 1], n = list[i + 1]; return !(p && r4(p[1]) === r4(k[1]) && (!n || r4(n[1]) === r4(k[1]))); });
+    };
+    var track = function (value) { return lean(keys.map(function (k) { return [k[0], value(k[1]), k[2]]; })); };
+    return {
+      grow: track(function (f) { return Math.max(0.001, Math.min(1, f / f0)); }),
+      fill: track(function (f) { return Math.max(0, (f - f0) * w); }),
+      sweep: track(function (f) { return Math.max(0.001, f); })
+    };
+  }
+
   function withBar(spine, b, name, tech) {
     var json = spine.json;
     var w = r2(b.w), h = r2(b.h), hw = r2(w / 2), hh = r2(h / 2);
     var r = r2(Math.min(hh, 0.175 * h));
-    var sw = r2(h * 1.4), head = { w: r2(h * 0.9), h: r2(h * 1.5) }, glow = { w: r2(w + h * 0.8), h: r2(h * 2.2) };
+    var cap = Math.max(1, Math.min(Math.ceil(r * 1.1) + 2, Math.floor(hw))), tw = 2 * cap + 4;
+    var sw = r2(Math.min(h * 1.4, w / 2)), head = { w: r2(h * 0.9), h: r2(h * 1.15) }, glow = { w: r2(w + h * 0.8), h: r2(h * 2.2) };
     var base = 'art/' + name.replace(/^animation_/, '') + '/bar_';
     var bone = function (n, parent, x, y) { var o = { name: n, parent: parent }; if (r2(x || 0)) o.x = r2(x); if (r2(y || 0)) o.y = r2(y); return o; };
-    var track = bone('bar_shine_track', 'bar_sweep');
-    track.transform = 'noScale';
-    json.bones.push(bone('bar', 'art', b.x, b.y), bone('bar_fill', 'bar', -w), bone('bar_head', 'bar_fill', hw), bone('bar_sweep', 'bar', -hw), track, bone('bar_shine', 'bar_shine_track', -sw / 2));
+    json.bones.push(bone('bar', 'art', b.x, b.y), bone('bar_grow', 'bar', -hw), bone('bar_fill', 'bar_grow', 2 * cap), bone('bar_head', 'bar_fill'), bone('bar_sweep', 'bar', -hw), bone('bar_shine', 'bar_sweep', sw / 2));
     var slots = [
+      { name: 'bar_fill', bone: 'bar_fill' },
       { name: 'bar_glow', bone: 'bar', color: 'ffffff00', attachment: base + 'glow', blend: 'additive' },
-      { name: 'bar_clip', bone: 'bar', attachment: 'bar_clip' },
-      { name: 'bar_fill', bone: 'bar_fill', attachment: base + 'fill' },
-      { name: 'bar_flash', bone: 'bar_fill', color: 'ffffff00', attachment: base + 'flash', blend: 'additive' },
-      { name: 'bar_head', bone: 'bar_head', attachment: base + 'head', blend: 'additive' },
-      { name: 'bar_shine_clip', bone: 'bar', attachment: 'bar_shine_clip' },
-      { name: 'bar_shine', bone: 'bar_shine', blend: 'additive' }
+      { name: 'bar_flash', bone: 'bar_fill', color: 'ffffff00', blend: 'additive' },
+      { name: 'bar_head', bone: 'bar_head', blend: 'additive' },
+      { name: 'bar_shine', bone: 'bar_shine', color: 'ffffff00', blend: 'additive' }
     ];
     var at = json.slots.map(function (s) { return s.name; }).indexOf('art');
     json.slots.splice.apply(json.slots, [at + 1, 0].concat(slots));
-    var arc = [];
-    [[hw - r, hh - r, 90], [hw - r, -hh + r, 0], [-hw + r, -hh + r, -90], [-hw + r, hh - r, -180]].forEach(function (k) {
-      for (var j = 0; j <= 4; j++) { var t = (k[2] - j * 22.5) * Math.PI / 180; arc.push(r2(k[0] + r * Math.cos(t)), r2(k[1] + r * Math.sin(t))); }
-    });
     var bi = function (n) { return json.bones.map(function (x) { return x.name; }).indexOf(n); };
-    var c = r2(r * 0.6), B = bi('bar'), F = bi('bar_fill');
-    var cut = [[B, -hw + c, hh], [F, hw - c, hh], [F, hw, hh - c], [F, hw, -hh + c], [F, hw - c, -hh], [B, -hw + c, -hh], [B, -hw, -hh + c], [B, -hw, hh - c]];
-    var att = {
-      bar_glow: {}, bar_fill: {}, bar_shine: {}, bar_flash: {}, bar_head: {},
-      bar_clip: { bar_clip: { type: 'clipping', end: 'bar_head', vertexCount: arc.length / 2, vertices: arc } },
-      bar_shine_clip: { bar_shine_clip: { type: 'clipping', end: 'bar_shine', vertexCount: cut.length, vertices: [].concat.apply([], cut.map(function (v) { return [1, v[0], r2(v[1]), r2(v[2]), 1]; })) } }
-    };
+    var G = bi('bar_grow'), F = bi('bar_fill');
+    var att = { bar_fill: {}, bar_glow: {}, bar_flash: {}, bar_head: {}, bar_shine: {} };
+    att.bar_fill[base + 'fill'] = barMesh(tw, h, cap, G, F);
     att.bar_glow[base + 'glow'] = { width: glow.w, height: glow.h };
-    att.bar_fill[base + 'fill'] = { width: w, height: h };
+    att.bar_flash[base + 'flash'] = barMesh(tw, h, cap, G, F);
+    att.bar_head[base + 'head'] = { x: r2(-h * 0.2), width: head.w, height: head.h };
     att.bar_shine[base + 'shine'] = { width: sw, height: h };
-    att.bar_flash[base + 'flash'] = { width: w, height: h };
-    att.bar_head[base + 'head'] = { width: head.w, height: head.h };
     json.skins.forEach(function (s) { if (s.attachments) Object.assign(s.attachments, clone(att)); });
     var R = Math.round;
     var src = function (kind, rw, rh) { return 'bar:' + kind + ':' + R(rw) + ':' + R(rh) + ':' + R(r); };
     spine.regions.push(
-      { name: base + 'fill', w: R(w), h: R(h), src: src('fill', w, h) },
-      { name: base + 'flash', w: R(w), h: R(h), src: src('flash', w, h) },
-      { name: base + 'shine', w: R(sw), h: R(h), src: src('shine', sw, h) },
-      { name: base + 'head', w: R(head.w), h: R(head.h), src: src('head', head.w, head.h) },
-      { name: base + 'glow', w: R(glow.w), h: R(glow.h), src: 'bar:glow:' + R(glow.w) + ':' + R(glow.h) + ':' + R(r) + ':' + R(w) + ':' + R(h) }
+      { name: base + 'fill', w: tw, h: R(h), src: src('fill', tw, h) },
+      { name: base + 'flash', w: tw, h: R(h), src: src('flash', tw, h) },
+      { name: base + 'shine', w: R(sw), h: R(h), src: src('shine', sw, h), tex: 0.5 },
+      { name: base + 'head', w: R(head.w), h: R(head.h), src: src('head', head.w, head.h), tex: 0.5 },
+      { name: base + 'glow', w: R(glow.w), h: R(glow.h), src: 'bar:glow:' + R(glow.w) + ':' + R(glow.h) + ':' + R(r) + ':' + R(w) + ':' + R(h), tex: 0.5 }
     );
-    var shown = [[0, null, 'stepped'], [0.04, base + 'shine']];
+    var run = r2(w - sw);
+    var on = { 'bar_fill..att': [[0, base + 'fill']], 'bar_flash..att': [[0, base + 'flash']], 'bar_head..att': [[0, base + 'head']] };
     var anims = json.animations;
     var loops = Object.keys(anims).filter(function (n) { return /^(loop|idle)/.test(n); });
     if (!loops.length) { anims.loop_1 = {}; loops = ['loop_1']; spine.loops.push('loop_1'); }
     loops.forEach(function (n) {
       var d = durationOf(anims[n]) || 1.6;
-      anims[n] = mergeAnim(anims[n], barAnim({ 'bar_shine_track..x': [[0, 0], [d, w]], 'bar_shine..x': [[0, 0], [d, sw]] }));
+      anims[n] = mergeAnim(anims[n], barAnim({ 'bar_shine..x': [[0, 0], [d, run]], 'bar_shine..alpha': [[0, 0], [d * 0.15, 1], [d * 0.85, 1], [d, 0]] }));
     });
     var own = {
-      progress: { 'bar_fill..x': [[0, 0], [1, w]], 'bar_sweep..sx': [[0, 0.001], [1, 1]], 'bar_shine..att': shown },
+      progress: Object.assign({ 'bar_grow..sx': [[0, 0.001], [2 * cap / w, 1]], 'bar_fill..x': [[2 * cap / w, 0], [1, w - 2 * cap]], 'bar_sweep..sx': [[0, 0.001], [1, 1]], 'bar_shine..att': [[0, null], [0.04, base + 'shine']] }, on),
       add: { 'bar_head..scale': pulseKeys(0, 1, 1.6, 0.14, 0.35), 'bar_flash..alpha': pulseKeys(0, 0, 0.5, 0.14, 0.35) },
       anticipation: { 'bar_glow..alpha': pulseKeys(0, 0.3, 0.85, 0.575, 1.15, BAR_IO), 'bar_head..scale': pulseKeys(0, 1, 1.3, 0.575, 1.15, BAR_IO) },
       trigger: {
@@ -2027,30 +2060,30 @@ details.tech[open] > summary { margin-bottom: 12px; }
       }
     };
     var steps = [[0.4, 0.3], [1.6, 0.55], [2.8, 0.8], [4, 1]];
-    var fill = [[0, 0]], sweep = [[0, 0.001]], head = [[0, 1]], flash = [[0, 0]];
+    var level = [[0, 0]], pulse = [[0, 1]], flash = [[0, 0]], shineX = [], shineA = [];
     steps.forEach(function (s, i) {
-      var from = i ? steps[i - 1][1] : 0;
-      fill.push([s[0], from * w, BAR_OVER], [s[0] + 0.7, s[1] * w]);
-      sweep.push([s[0], Math.max(0.001, from), BAR_OVER], [s[0] + 0.7, s[1]]);
-      if (s[1] < 1) { head = head.concat(pulseKeys(s[0], 1, 1.6, 0.14, 0.35)); flash = flash.concat(pulseKeys(s[0], 0, 0.5, 0.14, 0.35)); }
+      level.push([s[0], i ? steps[i - 1][1] : 0, s[1] < 1 ? BAR_OVER : BAR_OUT], [s[0] + 0.7, s[1]]);
+      if (s[1] < 1) { pulse = pulse.concat(pulseKeys(s[0], 1, 1.6, 0.14, 0.35)); flash = flash.concat(pulseKeys(s[0], 0, 0.5, 0.14, 0.35)); }
+      shineX.push([i * 1.6, 0], [(i + 1) * 1.6 - 0.0333, run, 'stepped']);
+      shineA.push([i * 1.6, 0], [i * 1.6 + 0.24, 1], [(i + 1) * 1.6 - 0.27, 1], [(i + 1) * 1.6 - 0.0333, 0]);
     });
     var tg = 4.7, drain = tg + 1.15;
-    fill.push([drain, w, BAR_IO], [drain + 0.5, 0], [drain + 0.8, 0]);
-    sweep.push([drain, 1, BAR_IO], [drain + 0.5, 0.001], [drain + 0.8, 0.001]);
-    flash = flash.concat(pulseKeys(tg, 0, 0.85, 0.23, 0.9));
-    var shineAt = function (len) { var k = []; for (var i = 0; i < 4; i++) k.push([i * 1.6, 0], [(i + 1) * 1.6 - 0.0333, len, 'stepped']); return k.concat([[6.4, 0]]); };
-    own.demo = {
-      'bar_fill..x': fill,
-      'bar_sweep..sx': sweep,
-      'bar_flash..alpha': flash,
-      'bar_shine_track..x': shineAt(w),
-      'bar_shine..x': shineAt(sw),
-      'bar_shine..att': [[0, null, 'stepped'], [0.46, base + 'shine', 'stepped'], [drain + 0.42, null]],
+    level.push([drain, 1, BAR_IO], [drain + 0.5, 0]);
+    var T = barTracks(level, w, cap);
+    own.demo = Object.assign({
+      'bar_grow..sx': T.grow,
+      'bar_fill..x': T.fill,
+      'bar_sweep..sx': T.sweep,
+      'bar_flash..alpha': flash.concat(pulseKeys(tg, 0, 0.85, 0.23, 0.9)),
+      'bar_shine..x': shineX.concat([[6.4, 0]]),
+      'bar_shine..alpha': shineA,
+      'bar_shine..att': [[0, null], [0.46, base + 'shine'], [drain + 0.42, null]],
       'bar_glow..alpha': [[0, 0], [3.4, 0], [3.5, 0.3, BAR_IO], [4.075, 0.85, BAR_IO], [tg, 0.3, BAR_OUT], [tg + 0.23, 1, BAR_OUT], [drain, 0]],
-      'bar_head..scale': head.concat([[3.5, 1, BAR_IO], [4.075, 1.3, BAR_IO], [tg, 1, BAR_OUT], [tg + 0.23, 2, BAR_OUT], [drain, 1]]),
+      'bar_head..scale': pulse.concat([[3.5, 1, BAR_IO], [4.075, 1.3, BAR_IO], [tg, 1, BAR_OUT], [tg + 0.23, 2, BAR_OUT], [drain, 1]]),
       'art..scale': pulseKeys(tg, 1, 1.035, 0.23, 1.15)
-    };
+    }, on);
     Object.keys(own).forEach(function (n) { anims[n] = mergeAnim(anims[n], barAnim(own[n])); });
+    padTo(anims.demo, drain + 0.8);
     if (spine.loops.indexOf('anticipation') === -1) spine.loops.push('anticipation');
     return spine;
   }
@@ -2059,8 +2092,9 @@ details.tech[open] > summary { margin-bottom: 12px; }
   var PIVOT_AT = /^\s*(-?\d+(?:\.\d+)?)\s*:\s*(-?\d+(?:\.\d+)?)\s*$/;
   var BLENDS = ['normal', 'additive', 'multiply', 'screen'];
   var SHAPES = ['', 'rect', 'circle', 'ring', 'glow', 'star'];
-  var BAR_NAMES = ['bar', 'bar_fill', 'bar_shine', 'bar_head', 'bar_glow', 'bar_clip', 'bar_flash'];
+  var BAR_NAMES = ['bar', 'bar_grow', 'bar_fill', 'bar_head', 'bar_sweep', 'bar_shine', 'bar_glow', 'bar_flash'];
   var KEY_NUM = ['x', 'y', 'scale', 'sx', 'sy', 'rotate', 'alpha'];
+  var PLAYS = ['loop', 'once', 'pingpong'];
 
   function pivotName(v) {
     var s = String(v === undefined || v === null ? '' : v).trim().toLowerCase();
@@ -2087,11 +2121,22 @@ details.tech[open] > summary { margin-bottom: 12px; }
     var name = slug(p.name);
     if (!name) return null;
     var o = { name: name, parent: slug(p.parent) || 'art', x: given(p.x) ? r2(Number(p.x)) : 0, y: given(p.y) ? r2(Number(p.y)) : 0 };
+    if (given(p.rotate) && r2(Number(p.rotate))) o.rotate = r2(Number(p.rotate));
+    if (p.bone === true) { o.bone = true; return o; }
     if (given(p.w) && Number(p.w) > 0) o.w = r2(Number(p.w));
     if (given(p.h) && Number(p.h) > 0) o.h = r2(Number(p.h));
     var pv = pivotName(p.pivot);
     if (pv) o.pivot = pv;
-    if (given(p.rotate) && r2(Number(p.rotate))) o.rotate = r2(Number(p.rotate));
+    var lim = function (v, lo, hi, d) { return given(v) ? Math.max(lo, Math.min(hi, Number(v))) : d; };
+    var gl = isObj(p.glint) ? p.glint : null, sh = isObj(p.sheet) ? p.sheet : null;
+    if (gl) o.glint = { of: slug(gl.of) || 'art', bands: Math.round(lim(gl.bands, 1, 6, 3)), angle: r2(lim(gl.angle, -180, 180, 20)), level: r2(lim(gl.level, 0, 0.95, 0.6)), step: r4(lim(gl.step, 0, 1, 0.06)) };
+    else if (sh && Number(sh.cols) >= 1 && Number(sh.rows) >= 1) {
+      var cols = Math.round(lim(sh.cols, 1, 32, 1)), rows = Math.round(lim(sh.rows, 1, 32, 1));
+      o.sheet = { cols: cols, rows: rows, count: Math.round(lim(sh.count, 1, cols * rows, cols * rows)) };
+      if (given(p.fps)) o.fps = r2(lim(p.fps, 1, 60, 24));
+      if (PLAYS.indexOf(p.play) > 0) o.play = p.play;
+    } else if (slug(p.slot)) o.slot = slug(p.slot);
+    if (given(p.tex) && Number(p.tex) < 1) o.tex = r2(Math.max(0.1, Number(p.tex)));
     if (p.behind === true) o.behind = true;
     if (BLENDS.indexOf(p.blend) > 0) o.blend = p.blend;
     if (given(p.alpha) && Number(p.alpha) < 1) o.alpha = r4(Math.max(0, Number(p.alpha)));
@@ -2137,6 +2182,8 @@ details.tech[open] > summary { margin-bottom: 12px; }
           } else if (f === 'color') {
             if (hexOf(v)) o.color = hexOf(v);
             else errors.push(at + ': color як "ffcc00"');
+          } else if (f === 'show') {
+            o.show = v === null || v === false ? '' : slug(v);
           } else if (f === 'ease') {
             if (v === 'linear' || v === null || v === '') return;
             if (easeOf(v)) o.ease = Array.isArray(v) ? v.map(Number) : v;
@@ -2178,9 +2225,10 @@ details.tech[open] > summary { margin-bottom: 12px; }
     });
   }
 
-  function keyedAnim(keys, json, fade) {
+  function keyedAnim(keys, json, fade, meta) {
     var anim = {}, notes = [];
-    var bones = {}, slots = {}, tint = {};
+    var bones = {}, slots = {}, tint = {}, shown = {};
+    var fans = (meta && meta.fans) || {}, variants = (meta && meta.variants) || {};
     json.bones.forEach(function (b) { bones[b.name] = b; });
     json.slots.forEach(function (s) { slots[s.name] = s; });
     var names = Object.keys(keys).sort(function (a, b) { return (a === 'all' ? 0 : 1) - (b === 'all' ? 0 : 1); });
@@ -2194,12 +2242,34 @@ details.tech[open] > summary { margin-bottom: 12px; }
         if (k.rotate !== undefined) o.rotate = k.rotate;
         if (k.color) { var c = parseHex(k.color); o.r = c.r; o.g = c.g; o.b = c.b; }
         if (k.alpha !== undefined) o.a = k.alpha;
+        if (k.show !== undefined) o.show = k.show;
         return o;
       });
       var all = target === 'all';
+      var fan = fans[target];
+      if (fan) {
+        if (list.some(function (k) { return k.x !== undefined || k.y !== undefined || k.sx !== undefined || k.rotate !== undefined; })) notes.push('ключі ' + target + ': блік бере лише alpha і color, рухається він разом із джерелом');
+        var pulse = list.filter(function (k) { return k.a !== undefined || k.r !== undefined; });
+        fan.slots.forEach(function (sn, i) { tint[sn] = (tint[sn] || []).concat(pulse.map(function (k) { return Object.assign({}, k, { t: r4(k.t + i * fan.step) }); })); });
+        return;
+      }
+      var owner = Object.keys(variants).filter(function (s) { return variants[s].names[target]; })[0];
+      if (owner && !slots[target] && !bones[target]) { notes.push('ключі ' + target + ': це варіант слота ' + owner + ', став ключі на ' + owner + ' і перемикай картинку "show": "' + target + '"'); return; }
       var slotList = all ? fade.filter(function (n) { return slots[n]; }) : slots[target] ? [target] : [];
       var bone = all ? null : bones[target] ? target : slots[target] ? slots[target].bone : null;
       if (!bone && !slotList.length) { notes.push('ключі: немає частини ' + target); return; }
+      var shows = list.filter(function (k) { return k.show !== undefined; });
+      if (shows.length && !variants[target]) notes.push('ключі ' + target + ': show тільки для слота з варіантами');
+      else if (shows.length) {
+        var group = variants[target], tl = [];
+        shows.forEach(function (k) {
+          if (k.show && !group.names[k.show]) { notes.push('ключі ' + target + ': немає варіанта ' + k.show + '. Є: ' + Object.keys(group.names).join(', ')); return; }
+          var name = k.show ? group.names[k.show] : null;
+          if (name === (tl.length ? tl[tl.length - 1].name : slots[target].attachment || null)) return;
+          tl.push(k.t > 0 ? { time: r4(k.t), name: name } : { name: name });
+        });
+        if (tl.length) shown[target] = tl;
+      }
       var tr = keyGroup(list, ['x', 'y'], [0, 0]);
       var sc = keyGroup(list, ['sx', 'sy'], [1, 1]);
       var ro = keyGroup(list, ['rotate'], [0]);
@@ -2229,6 +2299,10 @@ details.tech[open] > summary { margin-bottom: 12px; }
       anim.slots = anim.slots || {};
       anim.slots[sn] = s;
     });
+    Object.keys(shown).forEach(function (sn) {
+      anim.slots = anim.slots || {};
+      anim.slots[sn] = Object.assign({ attachment: shown[sn] }, anim.slots[sn] || {});
+    });
     return { anim: anim, notes: notes };
   }
 
@@ -2239,7 +2313,7 @@ details.tech[open] > summary { margin-bottom: 12px; }
       Object.keys(anim[g] || {}).forEach(function (n) {
         Object.keys(anim[g][n]).forEach(function (t) {
           var tl = anim[g][n][t];
-          if (!Array.isArray(tl) || !tl.length) return;
+          if (t === 'attachment' || !Array.isArray(tl) || !tl.length) return;
           var lt = tl[tl.length - 1].time || 0;
           if (lt > bt) { bt = lt; best = tl; }
         });
@@ -2256,6 +2330,157 @@ details.tech[open] > summary { margin-bottom: 12px; }
     best.push(f);
   }
 
+  var CLEAN_KINDS = ['rotate', 'translate', 'scale', 'rgba', 'rgb', 'alpha'];
+  var HIDE_MIN = 0.2;
+
+  function keyVals(kind, k) {
+    if (kind === 'rotate') return [k.value || 0];
+    if (kind === 'alpha') return [k.value === undefined ? 1 : k.value];
+    if (kind === 'translate') return [k.x || 0, k.y || 0];
+    if (kind === 'scale') return [k.x === undefined ? 1 : k.x, k.y === undefined ? 1 : k.y];
+    var c = parseHex(k.color);
+    return kind === 'rgb' ? [c.r, c.g, c.b] : [c.r, c.g, c.b, c.a];
+  }
+  function keySig(kind, k) {
+    return kind === 'rgba' || kind === 'rgb' ? String(k.color).toLowerCase() : keyVals(kind, k).join(',');
+  }
+  function setupSig(kind, slot) {
+    if (kind === 'rotate') return '0';
+    if (kind === 'translate') return '0,0';
+    if (kind === 'scale') return '1,1';
+    var c = String((slot && slot.color) || 'ffffffff').toLowerCase();
+    if (kind === 'alpha') return String(r4(parseHex(c).a));
+    return kind === 'rgb' ? c.slice(0, 6) : c;
+  }
+  function flatKeys(kind, a, b) {
+    if (keySig(kind, a) !== keySig(kind, b)) return false;
+    if (!Array.isArray(a.curve)) return true;
+    return keyVals(kind, a).every(function (v, j) { return Math.abs(a.curve[j * 4 + 1] - v) < 0.0002 && Math.abs(a.curve[j * 4 + 3] - v) < 0.0002; });
+  }
+  function cleanTrack(kind, tl, setup) {
+    if (CLEAN_KINDS.indexOf(kind) === -1 || !Array.isArray(tl)) return tl;
+    var out = tl.slice();
+    for (var i = out.length - 2; i > 0; i--) if (flatKeys(kind, out[i - 1], out[i]) && flatKeys(kind, out[i], out[i + 1])) out.splice(i, 1);
+    while (out.length > 1 && flatKeys(kind, out[out.length - 2], out[out.length - 1])) out.pop();
+    while (out.length > 1 && keySig(kind, out[0]) === setup && flatKeys(kind, out[0], out[1])) out.shift();
+    if (out.length === 1 && keySig(kind, out[0]) === setup) return [];
+    return out.map(function (k, j) {
+      var n = out[j + 1];
+      if (k.curve === undefined || (n && !flatKeys(kind, k, n))) return k;
+      var o = Object.assign({}, k);
+      delete o.curve;
+      return o;
+    });
+  }
+  function cleanAnim(anim, json) {
+    var slots = {}, d = durationOf(anim);
+    json.slots.forEach(function (s) { slots[s.name] = s; });
+    ['bones', 'slots'].forEach(function (g) {
+      Object.keys(anim[g] || {}).forEach(function (n) {
+        if (/^bar(_|$)/.test(n)) return;
+        Object.keys(anim[g][n]).forEach(function (kind) {
+          var tl = cleanTrack(kind, anim[g][n][kind], setupSig(kind, slots[n]));
+          if (tl.length) anim[g][n][kind] = tl;
+          else delete anim[g][n][kind];
+        });
+        if (!Object.keys(anim[g][n]).length) delete anim[g][n];
+      });
+      if (anim[g] && !Object.keys(anim[g]).length) delete anim[g];
+    });
+    padTo(anim, d);
+  }
+
+  function toggleKeys(spine, an, S, region, a0) {
+    var A = spine.json.animations[an], shown = a0 > 0.002;
+    var pts = (S.alpha || S.rgba || []).map(function (k) {
+      return { t: k.time || 0, a: S.alpha ? (k.value === undefined ? 1 : k.value) : parseHex(k.color).a, step: k.curve === 'stepped' };
+    });
+    if (!pts.length || pts[0].t > 0) pts.unshift({ t: 0, a: a0, step: true });
+    var d = durationOf(A), loop = spine.loops.indexOf(an) !== -1, runs = [], state = shown, keys = [];
+    pts.forEach(function (q, i) {
+      var n = pts[i + 1], prev = runs[runs.length - 1];
+      var vis = q.a > 0.002 || (!!n && !q.step && n.a > 0.002);
+      if (prev && prev.vis === vis) prev.to = n ? n.t : d;
+      else runs.push({ from: q.t, to: n ? n.t : d, vis: vis });
+    });
+    runs.forEach(function (r, i) {
+      if (!r.vis && i < runs.length - 1 && r.to - r.from < HIDE_MIN) return;
+      if (r.vis === state || (loop && r.from >= d - 0.0001)) return;
+      state = r.vis;
+      var k = r.from > 0 ? { time: r4(r.from) } : {};
+      k.name = r.vis ? region : null;
+      keys.push(k);
+    });
+    return keys;
+  }
+  function toggleParts(spine, names, seqs) {
+    var json = spine.json, slots = {};
+    json.slots.forEach(function (s) { slots[s.name] = s; });
+    names.forEach(function (name) {
+      var slot = slots[name];
+      if (!slot || !slot.attachment) return;
+      var region = slot.attachment, a0 = parseHex(slot.color || 'ffffffff').a, shown = a0 > 0.002, seq = seqs[name];
+      Object.keys(json.animations).forEach(function (an) {
+        var A = json.animations[an], S = (A.slots || {})[name] || {};
+        var keys = S.attachment || toggleKeys(spine, an, S, region, a0);
+        if (keys.length && !S.attachment) {
+          A.slots = A.slots || {};
+          A.slots[name] = Object.assign({ attachment: keys }, A.slots[name] || {});
+        }
+        if (!seq) return;
+        var starts = (shown && !(keys.length && !keys[0].time && !keys[0].name) ? [0] : []).concat(keys.filter(function (k) { return k.name; }).map(function (k) { return k.time || 0; }));
+        starts = starts.filter(function (t, i) { return starts.indexOf(t) === i; });
+        if (!starts.length) return;
+        A.attachments = A.attachments || {};
+        json.skins.forEach(function (sk) {
+          if (!sk.attachments || !sk.attachments[name] || !sk.attachments[name][seq.att]) return;
+          var at = A.attachments[sk.name] = A.attachments[sk.name] || {};
+          at[name] = {};
+          at[name][seq.att] = { sequence: starts.map(function (t) { var k = t > 0 ? { time: r4(t) } : {}; k.mode = seq.mode; k.delay = seq.delay; return k; }) };
+        });
+      });
+      if (!shown) delete slot.attachment;
+    });
+  }
+
+  function tidyRegions(spine) {
+    var shown = {}, refs = [], first = {}, alias = {}, out = [];
+    (spine.json.skins || []).forEach(function (sk) {
+      Object.keys(sk.attachments || {}).forEach(function (sn) {
+        Object.keys(sk.attachments[sn]).forEach(function (an) {
+          var a = sk.attachments[sn][an];
+          if (a.type || !(a.width > 0) || !(a.height > 0)) return;
+          var base = a.path || a.name || an, list = [base];
+          if (a.sequence) {
+            list = [];
+            for (var i = 0; i < a.sequence.count; i++) {
+              var n = String((a.sequence.start || 0) + i);
+              while (n.length < (a.sequence.digits || 0)) n = '0' + n;
+              list.push(base + n);
+            }
+          } else refs.push({ a: a, name: base });
+          list.forEach(function (name) {
+            var s = shown[name] = shown[name] || { w: 0, h: 0 };
+            s.w = Math.max(s.w, a.width * Math.abs(a.scaleX === undefined ? 1 : a.scaleX));
+            s.h = Math.max(s.h, a.height * Math.abs(a.scaleY === undefined ? 1 : a.scaleY));
+          });
+        });
+      });
+    });
+    spine.regions.forEach(function (r) {
+      var o = Object.assign({}, r), s = shown[r.name];
+      var f = s && typeof r.src === 'string' && r.src !== 'clear' && r.src !== 'white' ? Math.min(1, Math.max(s.w / r.w, s.h / r.h)) : 1;
+      f *= r.tex || 1;
+      if (f < 0.95) { o.w = Math.max(1, Math.ceil(r.w * f)); o.h = Math.max(1, Math.ceil(r.h * f)); }
+      var same = r.sum ? first[r.sum] : null;
+      if (same) { same.w = Math.max(same.w, o.w); same.h = Math.max(same.h, o.h); alias[r.name] = same.name; return; }
+      if (r.sum) first[r.sum] = o;
+      out.push(o);
+    });
+    refs.forEach(function (x) { if (alias[x.name]) x.a.path = alias[x.name]; });
+    return out;
+  }
+
   function partList(comp, reserved, notes) {
     var taken = {}, out = [], by = {};
     reserved.forEach(function (n) { taken[n] = true; });
@@ -2267,68 +2492,148 @@ details.tech[open] > summary { margin-bottom: 12px; }
       by[p.name] = p;
       out.push(p);
     });
+    var groups = {};
     out.forEach(function (p) {
-      if (p.parent !== 'art' && !by[p.parent]) { notes.push('Частина ' + p.name + ': немає батька ' + p.parent + ', стала на art'); p.parent = 'art'; return; }
-      for (var q = by[p.parent], n = 0; q && n <= out.length; q = by[q.parent], n++) {
+      if (!p.slot) return;
+      if (reserved.indexOf(p.slot) !== -1 || by[p.slot]) { notes.push('Частина ' + p.name + ': слот ' + p.slot + ' збігається з назвою частини чи кістки, варіант став окремою частиною'); delete p.slot; return; }
+      if (!groups[p.slot]) groups[p.slot] = p;
+    });
+    var at = function (n) { return by[n] || groups[n]; };
+    out.forEach(function (p) {
+      var first = p.slot && groups[p.slot];
+      if (first && first !== p) { p.parent = first.parent; return; }
+      var par = at(p.parent);
+      if (p.parent !== 'art' && (!par || par.glint)) { notes.push('Частина ' + p.name + ': немає батька ' + p.parent + ', стала на art'); p.parent = 'art'; return; }
+      for (var q = par, n = 0; q && n <= out.length; q = at(q.parent), n++) {
         if (q === p) { notes.push('Частина ' + p.name + ': батьки по колу, стала на art'); p.parent = 'art'; break; }
       }
+    });
+    out.forEach(function (p) {
+      var s = p.glint && p.glint.of !== 'art' ? by[p.glint.of] : null;
+      if (!p.glint || p.glint.of === 'art' || (s && !s.bone && !s.glint && !s.slot && !s.sheet)) return;
+      notes.push('Блік ' + p.name + ': джерело ' + p.glint.of + ' має бути звичайною частиною з картинкою, взято art');
+      p.glint.of = 'art';
     });
     return out;
   }
 
-  function addParts(spine, comp, parts, ap, cx, cy, px) {
-    if (!parts.length) return;
+  function addParts(spine, comp, parts, ap, cx, cy, px, main, notes) {
+    var meta = { toggle: [], variants: {}, fans: {}, seqs: {} };
+    if (!parts.length) return meta;
     var json = spine.json;
     var short = spine.name.replace(/^animation_/, '');
-    var info = { art: { pv: ap, cx: cx, cy: cy } };
+    var info = { art: { bone: 'art', pv: ap, cx: cx, cy: cy } };
+    var geo = main ? { art: { bone: 'art', key: 'c:' + comp.id, x: -ap.x, y: -ap.y, w: main.w, h: main.h, px: main.px } } : {};
     var done = { art: true }, order = [];
     while (order.length < parts.length) {
       var moved = false;
-      parts.forEach(function (p) { if (!done[p.name] && done[p.parent]) { done[p.name] = true; order.push(p); moved = true; } });
+      parts.forEach(function (p) {
+        if (order.indexOf(p) !== -1 || !done[p.parent] || (p.glint && p.glint.of !== 'art' && !done[p.glint.of])) return;
+        done[p.name] = true;
+        if (p.slot) done[p.slot] = true;
+        order.push(p);
+        moved = true;
+      });
       if (!moved) break;
     }
-    var pts = [], slotOf = {}, att = {};
+    var pts = [], slotsOf = {}, att = {};
+    var regionOf = function (n) { return 'art/' + short + '/' + (n === short ? n + '_part' : n); };
+    var put = function (slot, key, a) { att[slot] = att[slot] || {}; att[slot][key] = a; };
+    var offset = function (o, x, y) { if (r2(x)) o.x = r2(x); if (r2(y)) o.y = r2(y); return o; };
     order.forEach(function (p) {
-      var key = 'p:' + comp.id + ':' + p.name;
-      var q = px(key);
-      var w = p.w || (q ? q.w : 100), h = p.h || (q ? q.h : 100);
-      if (!q) q = { w: Math.max(1, Math.round(w)), h: Math.max(1, Math.round(h)) };
-      var pv = pivotOf(p.pivot, w, h);
+      if (p.glint) {
+        var src = geo[p.glint.of];
+        if (!src) { notes.push('Блік ' + p.name + ': у джерела ' + p.glint.of + ' немає картинки'); return; }
+        var kx = src.w / src.px.w, ky = src.h / src.px.h, bands = [], dark = 0;
+        for (var i = 0; i < p.glint.bands; i++) {
+          var gk = ['gl', i, p.glint.bands, p.glint.angle, p.glint.level, p.tex || 0.5, src.key].join(':');
+          var gq = px(gk), sn = p.name + '_' + (i + 1), reg = regionOf(p.name) + '_' + (i + 1);
+          if (gq && gq.empty) dark++;
+          var ga = gq ? offset({}, src.x + gq.ox * kx, src.y - gq.oy * ky) : offset({}, src.x, src.y);
+          ga.width = r2(gq ? gq.cw * kx : src.w);
+          ga.height = r2(gq ? gq.ch * ky : src.h);
+          put(sn, reg, ga);
+          bands.push({ name: sn, bone: src.bone, color: 'ffffff00', attachment: reg, blend: p.blend || 'additive' });
+          spine.regions.push({ name: reg, w: gq ? gq.w : 16, h: gq ? gq.h : 16, src: gk, sum: gq ? gq.sum : undefined });
+          meta.toggle.push(sn);
+        }
+        if (dark === p.glint.bands) notes.push('Блік ' + p.name + ': у джерелі немає пікселів, яскравіших за level ' + p.glint.level + ', знизь level');
+        slotsOf[p.name] = bands;
+        meta.fans[p.name] = { slots: bands.map(function (s) { return s.name; }), step: p.glint.step };
+        return;
+      }
       var par = info[p.parent];
-      var b = { name: p.name, parent: p.parent };
-      var bx = r2(p.x + pv.x - par.pv.x), by = r2(p.y + pv.y - par.pv.y);
-      if (bx) b.x = bx;
-      if (by) b.y = by;
+      if (p.bone) {
+        var pb = offset({ name: p.name, parent: par.bone }, p.x - par.pv.x, p.y - par.pv.y);
+        if (p.rotate) pb.rotation = p.rotate;
+        json.bones.push(pb);
+        info[p.name] = { bone: p.name, pv: { x: 0, y: 0 }, cx: par.cx + p.x, cy: par.cy + p.y };
+        return;
+      }
+      var key = 'p:' + comp.id + ':' + p.name, q = px(key), region = regionOf(p.name);
+      var sheet = p.sheet && q && q.sum ? p.sheet : null;
+      if (p.sheet && !sheet) notes.push('Сиквенція ' + p.name + ': немає картинки з розкладкою кадрів');
+      var fw = sheet ? Math.floor(q.w / sheet.cols) : 0, fh = sheet ? Math.floor(q.h / sheet.rows) : 0;
+      var w = p.w || (sheet ? fw : q ? q.w : 100), h = p.h || (sheet ? fh : q ? q.h : 100);
+      if (!q) q = { w: Math.max(1, Math.round(w)), h: Math.max(1, Math.round(h)) };
+      pts = pts.concat(corners(par.cx + p.x, par.cy + p.y, w, h));
+      if (!sheet) spine.regions.push({ name: region, w: q.w, h: q.h, src: key, sum: q.sum, tex: p.tex });
+      var group = p.slot ? meta.variants[p.slot] : null;
+      if (group) {
+        var f = group.first, rad = -(f.rotate || 0) * Math.PI / 180, dx = p.x - f.x - group.pv.x, dy = p.y - f.y - group.pv.y;
+        var va = offset({}, dx * Math.cos(rad) - dy * Math.sin(rad), dx * Math.sin(rad) + dy * Math.cos(rad));
+        if (r2((p.rotate || 0) - (f.rotate || 0))) va.rotation = r2((p.rotate || 0) - (f.rotate || 0));
+        va.width = r2(w);
+        va.height = r2(h);
+        put(p.slot, region, va);
+        group.names[p.name] = region;
+        if (!group.slot.attachment && p.alpha === undefined) group.slot.attachment = region;
+        info[p.name] = info[p.slot];
+        return;
+      }
+      var pv = pivotOf(p.pivot, w, h), bone = p.slot || p.name;
+      var b = offset({ name: bone, parent: par.bone }, p.x + pv.x - par.pv.x, p.y + pv.y - par.pv.y);
       if (p.rotate) b.rotation = p.rotate;
       json.bones.push(b);
-      info[p.name] = { pv: pv, cx: par.cx + p.x, cy: par.cy + p.y };
-      pts = pts.concat(corners(par.cx + p.x, par.cy + p.y, w, h));
-      var region = 'art/' + short + '/' + (p.name === short ? p.name + '_part' : p.name);
-      var slot = { name: p.name, bone: p.name, attachment: region };
-      if (p.alpha !== undefined) slot.color = 'ffffff' + hex2(p.alpha);
-      if (p.blend) slot.blend = p.blend;
-      slotOf[p.name] = slot;
-      var a = {};
-      if (r2(-pv.x)) a.x = r2(-pv.x);
-      if (r2(-pv.y)) a.y = r2(-pv.y);
+      info[p.name] = { bone: bone, pv: pv, cx: par.cx + p.x, cy: par.cy + p.y };
+      var slot = { name: bone, bone: bone };
+      var a = offset({}, -pv.x, -pv.y);
       a.width = r2(w);
       a.height = r2(h);
-      att[p.name] = {};
-      att[p.name][region] = a;
-      spine.regions.push({ name: region, w: q.w, h: q.h, src: key });
+      if (p.slot) {
+        info[p.slot] = info[p.name];
+        meta.variants[p.slot] = { first: p, pv: pv, slot: slot, names: {} };
+        meta.variants[p.slot].names[p.name] = region;
+        if (p.alpha === undefined) slot.attachment = region;
+        put(bone, region, a);
+      } else if (sheet) {
+        a.sequence = { count: sheet.count, start: 0 };
+        slot.attachment = region + '_';
+        put(bone, region + '_', a);
+        for (var j = 0; j < sheet.count; j++) spine.regions.push({ name: region + '_' + j, w: fw, h: fh, src: ['fr', j, sheet.cols, sheet.rows, key].join(':'), sum: q.sum + '#' + j + '/' + sheet.cols + 'x' + sheet.rows, tex: p.tex });
+        meta.seqs[bone] = { att: region + '_', mode: p.play || 'loop', delay: r4(1 / (p.fps || 24)) };
+      } else {
+        slot.attachment = region;
+        put(bone, region, a);
+        geo[p.name] = { bone: bone, key: key, x: -pv.x, y: -pv.y, w: w, h: h, px: q };
+      }
+      if (!p.slot && p.alpha !== undefined) slot.color = 'ffffff' + hex2(p.alpha);
+      if (p.blend) slot.blend = p.blend;
+      slotsOf[p.name] = [slot];
+      meta.toggle.push(bone);
     });
     var at = json.slots.map(function (s) { return s.name; }).indexOf('art');
-    var over = parts.filter(function (p) { return slotOf[p.name] && !p.behind; }).map(function (p) { return slotOf[p.name]; });
-    var under = parts.filter(function (p) { return slotOf[p.name] && p.behind; }).map(function (p) { return slotOf[p.name]; });
-    json.slots.splice.apply(json.slots, [at + 1, 0].concat(over));
-    json.slots.splice.apply(json.slots, [at, 0].concat(under));
+    var layer = function (behind) { return [].concat.apply([], parts.filter(function (p) { return slotsOf[p.name] && !!p.behind === behind; }).map(function (p) { return slotsOf[p.name]; })); };
+    json.slots.splice.apply(json.slots, [at + 1, 0].concat(layer(false)));
+    json.slots.splice.apply(json.slots, [at, 0].concat(layer(true)));
     json.skins.forEach(function (s) { if (s.attachments) Object.assign(s.attachments, clone(att)); });
     var sk = json.skeleton;
     var bb = bounds(pts.concat([[sk.x, sk.y], [sk.x + sk.width, sk.y + sk.height]]));
     sk.x = bb.x; sk.y = bb.y; sk.width = bb.width; sk.height = bb.height;
+    return meta;
   }
 
-  function applyKeys(spine, comp, fade, notes) {
+  function applyKeys(spine, comp, fade, notes, meta) {
     var anims = spine.json.animations;
     var seen = {};
     (comp.anims || []).forEach(function (row) {
@@ -2339,7 +2644,7 @@ details.tech[open] > summary { margin-bottom: 12px; }
       var nk = normKeys(row.keys);
       nk.errors.forEach(function (e) { notes.push(n + ': ' + e); });
       if (!Object.keys(nk.keys).length) return;
-      var k = keyedAnim(nk.keys, spine.json, fade);
+      var k = keyedAnim(nk.keys, spine.json, fade, meta);
       k.notes.forEach(function (e) { notes.push(n + ': ' + e); });
       anims[n] = mergeAnim(anims[n], k.anim);
       padTo(anims[n], specsFrom([row], 'custom')[0].duration);
@@ -2362,8 +2667,12 @@ details.tech[open] > summary { margin-bottom: 12px; }
     var reserved = ['root', 'art'].concat(bar ? BAR_NAMES : []);
     spacers.forEach(function (sp) { reserved.push(sp.slot, sp.slot + '_bone'); });
     var parts = partList(comp, reserved, notes);
-    var shown = parts.filter(function (q) { return q.alpha === undefined; }).map(function (q) { return q.name; });
-    var also = txt.concat(bar ? ['bar_fill', 'bar_shine', 'bar_head'] : [], shown);
+    var shown = [];
+    parts.forEach(function (q) {
+      var n = q.slot || q.name;
+      if (!q.bone && !q.glint && q.alpha === undefined && shown.indexOf(n) === -1) shown.push(n);
+    });
+    var also = txt.concat(bar ? ['bar_fill', 'bar_head'] : [], shown);
     var specs = specsFrom(comp.anims, 'custom').map(function (sp) {
       if (txt.length && /(^|_)txt$/.test(sp.name)) sp.ctx = { bone: txt[0], slot: txt[0], w: w, h: h, cellH: g.H, also: txt.slice(1) };
       return sp;
@@ -2383,9 +2692,17 @@ details.tech[open] > summary { margin-bottom: 12px; }
       specs: specs,
       ctx: { bone: 'art', slot: 'art', w: w, h: h, cellH: g.H, also: also }
     }, tech);
-    addParts(spine, comp, parts, ap, cx, cy, px);
+    if (comp.bone === true) {
+      spine.json.slots.forEach(function (s) { if (s.name === 'art') delete s.attachment; });
+      spine.json.skins.forEach(function (s) { if (s.attachments) delete s.attachments.art; });
+      spine.regions = spine.regions.filter(function (r) { return r.src !== key; });
+    }
+    var meta = addParts(spine, comp, parts, ap, cx, cy, px, comp.bone === true ? null : { w: w, h: h, px: p }, notes);
     if (bar) withBar(spine, { x: bar.x - ap.x, y: bar.y - ap.y, w: bar.w, h: bar.h }, name, tech);
-    applyKeys(spine, comp, ['art'].concat(also), notes);
+    applyKeys(spine, comp, ['art'].concat(also), notes, meta);
+    Object.keys(spine.json.animations).forEach(function (n) { cleanAnim(spine.json.animations[n], spine.json); });
+    toggleParts(spine, meta.toggle, meta.seqs);
+    spine.custom = true;
     spine.notes = notes;
     return spine;
   }
@@ -2450,14 +2767,133 @@ details.tech[open] > summary { margin-bottom: 12px; }
     };
   }
 
+  var SOFT_NAME = /(glow|flash|blur|smoke|shadow|light|ray|fog|shine|flare|dim|haze)/;
+
+  function audit(spine, regions, page, tech) {
+    var json = spine.json, slots = json.slots || [], anims = json.animations || {};
+    var atts = {}, px = {}, on = {}, keys = 0, secs = 0, dense = [], swaps = [], long = [], raw = !!spine.raw;
+    var deepKeys = function (o) { if (Array.isArray(o)) return o.length; var n = 0; if (isObj(o)) Object.keys(o).forEach(function (k) { n += deepKeys(o[k]); }); return n; };
+    skinList(json).forEach(function (sk) {
+      Object.keys(sk.attachments || {}).forEach(function (sn) { if (isObj(sk.attachments[sn])) atts[sn] = Object.assign({}, sk.attachments[sn], atts[sn] || {}); });
+    });
+    regions.forEach(function (r) { px[r.name] = r; });
+    Object.keys(anims).forEach(function (an) {
+      var A = anims[an];
+      secs += durationOf(A);
+      if (raw) keys += deepKeys(A.ik) + deepKeys(A.transform) + deepKeys(A.path) + deepKeys(A.attachments) + deepKeys(A.deform) + deepKeys(A.drawOrder || A.draworder) + deepKeys(A.events);
+      ['bones', 'slots'].forEach(function (g) {
+        Object.keys(A[g] || {}).forEach(function (n) {
+          Object.keys(A[g][n]).forEach(function (kind) {
+            var tl = A[g][n][kind];
+            if (!Array.isArray(tl) || !tl.length) return;
+            keys += tl.length;
+            if (kind === 'attachment') { if (tl.some(function (k) { return k.name; })) on[n] = true; return; }
+            if (g === 'slots' && kind === 'alpha' && tl.length > 1 && swaps.indexOf(n) === -1 && tl.every(function (k, i) { return (k.value === 0 || k.value === 1) && (i === tl.length - 1 || k.curve === 'stepped'); })) swaps.push(n);
+            var span = (tl[tl.length - 1].time || 0) - (tl[0].time || 0);
+            if (tl.length >= 12 && span > 0 && (tl.length - 1) / span >= 20 && dense.indexOf(an + ' / ' + n) === -1) dense.push(an + ' / ' + n);
+          });
+        });
+      });
+    });
+    var masks = [], unused = [], stretched = [], soft = [], groups = {}, seen = {}, runs = 0, last = null;
+    slots.forEach(function (s) {
+      var list = Object.keys(atts[s.name] || {}).map(function (k) { return { key: k, a: atts[s.name][k] }; }).filter(function (x) { return isObj(x.a); });
+      if (list.some(function (x) { return x.a.type === 'clipping'; })) { masks.push(s.name); return; }
+      var imgs = list.filter(function (x) { return (!x.a.type || x.a.type === 'region' || x.a.type === 'mesh' || x.a.type === 'linkedmesh') && x.key !== tech.spacer && x.a.path !== tech.spacer; });
+      if (!imgs.length) return;
+      if (!s.attachment && !on[s.name]) { unused.push(s.name); return; }
+      var blend = s.blend || 'normal';
+      if (blend !== last) { runs++; last = blend; }
+      var base = /^(.*?)[_-]?\d+$/.exec(s.name);
+      if (base && base[1]) groups[base[1]] = (groups[base[1]] || 0) + 1;
+      imgs.forEach(function (x) {
+        if (x.a.sequence && x.a.sequence.count > 24) long.push(s.name + ' ' + x.a.sequence.count);
+        var r = px[x.a.path || x.a.name || x.key];
+        if (!r || !r.sum || seen[r.name] || !(x.a.width > 0) || !(x.a.height > 0)) return;
+        var aw = x.a.width * Math.abs(x.a.scaleX === undefined ? 1 : x.a.scaleX), ah = x.a.height * Math.abs(x.a.scaleY === undefined ? 1 : x.a.scaleY);
+        var k = Math.max(aw / r.w, ah / r.h), mild = blend !== 'normal' || SOFT_NAME.test(s.name);
+        var label = r.name.split('/').pop();
+        if (!mild && k > (Math.max(aw, ah) > 2048 ? 2.5 : 1.3)) { seen[r.name] = true; stretched.push(label + ' ×' + r2(k)); }
+        if (mild && k < 1.5 && Math.max(r.w, r.h) > 512) { seen[r.name] = true; soft.push(label + ' ' + r.w + '×' + r.h); }
+      });
+    });
+    var notes = [], rate = secs > 0 ? Math.round(keys / secs) : 0;
+    if (spine.custom) {
+      var many = Object.keys(groups).filter(function (g) { return groups[g] >= 8; }).map(function (g) { return g + ' ×' + groups[g]; });
+      if (masks.length) notes.push('Маски: ' + masks.join(', ') + '. Кожна рве батч у грі: лишай маску лише там, де без неї ніяк');
+      if (unused.length) notes.push(raw ? 'Слоти без картинки в сетапі й без ключів attachment: ' + unused.join(', ') + '. Якщо гра не вмикає їх сама, вони зайві' : 'Ніде не показуються: ' + unused.join(', ') + '. Прибери ці частини або додай їм ключі alpha');
+      if (stretched.length) notes.push('Розтягнуті картинки: ' + stretched.join(', ') + '. Чітка графіка змилиться: дай більший файл або зменш розмір у грі');
+      if (soft.length) notes.push('Мʼякі текстури на повний розмір: ' + soft.join(', ') + (raw ? '. Збережи їх удвічі меншими й розтягни в скелеті: світінню, диму і спалахам це не шкодить' : '. Постав цим частинам текстуру 0.5 ("tex"): світіння, дим і спалахи скелет розтягне сам'));
+      if (swaps.length > 1) notes.push('Підміна картинок через alpha: ' + swaps.join(', ') + (raw ? '. Склади їх в один слот і перемикай ключами attachment' : '. Зроби їх варіантами одного слота ("slot") і перемикай ключем "show"'));
+      if (long.length) notes.push('Довгі сиквенції: ' + long.join(', ') + ' кадрів. У готових іграх зазвичай 9–16: проріди кадри');
+      if (many.length && !raw) notes.push('Багато однотипних частин: ' + many.join(', ') + '. Схоже на покадровий ефект із частин: спрости до кількох рухомих або лиши покадровку аніматору');
+      if (dense.length) notes.push('Ключ на кожен кадр: ' + dense.slice(0, 6).join(', ') + (dense.length > 6 ? ' і ще ' + (dense.length - 6) : '') + '. Лиши ключі тільки там, де рух змінюється');
+      if (rate > 220) notes.push('Ключів на секунду: ' + rate + ' (у 90 % готових спайнів до 220). Спрости рух або прибери зайві ' + (raw ? 'слоти' : 'частини'));
+      if (slots.length > 70) notes.push('Слотів: ' + slots.length + ' (у 90 % готових спайнів до 70). Обʼєднай або прибери ' + (raw ? 'слоти' : 'частини'));
+      if (runs > 4) notes.push('Блендинг чергується: ' + runs + ' груп normal / additive поспіль, кожна дає окремий draw call. ' + (raw ? 'Постав адитивні слоти поруч у порядку малювання' : 'Постав адитивні частини поруч у списку'));
+    }
+    return {
+      slots: slots.length, on_in_setup: slots.filter(function (s) { return s.attachment; }).length, masks: masks.length, draw_calls: runs + masks.length * 2,
+      keys: keys, keys_per_second: rate, atlas: page.label || page.width + '×' + page.height, images: regions.length, notes: notes
+    };
+  }
+
+  function rawSpine(input, techIn) {
+    var tech = Object.assign({}, TECH, techIn || {});
+    var name = String(input.name || '').replace(/\.json$/i, '');
+    var jsonText = String(input.jsonText || '').replace(/^\uFEFF/, '');
+    var json = JSON.parse(jsonText);
+    if (!isObj(json) || !isObj(json.skeleton) || !Array.isArray(json.bones)) throw new Error('Це не файл Spine: немає skeleton і bones');
+    var atlasText = String(input.atlasText || '');
+    var atlas = atlasOf(atlasText);
+    var nums = function (v) { return String(v === undefined ? '' : v).split(',').map(function (x) { return parseFloat(x); }).filter(function (x) { return isFinite(x); }); };
+    var regions = atlas.regions.map(function (r) { var o = nums(r.f.orig), f = nums(r.f.offsets); return { name: r.name, w: f[2] || o[0] || r.w || 1, h: f[3] || o[1] || r.h || 1, sum: r.name }; });
+    var page = { width: 0, height: 0, label: atlas.pages.map(function (p) { return p.w + '×' + p.h; }).join(' + ') };
+    atlas.pages.forEach(function (p) { page.width = Math.max(page.width, p.w); page.height = Math.max(page.height, p.h); });
+    var anims = isObj(json.animations) ? json.animations : {};
+    var entry = {
+      name: name,
+      skins: skinList(json).map(function (s) { return s.name; }),
+      animations: Object.keys(anims).map(function (n) {
+        var a = { name: n, duration: durationOf(anims[n]) };
+        var ev = ((anims[n] && anims[n].events) || []).map(function (e) { var o = { name: e.name }; if (e.int !== undefined && e.int !== 0) o.int = e.int; return o; });
+        if (ev.length) a.events = ev;
+        return a;
+      }),
+      decorationSpacers: spacerSlots(json, tech.spacer)
+    };
+    var findings = checkExport({ spineName: name, jsonText: jsonText, atlasText: atlasText, pngs: input.pages || {} }, { tech: tech, spines: [entry] }).findings;
+    var kinds = { region: 0, mesh: 0, clipping: 0, other: 0 };
+    skinList(json).forEach(function (s) {
+      Object.keys(s.attachments || {}).forEach(function (sl) {
+        var o = s.attachments[sl];
+        if (!isObj(o)) return;
+        Object.keys(o).forEach(function (k) { var t = (o[k] && o[k].type) || 'region'; kinds[t === 'region' ? 'region' : t === 'mesh' || t === 'linkedmesh' ? 'mesh' : t === 'clipping' ? 'clipping' : 'other']++; });
+      });
+    });
+    return {
+      name: name, raw: true, json: json, jsonText: jsonText, atlasText: atlasText, loops: [], regions: regions, contract: entry, findings: findings,
+      warnings: findings.filter(function (f) { return f.level !== 'info'; }).map(function (f) { return f.title + (f.detail ? ': ' + f.detail : ''); }),
+      audit: audit({ name: name, json: json, custom: true, raw: true }, regions, page, tech),
+      stats: {
+        version: String(json.skeleton.spine || ''), bones: json.bones.length, slots: (json.slots || []).length, skins: entry.skins.length, animations: entry.animations.length,
+        constraints: (json.ik || []).length + (json.transform || []).length + (json.path || []).length, attachments: kinds,
+        events: isObj(json.events) ? Object.keys(json.events) : [], pages: atlas.pages.map(function (p) { return { name: p.name, w: p.w, h: p.h }; })
+      }
+    };
+  }
+
   function finalize(spine, tech) {
-    var page = pack(spine.regions, tech.padding, tech.maxPage);
+    var regions = tidyRegions(spine);
+    var page = pack(regions, tech.padding, tech.maxPage);
     var pageName = spine.name + '.png';
     var importJson = clone(spine.json);
     importJson.skeleton.images = './';
     var warnings = (spine.notes || []).slice();
     if (page.width > tech.maxPage || page.height > tech.maxPage) warnings.push('Атлас ' + page.width + '×' + page.height + ' більший за ' + tech.maxPage + ' px');
     return Object.assign({}, spine, {
+      regions: regions,
+      audit: audit(spine, regions, page, tech),
       pageName: pageName,
       page: page,
       atlasText: atlasText(pageName, page),
@@ -2679,7 +3115,7 @@ details.tech[open] > summary { margin-bottom: 12px; }
         if (r.r.index !== undefined && parseInt(r.r.index, 10) >= 0) add('warning', 'Атлас з індексами: ' + r.name + ' index ' + r.r.index, 'пакуйте з useIndexes: false');
         if (r.r.rotate !== undefined && ['true', 'false', '0', '90'].indexOf(String(r.r.rotate)) === -1) add('error', 'Регіон ' + r.name + ': rotate ' + r.r.rotate);
       });
-      atts.forEach(function (a) { if (names.indexOf(a) === -1) add('error', 'Регіону ' + a + ' немає в атласі'); });
+      atts.forEach(function (a) { if (!names.some(function (n) { return n.indexOf(a) === 0 && /^\d*$/.test(n.slice(a.length)); })) add('error', 'Регіону ' + a + ' немає в атласі'); });
       var pngs = input.pngs || {};
       if (Object.keys(pngs).length) {
         pages.forEach(function (pg) {
@@ -2832,8 +3268,18 @@ details.tech[open] > summary { margin-bottom: 12px; }
   }
   function boundsOf(rt) {
     var off = new rt.sp.Vector2(), size = new rt.sp.Vector2();
+    var x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
     rt.sk.setToSetupPose();
     rt.sk.updateWorldTransform();
+    rt.sk.drawOrder.forEach(function (slot) {
+      var a = slot.getAttachment(), v = null;
+      if (!a || !slot.bone.active || !(slot.color.a > 0) || typeof a.computeWorldVertices !== 'function') return;
+      if (a.offset) { v = new Float32Array(8); a.computeWorldVertices(slot, v, 0, 2); }
+      else if (a.triangles) { v = new Float32Array(a.worldVerticesLength); a.computeWorldVertices(slot, 0, a.worldVerticesLength, v, 0, 2); }
+      if (!v) return;
+      for (var i = 0; i < v.length; i += 2) { x0 = Math.min(x0, v[i]); x1 = Math.max(x1, v[i]); y0 = Math.min(y0, v[i + 1]); y1 = Math.max(y1, v[i + 1]); }
+    });
+    if (x1 >= x0 && y1 >= y0) return { w: x1 - x0, h: y1 - y0 };
     rt.sk.getBounds(off, size, []);
     return isFinite(size.x) && isFinite(size.y) ? { w: size.x, h: size.y } : null;
   }
@@ -3189,6 +3635,7 @@ details.tech[open] > summary { margin-bottom: 12px; }
     findWindow: findWindow,
     readme: readme,
     checkExport: checkExport,
+    rawSpine: rawSpine,
     finalCheck: finalCheck,
     atlasOf: atlasOf,
     renamePages: renamePages,
@@ -3359,19 +3806,20 @@ details.tech[open] > summary { margin-bottom: 12px; }
     dimCache.set(blob, d);
     return d;
   }
-  async function ref(S, blob, name) {
+  async function ref(S, blob, name, role) {
     var h = await S.hashOf(blob);
-    if (!h.type) return null;
+    var type = h.type || (role === 'spine:json' ? 'json' : role === 'spine:atlas' ? 'atlas' : null);
+    if (!type) return null;
     await S.upload(h.sha);
-    var d = await dims(blob);
-    return { sha: h.sha, name: String(name || '').slice(0, 200), type: h.type, w: d.w, h: d.h };
+    var d = h.type ? await dims(blob) : { w: 0, h: 0 };
+    return { sha: h.sha, name: String(name || '').slice(0, 200), type: type, w: d.w, h: d.h };
   }
   async function refs(S, images) {
     var out = {};
     var roles = Object.keys(images || {});
     for (var i = 0; i < roles.length; i++) {
       var x = images[roles[i]];
-      var rf = x && x.blob ? await ref(S, x.blob, x.name) : null;
+      var rf = x && x.blob ? await ref(S, x.blob, x.name, roles[i]) : null;
       if (rf) out[roles[i]] = rf;
     }
     return out;
@@ -5013,10 +5461,11 @@ details.tech[open] > summary { margin-bottom: 12px; }
     frame_under: { t: 'Рамка під барабанами', a: function () { return layersArt('under'); }, x: function () { return p('Малюється за символами: тло барабанів і роздільники колонок. Займає сітку з невеликим полем.') + p('Своя картинка розтягнеться так, щоб закрити сітку.'); } },
     frame_above: { t: 'Рамка над барабанами', a: function () { return layersArt('above'); }, x: function () { return p('Малюється поверх символів. Дайте PNG з прозорим вікном: кіт знайде вікно і покладе його точно на сітку.') + p('Якщо вікна немає, картинка стане по центру.'); } },
     custom: { t: 'Свій компонент', a: placeArt, x: function () { return p('Будь-який інший елемент: фон, логотип, попап, панель. Назва спайна має бути фінальною, як її шукатиме гра.') + p('Розмір — скільки px елемент займає в грі. Центр — зсув картинки від точки (0, 0), куди гра ставить спайн.') + p('Спейсер ' + c('txt_*') + ' — місце для тексту гри. Анімації з назвою на ' + c('_txt') + ' (' + c('in_txt') + ', ' + c('out_txt') + ') рухають лише текст, решта — картинку разом із текстом.'); } },
-    bar: { t: 'Прогрес-бар', x: function () { return p('Заливка, яку гра рухає числом: ' + c('x:y:ширина:висота') + ' — центр і розмір доріжки в px від центру картинки, y угору. Наприклад ' + c('0:-36:450:80') + '.') + p('Кіт малює заливку, блік, вогник на краю, спалах і світіння й додає анімації:') + list([c('progress') + ' 1 с — заливка 0→100 %. Гра ставить її на окремий трек з timeScale 0 і задає час = частка (0.5 = половина), зміну тягне твіном.', c('add') + ' — пульс, коли додалось.', c('anticipation') + ' — цикл світіння, коли бар майже повний.', c('trigger') + ' — спалах, коли бар повний; далі гра зливає ' + c('progress') + ' до 0.', c('demo') + ' — увесь сценарій підряд, лише для перегляду.']) + p('У ' + c('loop_*') + ' / ' + c('idle') + ' по заливці біжить блік, ' + c('in') + ' і ' + c('out') + ' ховають бар разом із картинкою.'); } },
+    bar: { t: 'Прогрес-бар', x: function () { return p('Заливка, яку гра рухає числом: ' + c('x:y:ширина:висота') + ' — центр і розмір доріжки в px від центру картинки, y угору. Наприклад ' + c('0:-36:450:80') + '.') + p('Кіт малює заливку, блік, вогник на краю, спалах і світіння й додає анімації. Масок у барі немає: заливка — сітка з трьох частин, краї лишаються круглими, а середина тягнеться.') + list([c('progress') + ' 1 с — заливка 0→100 %. Гра ставить її на окремий трек з timeScale 0 і задає час = частка (0.5 = половина), зміну тягне твіном.', c('add') + ' — пульс, коли додалось.', c('anticipation') + ' — цикл світіння, коли бар майже повний.', c('trigger') + ' — спалах, коли бар повний; далі гра зливає ' + c('progress') + ' до 0.', c('demo') + ' — увесь сценарій підряд, лише для перегляду.']) + p('У ' + c('loop_*') + ' / ' + c('idle') + ' по заливці біжить блік, ' + c('in') + ' і ' + c('out') + ' ховають бар разом із картинкою.'); } },
     pivot: { t: 'Опорна точка', x: function () { return p('Точка, навколо якої картинка крутиться й масштабується.') + list(['«Низ» — для персонажа: ноги стоять на місці.', '«Центр» — для решти.']) + p('Точне місце ' + c('X:Y') + ' (px від центру картинки, y угору) можна задати через MCP.'); } },
     parts: { t: 'Частини', x: function () { return p('Частина — окрема картинка всередині компонента: своя кістка і слот з тією ж назвою, регіон ' + c('art/<спайн>/<частина>') + '. Гра й аніматор бачать її в Spine.') + list(['Центр — від центру батька, y угору.', 'Порядок плиток = порядок малювання. «Під картинкою» кладе частину під основну.', 'Прозорість 0 ховає частину, поки анімація її не покаже: світіння, спалах.', 'Без картинки кіт малює заглушку обраної форми.']) + p('«Експорт» зберігає компонент з частинами, ключами й картинками в ' + c('.component.json') + '. «Імпорт з файлу» в «Додати компонент» додає його в будь-який проект.'); } },
-    keys: { t: 'Ключі анімації', x: function () { return p('Ключі лягають поверх руху з колонки «Рух»: ті самі канали ключі перекривають.') + p('Ціль: ' + c('art') + ', частина, спейсер, частина бару або ' + c('all') + ' (alpha і color усього компонента).') + list([c('t') + ' — секунди', c('x') + ', ' + c('y') + ' — зсув, y угору', c('scale') + ' / ' + c('sx') + ' / ' + c('sy') + ' — множник розміру', c('rotate') + ' — градуси проти годинникової', c('alpha') + ' 0–1, ' + c('color') + ' ' + c('"ffcc00"'), c('ease') + ' до наступного ключа: ' + ['linear', 'ease-in', 'ease-out', 'ease-in-out', 'back', 'soft', 'shake', 'stepped'].map(function (e) { return c(e); }).join(', ')]) + p('Не заданий канал тримає попереднє значення, до першого ключа — поза з налаштувань, після останнього — тримається. Анімація триває найдовше з «Сек» і останнього ' + c('t') + '.') + p('Приклад: ' + c('{"glow": [{"t": 0, "alpha": 0}, {"t": 0.2, "alpha": 1, "ease": "ease-out"}, {"t": 0.6, "alpha": 0}]}')); } },
+    kinds: { t: 'Тип частини', x: function () { return list(['Картинка — звичайна частина. «Слот варіантів»: частини з однаковим слотом стають варіантами однієї картинки (очі, рот, кисть), у грі видно одну, перемикає ключ ' + c('show') + '.', 'Кістка без картинки — тільки точка, до якої кріпляться інші частини.', 'Блік з арту — кіт сам вирізає яскраві місця джерела смугами; ключі alpha на блік запускають смуги одна за одною, маска не потрібна.', 'Сиквенція кадрів — одна картинка-розкладка кадрів або кілька файлів, кинутих разом: кіт складе розкладку, проріджує довгі серії й зменшує великі кадри.']) + p('«Текстура» зберігає картинку меншою, ніж вона показується: для світіння, диму й спалахів різниці не видно, а атлас легший.'); } },
+    keys: { t: 'Ключі анімації', x: function () { return p('Ключі лягають поверх руху з колонки «Рух»: ті самі канали ключі перекривають.') + p('Ціль: ' + c('art') + ', частина, спейсер, частина бару або ' + c('all') + ' (alpha і color усього компонента).') + list([c('t') + ' — секунди', c('x') + ', ' + c('y') + ' — зсув, y угору', c('scale') + ' / ' + c('sx') + ' / ' + c('sy') + ' — множник розміру', c('rotate') + ' — градуси проти годинникової', c('alpha') + ' 0–1, ' + c('color') + ' ' + c('"ffcc00"'), c('show') + ' — назва варіанта для слота з варіантами, ' + c('null') + ' ховає', c('ease') + ' до наступного ключа: ' + ['linear', 'ease-in', 'ease-out', 'ease-in-out', 'back', 'soft', 'shake', 'stepped'].map(function (e) { return c(e); }).join(', ')]) + p('Не заданий канал тримає попереднє значення, до першого ключа — поза з налаштувань, після останнього — тримається. Анімація триває найдовше з «Сек» і останнього ' + c('t') + '.') + p('Приклад: ' + c('{"glow": [{"t": 0, "alpha": 0}, {"t": 0.2, "alpha": 1, "ease": "ease-out"}, {"t": 0.6, "alpha": 0}]}')); } },
     preview: { t: 'Превʼю', x: function () { return p('Живий рантайм Spine 4.1: так чернетку покаже гра.') + p('У превʼю барабанів кіт тимчасово вставляє символи в слоти й обрізає вікном сітки. У файли це не йде.'); } },
     spin: { t: 'Спін', x: function () { return p('Справжній спін, як у грі на Pandora: кожен барабан стартує на 66.6 мс пізніше, крутить ' + c('spin_loop') + ' кілька кіл і зупиняється через ' + c('spin_stop') + '.') + p('Символи міняють події спайна: ' + c('onOffScreen') + ' ставить випадковий розмитий, ' + c('onFinalSymbol') + ' — фінальний, і на ньому грає ' + c('stop') + '.') + p('«Виграш» збирає лінію в середньому ряду й грає ' + c('win') + ' → ' + c('win_idle') + '. Блискавка — турбо: одне коло і швидкість 1.5, діє з наступного спіну.') + p('Кнопка спіну як у слоті: під час обертання показує стоп і зупиняє барабани по черзі, кожен наступний на одне коло пізніше (як reelsStopService у Pandora), поки вони зупиняються — неактивна, під час виграшу одразу запускає новий спін.'); } },
     download: { t: 'Що в архіві', a: function (g, presets, tech) { return treeArt(tech.folder); }, x: function () { return p('Перша папка лягає в арт-репо як є. Друга — для Spine Editor: Import Data, а картинки лежать поруч у ' + c('art/<група>/') + ', як у вхідних файлах аніматорів. Шлях до картинки — це назва регіону, наприклад ' + c('art/reels/high_1') + '.'); } },
@@ -5028,7 +5477,7 @@ details.tech[open] > summary { margin-bottom: 12px; }
     game_size: { t: 'Розмір гри', x: function () { return p(c('game_size') + ' — екран, під який зроблено лейаут: 2560×1440 для 16:9, 1920×1440 для 4:3, 1440×2560 для 9:16.') + p('Гра вписує цей прямокутник у вікно: масштаб = менше з «ширина вікна / ширина» і «висота вікна / висота». Решту вікна закривають компоненти, більші за екран, наприклад фон 4000×4000.'); } },
     layout_file: { t: 'Файл лейаута', x: function () { return p('Назва файлу без .json. Гра бере лейаути за назвою, тому міняйте її тільки разом із кодом гри.') + p('«Імпорт .json» або перетягування на полотно бере лейаути з арт-репо. Решта файлу зберігається, тож в експорті зміняться тільки кістки.') + p('В архіві лейаути лежать у ' + c('skins/main/Motion/layouts/') + ', а в ' + c('spine-editor/layouts/') + ' — ті самі лейаути з картинками компонентів на кістках, щоб відкрити їх у Spine Editor.'); } }
   };
-  INFO.sandbox = { t: 'Пісочниця', x: function () { return p('Ваш особистий верстак, щоб пробувати й робити компоненти з анімаціями окремо від «Чернеток»: його бачите лише ви і ваш Claude, він той самий у всіх проектах, тут нічого не йде в експорт драфту.') + list(['Почніть із шаблону, копії компонента з чернеток, файлу ' + c('.component.json') + ' або компонента з бібліотеки.', 'Велике превʼю грає вибрану анімацію: пауза, повзунок часу, повзунок швидкості 0,1–2×, петля, кістки. Кожна анімація стоїть по центру, а масштаб однаковий для всіх, тож розміри можна порівнювати.', 'Зум — колесом миші, щипком або кнопками − / + у куті превʼю; перетягніть, щоб зсунути. Кнопка з рамкою, подвійний клік або клавіша 0 знову центрують, «100%» — справжній розмір.', 'Праворуч ті самі налаштування, що в картці свого компонента: картинка, частини, анімації з ключами. Картинки можна кинути просто на превʼю.', '«Зберегти в бібліотеку» — щоб компонент можна було взяти в будь-який проект. «Додати в проект» кладе копію в «Чернетки» цього або іншого проекту.', '«Експорт → Spine (.zip)» одразу дає готовий спайн: ' + c('json') + ', ' + c('atlas') + ', ' + c('png') + ' і проект для Spine Editor. «Експорт → Компонент» зберігає ' + c('.component.json') + ' для іншого кіта.']) + p('Claude працює тут через MCP наживо: ' + c('sandbox_new') + ', ' + c('sandbox_update') + ', ' + c('sandbox_preview') + '. Попросіть, наприклад: «Зроби в пісочниці колектор монет: in, idle, add, win». Синя крапка на вкладці — Claude щойно щось тут змінив.') + p('Історії змін у пісочниці немає: що варто зберегти, кладіть у бібліотеку. На командному сервері пісочниця зберігається за вашим акаунтом, локально — у цьому браузері.'); } };
+  INFO.sandbox = { t: 'Пісочниця', x: function () { return p('Ваш особистий верстак, щоб пробувати й робити компоненти з анімаціями окремо від «Чернеток»: його бачите лише ви і ваш Claude, він той самий у всіх проектах, тут нічого не йде в експорт драфту.') + list(['Почніть із шаблону, копії компонента з чернеток, файлу ' + c('.component.json') + ' або компонента з бібліотеки.', 'Готовий спайн (експорт зі Spine: ' + c('.json') + ', ' + c('.atlas') + ', ' + c('.png') + ' або ' + c('.zip') + ') відкривається через «+ Новий» чи перетягуванням на превʼю, папку теж можна. Кіт його показує, перевіряє за правилами арт-репо, рахує оптимізацію й віддає файли як є; змінити його може Claude (править JSON) або аніматор у Spine.', 'Велике превʼю грає вибрану анімацію: пауза, повзунок часу, повзунок швидкості 0,1–2×, петля, кістки. Кожна анімація стоїть по центру, а масштаб однаковий для всіх, тож розміри можна порівнювати.', 'Зум — колесом миші, щипком або кнопками − / + у куті превʼю; перетягніть, щоб зсунути. Кнопка з рамкою, подвійний клік або клавіша 0 знову центрують, «100%» — справжній розмір.', 'Праворуч ті самі налаштування, що в картці свого компонента: картинка, частини, анімації з ключами. Картинки можна кинути просто на превʼю.', '«Зберегти в бібліотеку» — щоб компонент можна було взяти в будь-який проект. «Додати в проект» кладе копію в «Чернетки» цього або іншого проекту.', '«Експорт → Spine (.zip)» одразу дає готовий спайн: ' + c('json') + ', ' + c('atlas') + ', ' + c('png') + ' і проект для Spine Editor. «Експорт → Компонент» зберігає ' + c('.component.json') + ' для іншого кіта.']) + p('Claude працює тут через MCP наживо: ' + c('sandbox_new') + ', ' + c('sandbox_update') + ', ' + c('sandbox_preview') + '. Попросіть, наприклад: «Зроби в пісочниці колектор монет: in, idle, add, win». Синя крапка на вкладці — Claude щойно щось тут змінив.') + p('Історії змін у пісочниці немає: що варто зберегти, кладіть у бібліотеку. На командному сервері пісочниця зберігається за вашим акаунтом, локально — у цьому браузері.'); } };
   INFO.library = { t: 'Бібліотека компонентів', x: function () { return p('Збережені компоненти з частинами, ключами анімацій і картинками. Клік відкриває копію в пісочниці; ⋯ — додати одразу в «Чернетки», експорт у ' + c('.component.json') + ' або видалення.') + p('На командному сервері бібліотека спільна: кожен бачить компоненти всіх, а змінити чи видалити свій може лише автор (і адмін). У локальному киті вона живе в цьому браузері.') + p('Компонент, відкритий з бібліотеки, кнопка «Оновити в бібліотеці» перезаписує; «Як новий» робить окремий запис. Свій запис можна перейменувати через ⋯ або олівцем у пісочниці.') + p('Копія в «Чернетках» памʼятає свій запис у бібліотеці. Коли там зʼявляється новіша версія, на картці видно «оновлення», а кнопка «Оновити з бібліотеки» підтягує картинки, частини й анімації. Назва, назва спайна, позиція і привʼязка в лейаутах залишаються проектними. Сама собою копія не змінюється; «Відвʼязати» робить її зовсім окремою.'); } };
 
   root.SpineKitInfo = {
@@ -5488,7 +5937,7 @@ details.tech[open] > summary { margin-bottom: 12px; }
   function K() { return App.K; }
   function needProject() { if (!S().pid) throw new Error('Немає відкритого проекту'); }
   function symComp() { return S().s.components.filter(function (c) { return c.type === 'symbols'; })[0]; }
-  function spineOf(c) { return 'animation_' + (K().slug(c.name).replace(/^animation_/, '') || 'element'); }
+  function spineOf(c) { return c.raw ? c.raw.name : 'animation_' + (K().slug(c.name).replace(/^animation_/, '') || 'element'); }
   function symName(n) { return K().slug(n).replace(/^animation_symbol_/, '').replace(/^symbol_/, '').replace(/_blur$/, ''); }
   function clamp(v, a, b) { return Math.min(b, Math.max(a, Math.round(Number(v)))); }
   function num(v) { return v !== undefined && v !== null && isFinite(Number(v)); }
@@ -5544,7 +5993,7 @@ details.tech[open] > summary { margin-bottom: 12px; }
     return rows;
   }
 
-  var BAR_PARTS = ['bar', 'bar_fill', 'bar_shine', 'bar_head', 'bar_glow', 'bar_clip', 'bar_flash'];
+  var BAR_PARTS = ['bar', 'bar_grow', 'bar_fill', 'bar_head', 'bar_sweep', 'bar_shine', 'bar_glow', 'bar_flash'];
   function reservedOf(c) {
     var out = ['root', 'art'];
     K().listOf(c.spacers).forEach(function (s) { var n = K().slug(String(s).split('@')[0]); if (n) out.push(n, n + '_bone'); });
@@ -5560,15 +6009,16 @@ details.tech[open] > summary { margin-bottom: 12px; }
     });
   }
   function renamePartRefs(c, from, to) {
-    (c.parts || []).forEach(function (p) { if (p.parent === from) p.parent = to; });
+    (c.parts || []).forEach(function (p) { if (p.parent === from) p.parent = to; if (p.glint && p.glint.of === from) p.glint.of = to; });
     (c.anims || []).forEach(function (a) {
+      Object.keys(a.keys && typeof a.keys === 'object' ? a.keys : {}).forEach(function (t) { if (Array.isArray(a.keys[t])) a.keys[t].forEach(function (k) { if (k && k.show === from) k.show = to; }); });
       if (!a.keys || !a.keys[from]) return;
       var next = {};
       Object.keys(a.keys).forEach(function (k) { next[k === from ? to : k] = a.keys[k]; });
       a.keys = next;
     });
   }
-  var PART_FIELDS = ['parent', 'x', 'y', 'w', 'h', 'pivot', 'rotate', 'behind', 'blend', 'alpha', 'shape', 'color'];
+  var PART_FIELDS = ['parent', 'x', 'y', 'w', 'h', 'pivot', 'rotate', 'behind', 'blend', 'alpha', 'shape', 'color', 'bone', 'slot', 'glint', 'sheet', 'fps', 'play', 'tex'];
   async function applyParts(c, list, mode, remove) {
     var Kit = K();
     if (!Array.isArray(c.parts)) c.parts = [];
@@ -5606,13 +6056,28 @@ details.tech[open] > summary { margin-bottom: 12px; }
       if (set(it.shape) && Kit.SHAPES.indexOf(it.shape) === -1) throw new Error(name + ': shape ' + it.shape + ', можна ' + Kit.SHAPES.filter(Boolean).join(', '));
       if (set(it.pivot) && it.pivot !== 'center' && !Kit.pivotName(it.pivot)) throw new Error(name + ': pivot ' + it.pivot + ', можна center, bottom, top, left, right або "x:y"');
       if (set(it.color) && !Kit.hexOf(it.color)) throw new Error(name + ': color як "ffcc00"');
-      ['x', 'y', 'w', 'h', 'rotate', 'alpha'].forEach(function (f) { if (set(it[f]) && !num(it[f])) throw new Error(name + '.' + f + ' має бути числом'); });
+      ['x', 'y', 'w', 'h', 'rotate', 'alpha', 'fps', 'tex'].forEach(function (f) { if (set(it[f]) && !num(it[f])) throw new Error(name + '.' + f + ' має бути числом'); });
+      if (set(it.slot) && !Kit.slug(it.slot)) throw new Error(name + ': slot як "eyes"');
+      if (set(it.glint) && typeof it.glint !== 'object') throw new Error(name + ': glint як {"of": "art", "bands": 3}');
+      if (set(it.sheet) && (typeof it.sheet !== 'object' || !num(it.sheet.cols) || !num(it.sheet.rows))) throw new Error(name + ': sheet як {"cols": 4, "rows": 3, "count": 12}');
+      if (set(it.play) && ['loop', 'once', 'pingpong'].indexOf(it.play) === -1) throw new Error(name + ': play loop, once або pingpong');
       if (!p) { p = { name: name }; c.parts.push(p); }
       PART_FIELDS.forEach(function (f) { if (it[f] === null) delete p[f]; else if (it[f] !== undefined) p[f] = it[f]; });
       if (it.remove_image) App.forgetImage(App.partKey(c, name));
       if (it.image) {
         var nat = await putImage(App.partKey(c, name), it.image);
-        if (!num(it.w) && !num(it.h)) { p.w = nat.w; p.h = nat.h; }
+        if (!num(it.w) && !num(it.h)) { p.w = p.sheet ? Math.floor(nat.w / p.sheet.cols) : nat.w; p.h = p.sheet ? Math.floor(nat.h / p.sheet.rows) : nat.h; }
+      }
+      if (Array.isArray(it.frames) && it.frames.length) {
+        var shots = [];
+        for (var fi = 0; fi < it.frames.length; fi++) shots.push(await getBlob(it.frames[fi]));
+        var made = await App.sheetFrom(App.partKey(c, name), shots, { name: name, max_frames: it.max_frames, max_px: it.max_px });
+        delete p.bone;
+        delete p.glint;
+        delete p.slot;
+        p.sheet = { cols: made.cols, rows: made.rows, count: made.count };
+        if (!num(it.w) && !num(it.h)) { p.w = made.w; p.h = made.h; }
+        p.fps = Math.max(1, Math.round((num(it.fps) ? Number(it.fps) : 24) / made.step));
       }
       var clean = Kit.normPart(p);
       Object.keys(p).forEach(function (k) { delete p[k]; });
@@ -5620,7 +6085,7 @@ details.tech[open] > summary { margin-bottom: 12px; }
       if (names.indexOf(name) === -1) names.push(name);
     }
     c.parts.forEach(function (p) {
-      if (p.parent !== 'art' && !find(p.parent)) throw new Error(p.name + ': немає батька ' + p.parent + '. Є: art, ' + c.parts.map(function (x) { return x.name; }).join(', '));
+      if (p.parent !== 'art' && !find(p.parent) && !c.parts.some(function (x) { return x.slot === p.parent; })) throw new Error(p.name + ': немає батька ' + p.parent + '. Є: art, ' + c.parts.map(function (x) { return x.name; }).join(', '));
     });
     if (mode === 'replace') {
       c.parts.filter(function (p) { return names.indexOf(p.name) === -1; }).forEach(drop);
@@ -5628,6 +6093,7 @@ details.tech[open] > summary { margin-bottom: 12px; }
     }
     if (!c.parts.length) delete c.parts;
   }
+  function setBone(c, v) { if (v === true) c.bone = true; else delete c.bone; }
   function setPivot(c, v) {
     if (v === null || v === '' || v === 'center') { delete c.pivot; return; }
     var pv = K().pivotName(v);
@@ -5635,11 +6101,14 @@ details.tech[open] > summary { margin-bottom: 12px; }
     c.pivot = pv;
   }
 
-  async function putImage(key, img) {
+  async function getBlob(img) {
     if (!img || !img.blob) throw new Error('картинка не передана');
     var r = await fetch('/api/bridge/blobs/' + img.blob, { cache: 'no-store' });
     if (!r.ok) throw new Error('картинка не дійшла: ' + img.name);
-    var blob = await r.blob();
+    return r.blob();
+  }
+  async function putImage(key, img) {
+    var blob = await getBlob(img);
     try { return await App.setImage(key, blob, img.name); } catch (e) { throw new Error('картинка не читається: ' + img.name); }
   }
 
@@ -5669,6 +6138,8 @@ details.tech[open] > summary { margin-bottom: 12px; }
     if (key) o.image = S().images[key] ? S().images[key].fileName || true : false;
     if (c.anims) o.anims = c.anims;
     if (c.finals && Object.keys(c.finals).length) o.finals = App.fin.list(c);
+    var sp = c.type === 'custom' && S().plan ? S().plan.spines.filter(function (s) { return s.comp === c.id; })[0] : null;
+    if (sp && sp.audit) o.optimization = sp.audit;
     return o;
   }
   function finalOf(sp) {
@@ -5835,6 +6306,7 @@ details.tech[open] > summary { margin-bottom: 12px; }
     return c;
   }
   function sbWarn(c) { var sp = SB().plan(c); return sp ? sp.warnings : ['спайн не зібрався']; }
+  function sbOpt(c) { var sp = SB().plan(c); return sp ? sp.audit : null; }
   function animSnap(c) { var o = {}; (c.anims || []).forEach(function (a) { if (a) o[a.name] = JSON.stringify(a); }); return o; }
   function animChanged(before, c) { return (c.anims || []).filter(function (a) { return a && before[a.name] !== JSON.stringify(a); }).map(function (a) { return a.name; }); }
   async function sbFields(c, a) {
@@ -5844,6 +6316,7 @@ details.tech[open] > summary { margin-bottom: 12px; }
     if (typeof a.spacers === 'string') c.spacers = a.spacers;
     if (typeof a.bar === 'string') c.bar = a.bar.trim();
     if (a.pivot !== undefined) setPivot(c, a.pivot);
+    if (a.bone !== undefined) setBone(c, a.bone);
     if (Array.isArray(a.anims)) c.anims = a.anims_mode === 'merge' ? mergeAnims(c.anims || [], a.anims) : normAnims(a.anims);
     if (a.parts || a.remove_parts) await applyParts(c, a.parts, a.parts_mode, a.remove_parts);
     if (a.remove_image) App.forgetImage('c:' + c.id);
@@ -5867,6 +6340,21 @@ details.tech[open] > summary { margin-bottom: 12px; }
     out.images = film.images || [];
     return out;
   }
+  async function bridgeFiles(list) {
+    var src = (Array.isArray(list) ? list : [list]).filter(Boolean), out = [];
+    if (!src.length) throw new Error('from_spine порожній: потрібні <спайн>.json, <спайн>.atlas і .png сторінки атласу');
+    for (var i = 0; i < src.length; i++) {
+      var f = src[i];
+      if (!f.blob) throw new Error('файл не передано: ' + (f.name || i));
+      var r = await fetch('/api/bridge/blobs/' + f.blob, { cache: 'no-store' });
+      if (!r.ok) throw new Error('файл не дійшов: ' + f.name);
+      var b = await r.blob(), file = new File([b], f.name, { type: b.type });
+      file.kitPath = f.path || f.name;
+      out.push(file);
+    }
+    return out;
+  }
+  function notRaw(c, what) { if (c.raw) throw new Error(spineOf(c) + ' — готовий спайн (імпорт), ' + what + ' для нього не діє. Кіт його лише показує: зміни JSON сам і поверни через sandbox_update from_spine.'); }
   async function fileData(f) {
     if (!f || !f.blob) throw new Error('файл не передано');
     var r = await fetch('/api/bridge/blobs/' + f.blob, { cache: 'no-store' });
@@ -5936,7 +6424,7 @@ details.tech[open] > summary { margin-bottom: 12px; }
         id: st.pid,
         settings: JSON.parse(JSON.stringify(st.s)),
         images: Object.keys(st.images).filter(function (k) { return k.indexOf('f:') !== 0; }).map(function (k) { var im = st.images[k]; return { key: k, file: im.fileName, w: im.w, h: im.h }; }),
-        spines: st.plan ? st.plan.spines.map(function (sp) { var o = { name: sp.name, component: sp.comp, skins: sp.json.skins.map(function (s) { return s.name; }), animations: Object.keys(sp.json.animations), warnings: sp.warnings }; if (sp.final) o.final = finalOf(sp); return o; }) : []
+        spines: st.plan ? st.plan.spines.map(function (sp) { var o = { name: sp.name, component: sp.comp, skins: sp.json.skins.map(function (s) { return s.name; }), animations: Object.keys(sp.json.animations), warnings: sp.warnings }; if (sp.custom) o.optimization = sp.audit; if (sp.final) o.final = finalOf(sp); return o; }) : []
       };
     },
     update_game: async function (a) {
@@ -6018,6 +6506,7 @@ details.tech[open] > summary { margin-bottom: 12px; }
         if (typeof a.label === 'string' && a.label.trim()) c.label = a.label.trim();
         if (typeof a.bar === 'string') c.bar = a.bar.trim();
         if (a.pivot !== undefined) setPivot(c, a.pivot);
+        if (a.bone !== undefined) setBone(c, a.bone);
         ['w', 'h', 'x', 'y'].forEach(function (k) { if (num(a[k])) c[k] = Number(a[k]); });
         if (a.parts || a.remove_parts) await applyParts(c, a.parts, a.parts_mode, a.remove_parts);
       }
@@ -6047,6 +6536,7 @@ details.tech[open] > summary { margin-bottom: 12px; }
       if (typeof a.spacers === 'string') c.spacers = a.spacers;
       if (typeof a.bar === 'string') c.bar = a.bar.trim();
       if (a.pivot !== undefined) setPivot(c, a.pivot);
+      if (a.bone !== undefined) setBone(c, a.bone);
       if (Array.isArray(a.anims)) c.anims = a.anims_mode === 'merge' ? mergeAnims(c.anims, a.anims) : normAnims(a.anims);
       try {
         if (a.parts) { delete c.parts; await applyParts(c, a.parts, 'replace'); }
@@ -6419,9 +6909,20 @@ details.tech[open] > summary { margin-bottom: 12px; }
     sandbox_new: async function (a) {
       needProject();
       await sbIn();
-      var srcs = ['template', 'from_library', 'from_component', 'file'].filter(function (k) { return a[k]; });
-      if (srcs.length > 1) throw new Error('Одне джерело: template, from_library, from_component або from_file');
+      var srcs = ['template', 'from_library', 'from_component', 'file', 'spine'].filter(function (k) { return a[k]; });
+      if (srcs.length > 1) throw new Error('Одне джерело: template, from_library, from_component, from_file або from_spine');
       var c;
+      if (a.spine) {
+        var got = await SB().fromSpine(await bridgeFiles(a.spine), { label: a.label });
+        await sbOut();
+        c = got.items[got.items.length - 1];
+        SB().show(c.id);
+        App.toast('Claude відкрив у пісочниці ' + got.items.map(spineOf).join(', '));
+        var res = { item: SB().info(c, true), warnings: sbWarn(c), optimization: sbOpt(c), note: 'Готовий спайн відкрито для перегляду. Користувач бачить його наживо у вкладці «Пісочниця».' };
+        if (got.items.length > 1) res.items = got.items.map(function (x) { return SB().info(x, false); });
+        if (got.skipped.length) res.skipped = got.skipped;
+        return withFilm(res, await sbLook(c, a.preview, null));
+      }
       if (a.from_library) c = await SB().fromLib(a.from_library);
       else if (a.from_component) {
         var src = findComp(a.from_component);
@@ -6438,26 +6939,47 @@ details.tech[open] > summary { margin-bottom: 12px; }
       await sbOut();
       SB().show(c.id);
       App.toast('Claude: у пісочниці ' + spineOf(c));
-      var out = { item: SB().info(c, false), warnings: sbWarn(c), note: 'Користувач бачить це наживо у вкладці «Пісочниця».' };
+      var out = { item: SB().info(c, false), warnings: sbWarn(c), optimization: sbOpt(c), note: 'Користувач бачить це наживо у вкладці «Пісочниця».' };
       return withFilm(out, await sbLook(c, a.preview, null));
     },
     sandbox_update: async function (a) {
       needProject();
       await sbIn();
       var c = sbFind(a.id);
+      if (c.raw) {
+        var extra = Object.keys(a).filter(function (k) { return ['id', 'label', 'spine', 'preview'].indexOf(k) === -1 && a[k] !== undefined; });
+        if (extra.length) notRaw(c, extra.join(', '));
+        if (typeof a.label === 'string' && a.label.trim()) c.label = a.label.trim();
+        if (a.spine) await SB().setSpine(c, await bridgeFiles(a.spine));
+        await sbOut();
+        SB().show(c.id);
+        App.toast('Claude оновив ' + spineOf(c) + ' у пісочниці');
+        return withFilm({ item: SB().info(c, true), warnings: sbWarn(c), optimization: sbOpt(c) }, await sbLook(c, a.preview, null));
+      }
+      if (a.spine) throw new Error('from_spine оновлює лише готовий спайн. ' + spineOf(c) + ' — компонент кита: міняй його parts і anims.');
       var before = animSnap(c);
       await sbFields(c, a);
       var ch = animChanged(before, c);
       await sbOut();
       SB().show(c.id, ch[0]);
       App.toast('Claude змінив ' + spineOf(c) + ' у пісочниці');
-      return withFilm({ item: SB().info(c, false), changed_animations: ch, warnings: sbWarn(c) }, await sbLook(c, a.preview, ch));
+      return withFilm({ item: SB().info(c, false), changed_animations: ch, warnings: sbWarn(c), optimization: sbOpt(c) }, await sbLook(c, a.preview, ch));
     },
     sandbox_preview: async function (a) {
       needProject();
       await sbIn();
       var c = sbFind(a.id);
       return SB().film({ id: c.id, animation: a.animation, at: a.at, skin: a.skin, bg: a.bg });
+    },
+    sandbox_export: async function (a) {
+      needProject();
+      await sbIn();
+      var c = sbFind(a.id);
+      for (var i = 0; i < 100 && !window.JSZip; i++) await sleep(100);
+      var z = await SB().zip(c);
+      var r = await fetch('/api/bridge/blobs?name=' + encodeURIComponent(z.name), { method: 'PUT', headers: { 'content-type': 'application/zip' }, body: z.blob });
+      if (!r.ok) throw new Error('zip не передався: ' + r.status);
+      return { blob: (await r.json()).id, name: z.name, spine: z.spine, kind: c.raw ? 'spine' : 'component' };
     },
     sandbox_remove: async function (a) {
       needProject();
@@ -6472,6 +6994,7 @@ details.tech[open] > summary { margin-bottom: 12px; }
       needProject();
       await sbIn();
       var c = sbFind(a.id);
+      notRaw(c, 'бібліотека');
       var r = await SB().save(c, { asNew: !!a.as_new, label: a.label, note: a.note, tags: Array.isArray(a.tags) ? a.tags : undefined });
       await sbOut();
       return { saved: true, updated_existing: r.updated, library: libOut(r.item), where: App.lib.api.mode() === 'server' ? 'бібліотека команди на сервері' : 'бібліотека цього браузера' };
@@ -6480,6 +7003,7 @@ details.tech[open] > summary { margin-bottom: 12px; }
       needProject();
       await sbIn();
       var c = sbFind(a.id);
+      notRaw(c, 'додавання в чернетки');
       var nc = await SB().toProject(c, { name: a.name });
       await commit();
       App.toast('Claude додав ' + spineOf(nc) + ' у «Чернетки»');
@@ -6976,7 +7500,7 @@ details.tech[open] > summary { margin-bottom: 12px; }
   function forgetComponentImages(c, keepFinals) {
     var st = imgs('c:' + c.id);
     forgetImage('c:' + c.id);
-    Object.keys(st.images).concat(Object.keys(st.blobs)).forEach(function (k) { if (k.indexOf('p:' + c.id + ':') === 0 || (!keepFinals && k.indexOf('f:' + c.id + ':') === 0)) forgetImage(k); });
+    Object.keys(st.images).concat(Object.keys(st.blobs)).forEach(function (k) { if (k.indexOf('p:' + c.id + ':') === 0 || k.indexOf('s:' + c.id + ':') === 0 || (!keepFinals && k.indexOf('f:' + c.id + ':') === 0)) forgetImage(k); });
   }
   function movePartImage(c, from, to) {
     var a = partKey(c, from), b = partKey(c, to);
@@ -6988,6 +7512,11 @@ details.tech[open] > summary { margin-bottom: 12px; }
 
   var COMP_KIT = 'spine-draft-kit/component@1';
   function compImageKeys(c) {
+    if (c.raw) {
+      var files = { 'spine:json': 's:' + c.id + ':json', 'spine:atlas': 's:' + c.id + ':atlas' };
+      (c.raw.pages || []).forEach(function (n) { files['page:' + n] = 's:' + c.id + ':page:' + n; });
+      return files;
+    }
     var out = { main: 'c:' + c.id };
     (c.parts || []).forEach(function (p) { if (p && p.name) out['part:' + p.name] = partKey(c, p.name); });
     return out;
@@ -7573,8 +8102,9 @@ details.tech[open] > summary { margin-bottom: 12px; }
   }
 
   function px(key) {
+    if (key.indexOf('gl:') === 0) { var gl = glintOf(key); return gl ? { w: gl.w, h: gl.h, cw: gl.cw, ch: gl.ch, ox: gl.ox, oy: gl.oy, empty: gl.empty, sum: gl.sum } : null; }
     var im = imgs(key).images[key];
-    if (im) return { w: im.w, h: im.h, win: im.win || null, uploaded: true };
+    if (im) return { w: im.w, h: im.h, win: im.win || null, uploaded: true, sum: im.sum };
     var g = geo();
     if (key.indexOf('sym:') === 0) return { w: Math.round(0.86 * g.W), h: Math.round(0.86 * g.H) };
     if (key.indexOf('blur:') === 0) {
@@ -7880,8 +8410,77 @@ details.tech[open] > summary { margin-bottom: 12px; }
     return cv;
   }
 
+  var derived = new WeakMap();
+  function derivedOf(src, id, make) {
+    var m = derived.get(src);
+    if (!m) { m = {}; derived.set(src, m); }
+    return m[id] || (m[id] = make());
+  }
+  function drawGlint(src, i, n, angle, level, scale, sum) {
+    var W = Math.max(2, Math.round(src.width * scale)), H = Math.max(2, Math.round(src.height * scale));
+    var c = el('canvas', { width: W, height: H }), x = c.getContext('2d', { willReadFrequently: true });
+    x.imageSmoothingQuality = 'high';
+    x.drawImage(src, 0, 0, W, H);
+    var img = x.getImageData(0, 0, W, H), d = img.data;
+    var rad = angle * Math.PI / 180, cs = Math.cos(rad), sn = Math.sin(rad), span = Math.abs(W * cs) + Math.abs(H * sn) || 1;
+    var mid = (i + 0.5) / n, half = 1 / n, x0 = W, y0 = H, x1 = -1, y1 = -1;
+    for (var py = 0; py < H; py++) {
+      for (var qx = 0; qx < W; qx++) {
+        var o = (py * W + qx) * 4, a = d[o + 3];
+        if (!a) continue;
+        var lit = level > 0 ? Math.max(0, Math.min(1, ((0.2126 * d[o] + 0.7152 * d[o + 1] + 0.0722 * d[o + 2]) / 255 - level + 0.12) / 0.24)) : 1;
+        var u = ((qx + 0.5 - W / 2) * cs + (py + 0.5 - H / 2) * sn) / span + 0.5;
+        a = Math.round(a * lit * lit * (3 - 2 * lit) * (n > 1 ? Math.max(0, 1 - Math.abs(u - mid) / half) : 1));
+        d[o + 3] = a;
+        if (a > 2) { if (qx < x0) x0 = qx; if (qx > x1) x1 = qx; if (py < y0) y0 = py; if (py > y1) y1 = py; }
+      }
+    }
+    if (x1 < 0) return { canvas: el('canvas', { width: 1, height: 1 }), w: 1, h: 1, cw: 1, ch: 1, ox: 0, oy: 0, empty: true, sum: sum };
+    var cw = x1 - x0 + 1, ch = y1 - y0 + 1, out = el('canvas', { width: cw, height: ch });
+    out.getContext('2d').putImageData(img, -x0, -y0, x0, y0, cw, ch);
+    return { canvas: out, w: cw, h: ch, cw: cw / scale, ch: ch / scale, ox: ((x0 + x1 + 1) / 2 - W / 2) / scale, oy: ((y0 + y1 + 1) / 2 - H / 2) / scale, empty: false, sum: sum };
+  }
+  function glintOf(key) {
+    var f = key.split(':'), srcKey = f.slice(6).join(':'), src = art(srcKey);
+    if (!src) return null;
+    var im = imgs(srcKey).images[srcKey];
+    return derivedOf(src, f.slice(0, 6).join(':'), function () { return drawGlint(src, Number(f[1]), Number(f[2]), Number(f[3]), Number(f[4]), Number(f[5]), im && im.sum ? f.slice(0, 6).join(':') + '|' + im.sum : undefined); });
+  }
+  function frameOf(key) {
+    var f = key.split(':'), src = art(f.slice(4).join(':'));
+    if (!src) return null;
+    return derivedOf(src, f.slice(0, 4).join(':'), function () {
+      var cols = Number(f[2]), fw = Math.max(1, Math.floor(src.width / cols)), fh = Math.max(1, Math.floor(src.height / Number(f[3])));
+      var c = el('canvas', { width: fw, height: fh });
+      c.getContext('2d').drawImage(src, (Number(f[1]) % cols) * fw, Math.floor(Number(f[1]) / cols) * fh, fw, fh, 0, 0, fw, fh);
+      return c;
+    });
+  }
+  async function sheetFrom(key, files, opts) {
+    var o = opts || {}, max = Math.max(2, Math.min(64, Number(o.max_frames) || 16)), side = Math.max(16, Math.min(1024, Number(o.max_px) || 256));
+    var list = files.every(function (f) { return f && f.name; }) ? files.slice().sort(function (a, b) { return String(a.name).localeCompare(String(b.name), undefined, { numeric: true }); }) : files;
+    var step = Math.ceil(list.length / max), frames = [];
+    for (var i = 0; i < list.length; i += step) {
+      var url = URL.createObjectURL(list[i]);
+      try { frames.push((await canvasFromUrl(url)).canvas); } finally { URL.revokeObjectURL(url); }
+    }
+    var fw = Math.max.apply(null, frames.map(function (c) { return c.width; })), fh = Math.max.apply(null, frames.map(function (c) { return c.height; }));
+    var s = Math.min(1, side / Math.max(fw, fh)), cw = Math.max(1, Math.round(fw * s)), ch = Math.max(1, Math.round(fh * s));
+    var cols = Math.ceil(Math.sqrt(frames.length)), rows = Math.ceil(frames.length / cols);
+    var cv = el('canvas', { width: cols * cw, height: rows * ch }), x = cv.getContext('2d');
+    x.imageSmoothingQuality = 'high';
+    frames.forEach(function (f, j) {
+      var w = Math.round(f.width * s), h = Math.round(f.height * s);
+      x.drawImage(f, (j % cols) * cw + Math.round((cw - w) / 2), Math.floor(j / cols) * ch + Math.round((ch - h) / 2), w, h);
+    });
+    await setImage(key, await canvasBlob(cv), (o.name || 'frames') + '_sheet.png');
+    return { cols: cols, rows: rows, count: frames.length, w: fw, h: fh, step: step };
+  }
+
   var artCache = {};
   function art(key) {
+    if (key.indexOf('gl:') === 0) { var gl = glintOf(key); return gl ? gl.canvas : null; }
+    if (key.indexOf('fr:') === 0) return frameOf(key);
     var im = imgs(key).images[key];
     if (im) return im.canvas;
     if (key.indexOf('blur:') === 0) { var sc = art('sym:' + key.slice(5)); return sc ? drawBlur(sc) : null; }
@@ -7963,21 +8562,26 @@ details.tech[open] > summary { margin-bottom: 12px; }
     for (var i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
     return new Blob([bytes], { type: m[1] || 'image/png' });
   }
+  async function imageSum(blob, canvas) {
+    var bytes = new Uint8Array(await blob.arrayBuffer()), a = 2166136261, b = 2538058380;
+    for (var i = 0; i < bytes.length; i++) { a = Math.imul(a ^ bytes[i], 16777619); b = Math.imul(b ^ bytes[i], 2246822519); }
+    return bytes.length + ':' + canvas.width + 'x' + canvas.height + ':' + (a >>> 0).toString(16) + (b >>> 0).toString(16);
+  }
   async function setImage(key, source, fileName) {
     var blob = typeof source === 'string' ? dataUrlBlob(source) : source;
     var url = URL.createObjectURL(blob);
     var r;
     try { r = await canvasFromUrl(url); } finally { URL.revokeObjectURL(url); }
-    var im = { canvas: r.canvas, w: r.canvas.width, h: r.canvas.height, fileName: fileName || '' };
+    var im = { canvas: r.canvas, w: r.canvas.width, h: r.canvas.height, fileName: fileName || '', sum: await imageSum(blob, r.canvas) };
     if (key === 'frame_above') im.win = windowOf(r.canvas);
     var st = imgs(key);
     st.images[key] = im;
     st.blobs[key] = blob;
     return r.natural;
   }
-  function isSbKey(k) { return /^(c|p):sb/.test(String(k || '')); }
+  function isSbKey(k) { return /^(c|p|s):sb/.test(String(k || '')); }
   function imgs(k) { return isSbKey(k) ? sb.store : state; }
-  function forgetImage(key) { var st = imgs(key); delete st.images[key]; delete st.blobs[key]; delete fin.text[key]; delete fin.parsed[key]; delete fin.drift[key]; }
+  function forgetImage(key) { var st = imgs(key); delete st.images[key]; delete st.blobs[key]; delete fin.text[key]; delete fin.parsed[key]; delete fin.drift[key]; delete sb.text[key]; }
   function dropImage(key) {
     forgetImage(key);
     changed({ render: true, images: true });
@@ -8035,13 +8639,15 @@ details.tech[open] > summary { margin-bottom: 12px; }
     input.addEventListener('change', function () { var fs = Array.prototype.slice.call(input.files || []); input.value = ''; if (fs.length) onFiles(fs); });
     return [input, el('label', { class: 'btn sm', for: id, text: label })];
   }
-  function dropTarget(node, onFiles) {
+  function dropTarget(node, onFiles, deep) {
     node.addEventListener('dragover', function (e) { e.preventDefault(); node.classList.add('over'); });
     node.addEventListener('dragleave', function () { node.classList.remove('over'); });
-    node.addEventListener('drop', function (e) {
+    node.addEventListener('drop', async function (e) {
       e.preventDefault();
       node.classList.remove('over');
-      var fs = Array.prototype.slice.call((e.dataTransfer && e.dataTransfer.files) || []);
+      var dt = e.dataTransfer, fs = Array.prototype.slice.call((dt && dt.files) || []), entries = [];
+      if (deep) Array.prototype.forEach.call((dt && dt.items) || [], function (it) { var en = it.kind === 'file' && it.webkitGetAsEntry ? it.webkitGetAsEntry() : null; if (en) entries.push(en); });
+      if (entries.some(function (en) { return en.isDirectory; })) { try { fs = await finWalk(entries); } catch (err) { entries = []; } }
       if (fs.length) onFiles(fs);
     });
   }
@@ -8293,17 +8899,18 @@ details.tech[open] > summary { margin-bottom: 12px; }
   function infoBtn(key) { return el('button', { type: 'button', class: 'info', 'data-info': key, 'aria-label': 'Що таке: ' + Info.title(key), text: 'i' }); }
 
   var KEY_ICON = '<path d="M12 3.5 20.5 12 12 20.5 3.5 12Z"/>';
-  var BAR_PARTS = ['bar', 'bar_fill', 'bar_shine', 'bar_head', 'bar_glow', 'bar_clip', 'bar_flash'];
+  var BAR_PARTS = ['bar', 'bar_fill', 'bar_shine', 'bar_head', 'bar_glow', 'bar_flash'];
+  var BAR_BONES = ['bar_grow', 'bar_sweep'];
   var kd = { c: null, row: null, bound: false };
   function spacerSlots(c) { return K.listOf(c.spacers).map(function (s) { return K.spacerItem(s).split('@')[0]; }).filter(Boolean); }
   function barOn(c) { return !!String(c.bar || '').trim(); }
   function partReserved(c) {
     var out = ['root', 'art'];
     spacerSlots(c).forEach(function (s) { out.push(s, s + '_bone'); });
-    return barOn(c) ? out.concat(BAR_PARTS) : out;
+    return barOn(c) ? out.concat(BAR_PARTS, BAR_BONES) : out;
   }
   function keyTargets(c) {
-    var out = ['art'].concat((c.parts || []).map(function (p) { return p ? K.slug(p.name) : ''; }), spacerSlots(c), barOn(c) ? BAR_PARTS.filter(function (n) { return n !== 'bar_clip'; }) : [], ['all']);
+    var out = ['art'].concat((c.parts || []).map(function (p) { return p ? K.slug(p.name) : ''; }), spacerSlots(c), barOn(c) ? BAR_PARTS : [], ['all']);
     return out.filter(function (n, i) { return n && out.indexOf(n) === i; });
   }
   function keysOf(row) {
@@ -8600,8 +9207,12 @@ details.tech[open] > summary { margin-bottom: 12px; }
     var why = !n ? 'Порожня назва' : partReserved(c).indexOf(n) !== -1 ? 'Назва ' + n + ' зарезервована' : !partFree(c, n, p) ? 'Частина ' + n + ' вже є' : '';
     if (why) { input.value = old; toast(why); return; }
     movePartImage(c, old, n);
-    (c.parts || []).forEach(function (x) { if (x && x.parent === old) x.parent = n; });
-    (c.anims || []).forEach(function (a) { renameTarget(a, old, n); });
+    (c.parts || []).forEach(function (x) { if (x && x.parent === old) x.parent = n; if (x && x.glint && x.glint.of === old) x.glint.of = n; });
+    (c.anims || []).forEach(function (a) {
+      renameTarget(a, old, n);
+      var ks = keysOf(a);
+      Object.keys(ks || {}).forEach(function (t) { if (Array.isArray(ks[t])) ks[t].forEach(function (key) { if (key && key.show === old) key.show = n; }); });
+    });
     p.name = n;
     state.selPart[c.id] = n;
     changed({ render: true, images: true });
@@ -8653,15 +9264,28 @@ details.tech[open] > summary { margin-bottom: 12px; }
     var p = (c.parts || []).filter(function (x) { return x && x.name === sel; })[0];
     if (!p) return null;
     var k = partKey(c, p.name), im = imgs(k).images[k];
-    var after = function (natural) { p.w = natural.w; p.h = natural.h; };
-    var pick = fileButton('', 'image/png,image/webp,image/jpeg', false, function (fs) { addImageFile(k, fs[0], after); });
+    var after = function (natural) { p.w = p.sheet ? Math.floor(natural.w / p.sheet.cols) : natural.w; p.h = p.sheet ? Math.floor(natural.h / p.sheet.rows) : natural.h; };
+    var take = async function (fs) {
+      if (fs.length < 2) { addImageFile(k, fs[0], after); return; }
+      try {
+        var m = await sheetFrom(k, fs, { name: p.name });
+        delete p.glint;
+        delete p.slot;
+        p.sheet = { cols: m.cols, rows: m.rows, count: m.count };
+        p.w = m.w;
+        p.h = m.h;
+        p.fps = Math.max(1, Math.round(24 / m.step));
+        changed({ render: true, images: true });
+      } catch (e) { toast('Не вдалося скласти кадри в сиквенцію'); }
+    };
+    var pick = fileButton('', 'image/png,image/webp,image/jpeg', true, take);
     var what = (im ? 'Замінити' : 'Додати') + ' картинку';
     pick[1].className = 'btn icon';
     pick[1].title = what;
     pick[1].setAttribute('aria-label', what);
     pick[1].innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + ICONS.upload + '</svg>';
     var pic = el('label', { class: 'pic', for: pick[1].htmlFor, title: what + ' (або перетягни файл)' }, [el('img', { alt: '', src: thumb(art(k)) })]);
-    dropTarget(pic, function (fs) { addImageFile(k, fs[0], after); });
+    dropTarget(pic, take);
     var nameIn = el('input', { type: 'text', value: p.name, spellcheck: 'false', autocomplete: 'off', 'aria-label': 'Назва частини' });
     nameIn.addEventListener('change', function () { renamePart(c, p, nameIn); });
     var kids = partKids(c, p.name), par = p.parent || 'art';
@@ -8678,25 +9302,54 @@ details.tech[open] > summary { margin-bottom: 12px; }
       changed();
     } });
     var color = el('input', { type: 'color', value: '#' + partHex(p), 'aria-label': 'Колір частини', oninput: function (e) { p.color = e.target.value.slice(1).toLowerCase(); changed(); }, onchange: function () { changed({ render: true }); } });
+    var kind = p.bone ? 'bone' : p.glint ? 'glint' : p.sheet ? 'sheet' : '';
+    var num = function (label, value, attrs, set) {
+      return box(label, el('input', Object.assign({ type: 'number', value: String(value), step: 'any', 'aria-label': label, onchange: function (e) { if (e.target.value !== '' && isFinite(Number(e.target.value))) { set(Number(e.target.value)); changed({ render: true }); } } }, attrs || {})));
+    };
+    var kindPick = pickField('Тип', 'Тип частини', [['', 'Картинка'], ['bone', 'Кістка без картинки'], ['glint', 'Блік з арту'], ['sheet', 'Сиквенція кадрів']], kind, function (v) {
+      delete p.bone;
+      delete p.glint;
+      delete p.sheet;
+      if (v === 'bone') p.bone = true;
+      if (v === 'glint') p.glint = { of: 'art' };
+      if (v === 'sheet') p.sheet = { cols: 1, rows: 1, count: 1 };
+    }, 'kinds');
+    var texPick = pickField('Текстура', 'Масштаб текстури частини', [['1', 'Як показано'], ['0.75', '75 %'], ['0.5', 'Удвічі менша'], ['0.25', 'Учетверо менша']], String(p.tex || 1), function (v) { if (Number(v) < 1) p.tex = Number(v); else delete p.tex; });
+    var slotIn = el('input', { type: 'text', value: p.slot || '', spellcheck: 'false', autocomplete: 'off', placeholder: 'eyes', 'aria-label': 'Слот варіантів', onchange: function (e) { var v = K.slug(e.target.value); if (v) p.slot = v; else delete p.slot; changed({ render: true }); } });
+    var extra = kind === 'glint' ? [
+      pickField('Джерело', 'Картинка, з якої вирізається блік', [['art', 'Основна картинка']].concat((c.parts || []).filter(function (x) { return x && x !== p && !x.bone && !x.glint && !x.slot && !x.sheet; }).map(function (x) { return [x.name, x.name]; })), p.glint.of || 'art', function (v) { p.glint.of = v; }),
+      num('Смуг', p.glint.bands || 3, { min: '1', max: '6', step: '1' }, function (v) { p.glint.bands = v; }),
+      num('Кут', p.glint.angle === undefined ? 20 : p.glint.angle, null, function (v) { p.glint.angle = v; }),
+      num('Яскравість від', p.glint.level === undefined ? 0.6 : p.glint.level, { min: '0', max: '0.95', step: '0.05' }, function (v) { p.glint.level = v; }),
+      num('Крок, с', p.glint.step === undefined ? 0.06 : p.glint.step, { min: '0', max: '1', step: '0.01' }, function (v) { p.glint.step = v; })
+    ] : kind === 'sheet' ? [
+      num('Колонок', p.sheet.cols, { min: '1', max: '32', step: '1' }, function (v) { p.sheet.cols = v; }),
+      num('Рядків', p.sheet.rows, { min: '1', max: '32', step: '1' }, function (v) { p.sheet.rows = v; }),
+      num('Кадрів', p.sheet.count, { min: '1', step: '1' }, function (v) { p.sheet.count = v; }),
+      num('Кадрів за секунду', p.fps || 24, { min: '1', max: '60', step: '1' }, function (v) { p.fps = v; }),
+      pickField('Програвання', 'Режим сиквенції', [['loop', 'По колу'], ['once', 'Один раз'], ['pingpong', 'Туди й назад']], p.play || 'loop', function (v) { if (v === 'loop') delete p.play; else p.play = v; }),
+      texPick
+    ] : kind === '' ? [box('Слот варіантів', slotIn), texPick] : [];
     return el('div', { class: 'sym-edit part-edit' }, [
-      el('div', { class: 'sym-pics' }, [el('div', { class: 'sym-pic' }, [pic, el('div', { class: 'pic-act' }, [pick[0], pick[1], im ? iconBtn('pic-del', 'Прибрати картинку частини', ICONS.x, function () { dropImage(k); }) : null])])]),
+      kind === 'bone' || kind === 'glint' ? null : el('div', { class: 'sym-pics' }, [el('div', { class: 'sym-pic' }, [pic, el('div', { class: 'pic-act' }, [pick[0], pick[1], im ? iconBtn('pic-del', 'Прибрати картинку частини', ICONS.x, function () { dropImage(k); }) : null])])]),
       el('div', { class: 'grid' }, [
         el('div', { class: 'row' }, [
           el('div', { class: 'field' }, [el('span', { class: 'lbl', text: 'Назва' }), nameIn]),
           pickField('Батько', 'Батько частини', parents, par, function (v) { p.parent = v; })
         ]),
-        el('div', { class: 'row' }, [
+        el('div', { class: 'row' }, [kindPick].concat(extra)),
+        kind === 'glint' ? null : el('div', { class: 'row' }, [
           numPair(el('span', {}, ['Центр X, Y ', el('span', { class: 'hint', text: 'від батька, y угору' })]), p.x || 0, p.y || 0, function (v) { p.x = Number(v) || 0; changed(); }, function (v) { p.y = Number(v) || 0; changed(); }, ['X', 'Y', ',']),
-          numPair('Розмір', w, h, function (v) { if (Number(v) > 0) p.w = Number(v); else delete p.w; changed(); }, function (v) { if (Number(v) > 0) p.h = Number(v); else delete p.h; changed(); }, ['Ширина', 'Висота']),
-          pivotField(p, 'Опорна точка частини'),
+          kind === 'bone' ? null : numPair('Розмір', w, h, function (v) { if (Number(v) > 0) p.w = Number(v); else delete p.w; changed(); }, function (v) { if (Number(v) > 0) p.h = Number(v); else delete p.h; changed(); }, ['Ширина', 'Висота']),
+          kind === 'bone' ? null : pivotField(p, 'Опорна точка частини'),
           box('Поворот', rot, '°')
         ]),
-        el('div', { class: 'row' }, [
+        kind === 'bone' ? null : el('div', { class: 'row' }, [
           pickField('Шар', 'Шар частини', [['', 'Над картинкою'], ['behind', 'Під картинкою']], p.behind === true ? 'behind' : '', function (v) { if (v) p.behind = true; else delete p.behind; }),
           pickField('Змішування', 'Змішування частини', [['normal', 'Звичайне'], ['additive', 'Додавання'], ['multiply', 'Множення'], ['screen', 'Екран']], K.BLENDS.indexOf(p.blend) > 0 ? p.blend : 'normal', function (v) { if (v === 'normal') delete p.blend; else p.blend = v; }),
-          box('Прозорість на старті', alpha)
+          kind === 'glint' ? null : box('Прозорість на старті', alpha)
         ]),
-        el('div', { class: 'row' }, [
+        kind === 'bone' || kind === 'glint' ? null : el('div', { class: 'row' }, [
           pickField('Заглушка', 'Заглушка частини', [['', 'Картка з назвою'], ['rect', 'Прямокутник'], ['circle', 'Коло'], ['ring', 'Кільце'], ['glow', 'Світіння'], ['star', 'Зірка']], K.SHAPES.indexOf(p.shape) > 0 ? p.shape : '', function (v) { if (v) p.shape = v; else delete p.shape; }),
           box('Колір', color, p.color ? el('button', { type: 'button', class: 'btn ghost sm', text: 'Скинути', 'aria-label': 'Скинути колір частини', onclick: function () { delete p.color; changed({ render: true }); } }) : null)
         ]),
@@ -8729,6 +9382,7 @@ details.tech[open] > summary { margin-bottom: 12px; }
         listField('Спейсери', c.spacers, function (v) { c.spacers = v; changed(); }, 'txt_amount', 'spacers')
       ]),
       imageRow(key, null, function (natural) { fitSize(c, natural); }),
+      el('div', { class: 'row', style: 'align-items: center; gap: 4px;' }, [el('label', { class: 'switch' }, [el('input', { type: 'checkbox', checked: c.bone === true, onchange: function (e) { if (e.target.checked) c.bone = true; else delete c.bone; changed({ render: true }); } }), 'Без основної картинки, лише кістка'])]),
       el('div', { class: 'row' }, [
         numPair('Розмір у грі, px', c.w, c.h, function (v) { c.w = Number(v); changed(); }, function (v) { c.h = Number(v); changed(); }, ['Ширина', 'Висота'], 'custom'),
         numPair('Центр X, Y', c.x || 0, c.y || 0, function (v) { c.x = Number(v); changed(); }, function (v) { c.y = Number(v); changed(); }, ['X', 'Y', ',']),
@@ -9676,6 +10330,7 @@ details.tech[open] > summary { margin-bottom: 12px; }
   function regionCanvas(src, w, h) {
     var c = el('canvas', { width: w, height: h });
     var x = c.getContext('2d');
+    x.imageSmoothingQuality = 'high';
     if (src === 'white') { x.fillStyle = '#fff'; x.fillRect(0, 0, w, h); }
     else if (src && src !== 'clear') { var a = typeof src === 'string' ? art(src) : src; if (a) x.drawImage(a, 0, 0, w, h); }
     return c;
@@ -9683,6 +10338,7 @@ details.tech[open] > summary { margin-bottom: 12px; }
   function pageCanvas(page) {
     var c = el('canvas', { width: page.width, height: page.height });
     var x = c.getContext('2d');
+    x.imageSmoothingQuality = 'high';
     page.placements.forEach(function (p) {
       if (p.src === 'white') { x.fillStyle = '#fff'; x.fillRect(p.x, p.y, p.w, p.h); }
       else if (p.src && p.src !== 'clear') { var a = typeof p.src === 'string' ? art(p.src) : p.src; if (a) x.drawImage(a, p.x, p.y, p.w, p.h); }
@@ -9934,6 +10590,22 @@ details.tech[open] > summary { margin-bottom: 12px; }
     if (pj) Object.keys(pj.animations || {}).forEach(function (n) {
       chips.appendChild(el('button', { type: 'button', class: 'chip', 'aria-pressed': String(n === state.pv.anim), text: n, onclick: function () { state.pv.anim = n; renderPreview(); } }));
     });
+    optBox($('pv-opt'), sp && !finShown(sp) ? sp : null);
+  }
+  function optBox(box, sp) {
+    var a = sp && sp.audit;
+    if (!box) return;
+    box.textContent = '';
+    box.hidden = !a;
+    if (!a) return;
+    box.appendChild(el('div', { class: 'opt-line', text: [
+      a.slots + ' ' + plural(a.slots, 'слот', 'слоти', 'слотів'),
+      a.masks + ' ' + plural(a.masks, 'маска', 'маски', 'масок'),
+      '≈' + a.draw_calls + ' draw calls',
+      a.keys + ' ' + plural(a.keys, 'ключ', 'ключі', 'ключів'),
+      'атлас ' + a.atlas
+    ].join(' · ') }));
+    if (a.notes.length) box.appendChild(el('ul', { class: 'opt-notes' }, a.notes.map(function (t) { return el('li', { text: t }); })));
   }
 
   function renderSide() {
@@ -10175,7 +10847,7 @@ details.tech[open] > summary { margin-bottom: 12px; }
   function curLayout() { var l = lays().list; if (lay.cur >= l.length) lay.cur = 0; return l[lay.cur] || null; }
   function curAspect(L) { var a = lay.scr[L.name]; return a > 0 ? a : L.w / L.h; }
   function compOn(t) { var c = state.s.components.filter(function (k) { return k.type === t; })[0]; return !!(c && c.on !== false); }
-  function spineOf(c) { return 'animation_' + (K.slug(c.name).replace(/^animation_/, '') || 'element'); }
+  function spineOf(c) { return c.raw ? c.raw.name : 'animation_' + (K.slug(c.name).replace(/^animation_/, '') || 'element'); }
   function layZ(c) {
     var n = spineOf(c).replace(/^animation_/, '');
     for (var i = 0; i < LAY_Z.length; i++) if (LAY_Z[i][0].test(n)) return LAY_Z[i][1];
@@ -10285,10 +10957,10 @@ details.tech[open] > summary { margin-bottom: 12px; }
         items.push({ clip: pts, end: a.end, slot: s.name });
         return;
       }
-      var key = !a.type && src[a.path || s.attachment];
+      var key = !a.type && src[a.sequence ? s.attachment + (a.sequence.start || 0) : a.path || s.attachment];
       if (!key || key === 'clear') return;
-      var ax = a.x || 0, ay = a.y || 0, w = a.width, h = a.height;
-      var t = [m[0], -m[2], -m[1], m[3], m[0] * ax + m[1] * ay + m[4], -(m[2] * ax + m[3] * ay + m[5])];
+      var ax = a.x || 0, ay = a.y || 0, w = a.width, h = a.height, ar = (a.rotation || 0) * Math.PI / 180, ca = Math.cos(ar), sa = Math.sin(ar);
+      var t = [m[0] * ca + m[1] * sa, -(m[2] * ca + m[3] * sa), -(m[1] * ca - m[0] * sa), m[3] * ca - m[2] * sa, m[0] * ax + m[1] * ay + m[4], -(m[2] * ax + m[3] * ay + m[5])];
       var alpha = s.color ? parseInt(s.color.slice(6, 8) || 'ff', 16) / 255 : 1;
       items.push({ slot: s.name, key: key, t: t, w: w, h: h, alpha: alpha, blend: BLEND_OP[s.blend] || '' });
       if (!(alpha > 0)) return;
@@ -11292,7 +11964,7 @@ details.tech[open] > summary { margin-bottom: 12px; }
 
   var Lib = window.SpineKitLibrary;
   var SbStore = window.SpineKitSandboxStore;
-  var sb = { items: [], store: { images: {}, blobs: {} }, saved: {}, ready: false, loadErr: '', saveTimer: null, flushing: null, again: false, cur: null, anim: null, skin: null, speed: 1, playing: true, loop: true, bones: false, cam: null, camFor: null, zoomTxt: '', plan: null, player: null, scrub: false, t: 0, d: 0, confirm: null, conTimer: null, libDel: null, libBusy: '', libErr: '', libLoading: false, q: '' };
+  var sb = { items: [], store: { images: {}, blobs: {} }, text: {}, rawSp: {}, rawErr: {}, pics: {}, saved: {}, ready: false, loadErr: '', saveTimer: null, flushing: null, again: false, cur: null, anim: null, skin: null, speed: 1, playing: true, loop: true, bones: false, cam: null, camFor: null, zoomTxt: '', plan: null, player: null, scrub: false, t: 0, d: 0, confirm: null, conTimer: null, libDel: null, libBusy: '', libErr: '', libLoading: false, q: '' };
   var SB_MOVED = 'spine-draft-kit.sandbox-moved';
   var SB_PREF = 'spine-draft-kit.sandbox';
   var SB_TPL = ['custom', 'character', 'logo', 'popup', 'infopanel', 'background'];
@@ -11354,13 +12026,13 @@ details.tech[open] > summary { margin-bottom: 12px; }
     if (!Array.isArray(c.anims)) c.anims = frameAnims();
     return c;
   }
-  function sbKeyOf(id, role) { return role === 'main' ? 'c:' + id : 'p:' + id + ':' + role.slice(5); }
+  function sbKeyOf(id, role) { return role === 'main' ? 'c:' + id : role.indexOf('part:') === 0 ? 'p:' + id + ':' + role.slice(5) : 's:' + id + ':' + (role.indexOf('spine:') === 0 ? role.slice(6) : role); }
   async function sbImages(id, images) {
     var roles = Object.keys(images || {});
     for (var i = 0; i < roles.length; i++) {
       var x = images[roles[i]];
-      if (!x || !x.blob || (roles[i] !== 'main' && roles[i].indexOf('part:') !== 0)) continue;
-      try { await setImage(sbKeyOf(id, roles[i]), x.blob, x.name || ''); } catch (e) { continue; }
+      if (!x || !x.blob || !/^(main$|part:|spine:(json|atlas)$|page:)/.test(roles[i])) continue;
+      try { await sbPutFile(sbKeyOf(id, roles[i]), x.blob, x.name || ''); } catch (e) { continue; }
     }
   }
   function sbSig(c) {
@@ -11384,6 +12056,10 @@ details.tech[open] > summary { margin-bottom: 12px; }
     catch (e) { sb.loadErr = e.message; return false; }
     sb.store.images = {};
     sb.store.blobs = {};
+    sb.text = {};
+    sb.rawSp = {};
+    sb.rawErr = {};
+    sb.pics = {};
     sb.items = recs.map(sbClean);
     for (var i = 0; i < recs.length; i++) await sbImages(recs[i].id, recs[i].images);
     sb.saved = {};
@@ -11398,6 +12074,10 @@ details.tech[open] > summary { margin-bottom: 12px; }
     sb.items = [];
     sb.store.images = {};
     sb.store.blobs = {};
+    sb.text = {};
+    sb.rawSp = {};
+    sb.rawErr = {};
+    sb.pics = {};
     sb.saved = {};
     sb.again = false;
     sb.ready = false;
@@ -11479,11 +12159,11 @@ details.tech[open] > summary { margin-bottom: 12px; }
       } else { c = next; sb.items.push(c); }
       var want = {}, roles = Object.keys(ev.rec.images || {});
       roles.forEach(function (role) { want[sbKeyOf(c.id, role)] = true; });
-      Object.keys(sb.store.images).concat(Object.keys(sb.store.blobs)).forEach(function (k) { if ((k === 'c:' + c.id || k.indexOf('p:' + c.id + ':') === 0) && !want[k]) forgetImage(k); });
+      Object.keys(sb.store.images).concat(Object.keys(sb.store.blobs)).forEach(function (k) { if ((k === 'c:' + c.id || k.indexOf('p:' + c.id + ':') === 0 || k.indexOf('s:' + c.id + ':') === 0) && !want[k]) forgetImage(k); });
       for (var i = 0; i < roles.length; i++) {
         var x = ev.rec.images[roles[i]], k = sbKeyOf(c.id, roles[i]);
         if (!x || !x.blob || sb.store.blobs[k] === x.blob) continue;
-        try { await setImage(k, x.blob, x.name || ''); } catch (e) { continue; }
+        try { await sbPutFile(k, x.blob, x.name || ''); } catch (e) { continue; }
       }
       sb.saved[c.id] = sbSig(c);
     }
@@ -11498,14 +12178,250 @@ details.tech[open] > summary { margin-bottom: 12px; }
     renderSandbox();
   }
 
+  var SB_SPINE = '<circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/><path d="m8.5 8.5 7 7"/>';
+  var SB_SPINE_EXT = '.json,.atlas,.txt,.png,.jpg,.jpeg,.webp,.zip';
+  async function sbPutFile(key, blob, name) {
+    if (key.indexOf('s:') !== 0) return setImage(key, blob, name);
+    var im = { fileName: name || '', w: 0, h: 0 };
+    if (/^s:[^:]+:page:/.test(key)) {
+      var s = K.pngSize(new Uint8Array(await blob.slice(0, 32).arrayBuffer()));
+      if (s) { im.w = s.width; im.h = s.height; }
+      else { try { var bm = await createImageBitmap(blob); im.w = bm.width; im.h = bm.height; bm.close(); } catch (e) { im.w = 0; im.h = 0; } }
+    } else sb.text[key] = await blob.text();
+    sb.store.images[key] = im;
+    sb.store.blobs[key] = blob;
+    return null;
+  }
+  function sbRawSpine(c) {
+    var pre = 's:' + c.id + ':', jt = sb.text[pre + 'json'], at = sb.text[pre + 'atlas'];
+    if (typeof jt !== 'string' || typeof at !== 'string') { sb.rawErr[c.id] = 'немає JSON або атласу'; return null; }
+    var pages = ((c.raw && c.raw.pages) || []).map(function (n) { return { name: n, key: pre + 'page:' + n }; });
+    var sig = pages.map(function (p) { return p.key + ':' + imgRev(p.key); }).join(',') + '|' + JSON.stringify((state.s && state.s.tech) || {});
+    var hit = sb.rawSp[c.id];
+    if (hit && hit.jt === jt && hit.at === at && hit.sig === sig) return hit.sp;
+    var sizes = {}, sp = null;
+    pages.forEach(function (p) { var im = sb.store.images[p.key]; if (im && im.w && sb.store.blobs[p.key]) sizes[p.name] = { width: im.w, height: im.h }; });
+    try { sp = K.rawSpine({ name: c.raw.name, jsonText: jt, atlasText: at, pages: sizes }, state.s && state.s.tech); delete sb.rawErr[c.id]; }
+    catch (e) { sb.rawErr[c.id] = String((e && e.message) || e); }
+    if (sp) { sp.pages = pages; sp.comp = c.id; }
+    sb.rawSp[c.id] = { jt: jt, at: at, sig: sig, sp: sp };
+    return sp;
+  }
+  async function sbRawPicMake(id, blob) {
+    try {
+      var bm = await createImageBitmap(blob);
+      var k = Math.min(1, 128 / Math.max(bm.width, bm.height, 1));
+      var cv = el('canvas', { width: Math.max(1, Math.round(bm.width * k)), height: Math.max(1, Math.round(bm.height * k)) });
+      cv.getContext('2d').drawImage(bm, 0, 0, cv.width, cv.height);
+      bm.close();
+      if (sb.pics[id] && sb.pics[id].blob === blob) { sb.pics[id].canvas = cv; if (sbShown()) renderSbItems(); }
+    } catch (e) { return; }
+  }
+  function sbRawPic(c) {
+    var blob = sb.store.blobs['s:' + c.id + ':page:' + (((c.raw && c.raw.pages) || [])[0] || '')];
+    var hit = sb.pics[c.id];
+    if (hit && hit.blob === blob) return hit.canvas;
+    if (!blob) return null;
+    sb.pics[c.id] = { blob: blob, canvas: null };
+    sbRawPicMake(c.id, blob);
+    return null;
+  }
+  function sbSpineJson(x) {
+    if (!x || x.kind !== 'json' || typeof x.text !== 'string') return false;
+    try { var o = JSON.parse(x.text.replace(/^\uFEFF/, '')); return !!o && typeof o === 'object' && !!o.skeleton && Array.isArray(o.bones); } catch (e) { return false; }
+  }
+  function sbRawGroups(list) {
+    var lc = function (s) { return String(s || '').toLowerCase(); };
+    var dir = function (x) { return String(x.path || '').replace(/[^\/]*$/, ''); };
+    var atlases = list.filter(function (x) { return x.kind === 'atlas'; }), images = list.filter(function (x) { return x.kind === 'image'; }), used = [];
+    var near = function (pool, name, at) {
+      var hits = pool.filter(function (x) { return used.indexOf(x) === -1 && lc(x.name) === lc(name); });
+      return hits.filter(function (x) { return dir(x) === dir(at); })[0] || hits[0] || null;
+    };
+    var out = list.filter(sbSpineJson).map(function (j) {
+      var base = j.name.replace(/\.json$/i, '');
+      var a = near(atlases, base + '.atlas', j) || near(atlases, base + '.atlas.txt', j);
+      if (a) used.push(a);
+      return { name: base, json: j, atlas: a, pages: {}, lost: [] };
+    });
+    var bare = out.filter(function (g) { return !g.atlas; }), free = atlases.filter(function (x) { return used.indexOf(x) === -1; });
+    if (bare.length === 1 && free.length === 1) bare[0].atlas = free[0];
+    out.forEach(function (g) {
+      if (!g.atlas) return;
+      K.atlasOf(g.atlas.text).pages.forEach(function (p) {
+        var hits = images.filter(function (x) { return lc(x.name) === lc(p.name); });
+        var f = hits.filter(function (x) { return dir(x) === dir(g.atlas); })[0] || hits[0];
+        if (f) g.pages[p.name] = f; else g.lost.push(p.name);
+      });
+    });
+    return out;
+  }
+  function sbRawWhy(g) { return g.name + ': ' + (!g.atlas ? 'немає .atlas' : 'бракує ' + g.lost.join(', ')); }
+  async function sbRawPut(c, g) {
+    var pre = 's:' + c.id + ':';
+    Object.keys(sb.store.blobs).concat(Object.keys(sb.store.images)).forEach(function (k) { if (k.indexOf(pre) === 0) forgetImage(k); });
+    await sbPutFile(pre + 'json', g.json.blob, g.json.name);
+    await sbPutFile(pre + 'atlas', g.atlas.blob, g.atlas.name);
+    var names = Object.keys(g.pages);
+    for (var i = 0; i < names.length; i++) await sbPutFile(pre + 'page:' + names[i], g.pages[names[i]].blob, names[i]);
+    c.raw = { name: g.name, pages: names, at: Date.now() };
+    delete sb.rawSp[c.id];
+  }
+  async function sbFromSpine(files, opts) {
+    opts = opts || {};
+    var groups = sbRawGroups(opts.list || await finRead(files));
+    if (!groups.length) throw new Error('Серед файлів немає Spine JSON: потрібні <спайн>.json, .atlas і .png сторінки атласу');
+    var ok = groups.filter(function (g) { return g.atlas && !g.lost.length; }), bad = groups.filter(function (g) { return !g.atlas || g.lost.length; }).map(sbRawWhy);
+    if (!ok.length) throw new Error('Не вистачає файлів. ' + bad.join('; '));
+    var room = Math.max(0, 60 - sbItems().length), take = ok.slice(0, Math.min(12, room));
+    if (!take.length) throw new Error('У пісочниці вже 60 елементів: приберіть зайві');
+    var made = [];
+    for (var i = 0; i < take.length; i++) {
+      var c = { id: sbNewId(), type: 'custom', label: opts.label && take.length === 1 ? String(opts.label).trim() : take[i].name.replace(/^animation_/, ''), name: take[i].name, anims: [] };
+      await sbRawPut(c, take[i]);
+      sbItems().push(c);
+      made.push(c);
+    }
+    sb.cur = made[made.length - 1].id;
+    sb.anim = null;
+    sb.skin = null;
+    sb.playing = true;
+    changed({ render: true, now: true });
+    return { items: made, skipped: bad.concat(ok.slice(take.length).map(function (g) { return g.name + ': не влізло за раз (до 12 спайнів)'; })) };
+  }
+  async function sbRawReplace(c, files) {
+    var list = await finRead(files), pre = 's:' + c.id + ':';
+    var lc = function (s) { return String(s || '').toLowerCase(); };
+    if (list.filter(sbSpineJson).length > 1) throw new Error('Тут кілька Spine JSON: для заміни дайте файли одного спайна');
+    var old = function (kind, key, name) {
+      var blob = sb.store.blobs[key];
+      if (blob) list.push({ kind: kind, name: name, path: '~/' + name, blob: blob, text: sb.text[key] });
+    };
+    if (!list.some(sbSpineJson)) old('json', pre + 'json', c.raw.name + '.json');
+    if (!list.some(function (x) { return x.kind === 'atlas'; })) old('atlas', pre + 'atlas', c.raw.name + '.atlas');
+    (c.raw.pages || []).forEach(function (n) { if (!list.some(function (x) { return x.kind === 'image' && lc(x.name) === lc(n); })) old('image', pre + 'page:' + n, n); });
+    var g = sbRawGroups(list)[0];
+    if (!g) throw new Error('Серед файлів немає Spine JSON, .atlas чи сторінок атласу цього спайна');
+    if (!g.atlas || g.lost.length) throw new Error('Не вистачає файлів. ' + sbRawWhy(g));
+    g.name = c.raw.name;
+    await sbRawPut(c, g);
+    changed({ render: true, now: true });
+    return c;
+  }
+  function sbSpineToast(r) {
+    toast('Відкрито в пісочниці: ' + r.items.map(spineOf).join(', ') + (r.skipped.length ? '. Пропущено: ' + r.skipped.join('; ') : ''));
+  }
+  function sbSpineBtn() {
+    var input = el('input', { type: 'file', class: 'file', multiple: true, accept: SB_SPINE_EXT });
+    input.addEventListener('change', async function () {
+      var fs = Array.prototype.slice.call(input.files || []);
+      input.value = '';
+      if (!fs.length) return;
+      try { sbSpineToast(await sbFromSpine(fs)); } catch (e) { toast(e.message); }
+    });
+    var b = labelBtn('Готовий спайн', SB_SPINE, { type: 'button', class: 'btn sm', title: 'Експорт зі Spine: .json, .atlas і .png або .zip', onclick: function () { input.click(); } });
+    return el('span', {}, [input, b]);
+  }
+  function sbnSpine() {
+    var input = el('input', { type: 'file', class: 'file', multiple: true, accept: SB_SPINE_EXT, tabindex: '-1', 'aria-hidden': 'true' });
+    input.addEventListener('change', async function () {
+      var fs = Array.prototype.slice.call(input.files || []);
+      input.value = '';
+      if (!fs.length) return;
+      try { sbSpineToast(await sbFromSpine(fs)); closeSbNew(); } catch (e) { toast(e.message); }
+    });
+    return [input, sbnItem(sbnIco(SB_SPINE), 'Готовий спайн', 'Експорт зі Spine: .json, .atlas і .png сторінки або .zip. Папку можна перетягнути на превʼю', '', function () { input.click(); })];
+  }
+  function sbBytes(b) {
+    var n = b ? b.size : 0;
+    return n >= 1048576 ? String(Math.round(n / 104857.6) / 10).replace('.', ',') + ' МБ' : Math.max(1, Math.round(n / 1024)) + ' КБ';
+  }
+  function sbRawBody(c) {
+    var sp = sbRawSpine(c), pre = 's:' + c.id + ':';
+    var pick = fileButton('Замінити файли', SB_SPINE_EXT, true, async function (fs) {
+      try { await sbRawReplace(c, fs); toast('Файли оновлено: ' + c.raw.name); } catch (e) { toast(e.message); }
+    });
+    var kids = [
+      el('div', { class: 'row' }, [textField('Назва', c.label, null, function (v) { c.label = v.trim() || c.raw.name; changed(); renderSbItems(); })]),
+      el('p', { class: 'note', text: 'Готовий спайн кіт не змінює: показує, перевіряє й віддає файли як є. Доробити його може Claude (править JSON і завантажує знову) або аніматор у Spine.' })
+    ];
+    if (!sp) return el('div', { class: 'comp-body sb-raw' }, kids.concat([el('p', { class: 'note', text: 'Файли не читаються: ' + (sb.rawErr[c.id] || 'невідома помилка') }), el('div', { class: 'row' }, pick)]));
+    var st = sp.stats, at = st.attachments;
+    var n = function (v, a, b, d) { return v + ' ' + plural(v, a, b, d); };
+    var facts = [n(st.bones, 'кістка', 'кістки', 'кісток'), n(st.slots, 'слот', 'слоти', 'слотів'), n(st.skins, 'скін', 'скіни', 'скінів'), n(st.animations, 'анімація', 'анімації', 'анімацій')];
+    if (st.constraints) facts.push(n(st.constraints, 'констрейнт', 'констрейнти', 'констрейнтів'));
+    var files = [[sp.name + '.json', sbBytes(sb.store.blobs[pre + 'json'])], [sp.name + '.atlas', sbBytes(sb.store.blobs[pre + 'atlas'])]].concat(sp.pages.map(function (p) {
+      var im = sb.store.images[p.key];
+      return [p.name, (im && im.w ? im.w + '×' + im.h + ' · ' : '') + sbBytes(sb.store.blobs[p.key])];
+    }));
+    kids.push(
+      el('div', { class: 'sub', text: 'Спайн' }),
+      el('div', { class: 'sb-facts' }, [
+        el('p', { class: 'note', text: sp.name + ' · Spine ' + (st.version || '—') }),
+        el('p', { class: 'note', text: facts.join(' · ') }),
+        el('p', { class: 'note', text: 'Картинки ' + at.region + ' · сітки ' + at.mesh + ' · маски ' + at.clipping + (at.other ? ' · інше ' + at.other : '') })
+      ]),
+      el('div', { class: 'sub', text: 'Файли' }),
+      finTable(['Файл', 'Розмір'], files.map(function (f) { return el('tr', {}, [el('td', { text: f[0] }), el('td', { text: f[1] })]); })),
+      el('div', { class: 'row' }, pick)
+    );
+    if (sp.findings.length) kids.push(el('div', { class: 'sub', text: 'Перевірка для арт-репо' }), el('ul', { class: 'fin-list' }, sp.findings.map(function (f) { return finItem(f, f.level); })));
+    kids.push(
+      el('div', { class: 'sub', text: 'Анімації' }),
+      finTable(['Анімація', 'Тривалість', 'Події'], sp.contract.animations.map(function (a) {
+        return el('tr', {}, [el('td', { text: a.name }), el('td', { text: sbFmt(a.duration) + ' с' }), el('td', { text: (a.events || []).map(function (e) { return e.name; }).join(', ') || '—' })]);
+      }))
+    );
+    return el('div', { class: 'comp-body sb-raw' }, kids);
+  }
+  async function sbZip(c) {
+    if (!window.JSZip) throw new Error(state.lib.zip === 'fail' ? 'JSZip не завантажився з cdnjs.cloudflare.com' : 'Ще завантажую JSZip, спробуйте за мить');
+    var zip = new window.JSZip(), name, root;
+    if (c.raw) {
+      var rs = sbRawSpine(c);
+      if (!rs) throw new Error('файли спайна не читаються');
+      name = rs.name;
+      root = name + '-spine/';
+      zip.file(root + name + '.json', sb.store.blobs['s:' + c.id + ':json']);
+      zip.file(root + name + '.atlas', sb.store.blobs['s:' + c.id + ':atlas']);
+      rs.pages.forEach(function (p) { if (sb.store.blobs[p.key]) zip.file(root + p.name, sb.store.blobs[p.key]); });
+    } else {
+      var plan = K.planAll(Object.assign({}, state.s, { components: [c] }), px), sp = plan.spines[0];
+      if (!sp) throw new Error('немає що експортувати');
+      name = sp.name;
+      root = name + '-spine/';
+      var folder = String(plan.tech.folder || '').replace(/^\/+/, '').replace(/\/?$/, '/');
+      if (folder === '/') folder = '';
+      zip.file(root + folder + sp.name + '.json', sp.jsonText);
+      zip.file(root + folder + sp.name + '.atlas', sp.atlasText);
+      zip.file(root + folder + sp.pageName, await canvasBlob(pageCanvas(sp.page)));
+      var ed = root + 'spine-editor/';
+      zip.file(ed + sp.name + '.json', sp.importJsonText);
+      for (var j = 0; j < sp.regions.length; j++) {
+        var r = sp.regions[j];
+        zip.file(ed + r.name + '.png', await canvasBlob(regionCanvas(r.src, r.w, r.h)));
+      }
+      if (sp.warnings && sp.warnings.length) zip.file(root + 'WARNINGS.txt', sp.warnings.join('\n'));
+    }
+    return { name: name + '-spine.zip', spine: name, blob: await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' }) };
+  }
+  async function sbSpineExport(c) {
+    try { var z = await sbZip(c); await saveFile(z.name, z.blob); } catch (e) { toast('Архів не зібрався: ' + ((e && e.message) || e)); }
+  }
+  function sbRmBtn(box, c) {
+    if (sb.confirm === c.id) box.appendChild(el('button', { type: 'button', class: 'btn sm sb-del', text: 'Точно прибрати?', onclick: function () { sbRemoveClick(c); } }));
+    else box.appendChild(iconBtn('ghost sb-rm', 'Прибрати з пісочниці', ICONS.trash, function () { sbRemoveClick(c); }));
+  }
   function sbPlanOf(c) {
     if (!c || !state.s) return null;
+    if (c.raw) return sbRawSpine(c);
     try { return K.planAll(Object.assign({}, state.s, { components: [c] }), px).spines[0] || null; } catch (e) { return null; }
   }
   function sbBuild() {
     var c = sbCur();
     sb.plan = null;
     if (!c || !state.s) return null;
+    if (c.raw) { var rs = sbRawSpine(c); sb.plan = rs ? { spines: [rs] } : null; return rs; }
     try { sb.plan = K.planAll(Object.assign({}, state.s, { components: [c] }), px); } catch (e) { toast('Пісочниця: не вдалося зібрати: ' + e.message); }
     return sbSpine();
   }
@@ -11514,6 +12430,7 @@ details.tech[open] > summary { margin-bottom: 12px; }
   var imgIds = new WeakMap(), imgSeq = 0;
   function imgRev(k) {
     var im = imgs(k).images[k];
+    if (im && !im.canvas) return 'b' + blobRev(imgs(k).blobs[k]);
     if (!im || !im.canvas) return '-';
     var id = imgIds.get(im.canvas);
     if (!id) { imgSeq += 1; id = imgSeq; imgIds.set(im.canvas, id); }
@@ -11525,6 +12442,7 @@ details.tech[open] > summary { margin-bottom: 12px; }
   }
   function sbDispose() {
     if (sb.player && sb.player.player) { try { sb.player.player.dispose(); } catch (e) { /* already gone */ } }
+    if (sb.player && sb.player.urls) sb.player.urls.forEach(function (u) { URL.revokeObjectURL(u); });
     sb.player = null;
     var st = $('sb-stage');
     if (st) st.textContent = '';
@@ -11700,27 +12618,36 @@ details.tech[open] > summary { margin-bottom: 12px; }
     var c = sbCur(), sp = sbSpine();
     if (!c) { sbDispose(); return; }
     if (sb.camFor !== c.id) { sb.cam = null; sb.camFor = c.id; }
-    if (!sp) { sbMsg('Не вдалося зібрати спайн.'); return; }
-    var anims = Object.keys(sp.json.animations);
-    if (!anims.length) { sbMsg('У компонента немає анімацій: додайте рядок в «Анімаціях».'); return; }
+    if (!sp) { sbMsg(c.raw ? 'Файли спайна не читаються: ' + (sb.rawErr[c.id] || 'немає JSON або атласу') : 'Не вдалося зібрати спайн.'); return; }
+    var anims = Object.keys(sp.json.animations || {});
+    if (!anims.length) { sbMsg(c.raw ? 'У спайні немає анімацій.' : 'У компонента немає анімацій: додайте рядок в «Анімаціях».'); return; }
     if (anims.indexOf(sb.anim) === -1) sb.anim = ['idle', 'loop_1', 'win', 'in'].filter(function (n) { return anims.indexOf(n) !== -1; })[0] || anims[0];
-    var skins = sp.json.skins.map(function (s) { return s.name; });
+    var skins = skinNames(sp.json);
     if (skins.indexOf(sb.skin) === -1) sb.skin = skins.indexOf('default') !== -1 ? 'default' : skins[0];
     var key = sbKey(c, sp);
     var rec = sb.player;
     if (rec && rec.key === key) { if (rec.ready && rec.anim !== sb.anim) sbPlay(sb.anim); return; }
     if (state.lib.spine !== 'ok') { sbMsg(state.lib.spine === 'fail' ? 'Рантайм Spine не завантажився з cdn.jsdelivr.net.' : 'Завантажую рантайм Spine…'); return; }
+    var lost = sp.raw ? sp.pages.filter(function (p) { return !sb.store.blobs[p.key]; }).map(function (p) { return p.name; }) : [];
+    if (lost.length) { sbMsg('Бракує сторінок атласу: ' + lost.join(', ')); return; }
     sbDispose();
-    var b = previewBundle(sp);
-    var raw = {};
-    raw[b.name + '.json'] = 'data:application/json;base64,' + b64(b.jsonText);
-    raw[b.name + '.atlas'] = 'data:text/plain;base64,' + b64(b.atlasText);
-    raw[b.pageName] = pageCanvas(b.page).toDataURL('image/png');
+    var raw = {}, urls = [], fname = sp.name;
+    if (sp.raw) {
+      raw[fname + '.json'] = 'data:application/json;base64,' + b64(sp.jsonText);
+      raw[fname + '.atlas'] = 'data:text/plain;base64,' + b64(sp.atlasText);
+      sp.pages.forEach(function (p) { var u = URL.createObjectURL(sb.store.blobs[p.key]); urls.push(u); raw[p.name] = u; });
+    } else {
+      var b = previewBundle(sp);
+      fname = b.name;
+      raw[b.name + '.json'] = 'data:application/json;base64,' + b64(b.jsonText);
+      raw[b.name + '.atlas'] = 'data:text/plain;base64,' + b64(b.atlasText);
+      raw[b.pageName] = pageCanvas(b.page).toDataURL('image/png');
+    }
     var div = el('div', { class: 'pc' });
     $('sb-stage').appendChild(div);
     var cfg = {
-      jsonUrl: b.name + '.json',
-      atlasUrl: b.name + '.atlas',
+      jsonUrl: fname + '.json',
+      atlasUrl: fname + '.atlas',
       rawDataURIs: raw,
       animation: sb.anim,
       skin: sb.skin,
@@ -11728,7 +12655,7 @@ details.tech[open] > summary { margin-bottom: 12px; }
       showLoading: false,
       alpha: true,
       backgroundColor: '00000000',
-      premultipliedAlpha: false,
+      premultipliedAlpha: !!sp.raw && /^\s*pma\s*:\s*true\s*$/im.test(sp.atlasText),
       preserveDrawingBuffer: true,
       defaultMix: 0,
       viewport: { padLeft: '8%', padRight: '8%', padTop: '8%', padBottom: '8%', transitionTime: 0 },
@@ -11743,8 +12670,8 @@ details.tech[open] > summary { margin-bottom: 12px; }
       },
       error: function (p, msg) { if (sb.player && sb.player.player === p) sbMsg('Превʼю не запустилося: ' + msg); }
     };
-    try { sb.player = { player: new window.spine.SpinePlayer(div, cfg), key: key, ready: false, anim: null }; }
-    catch (e) { sbMsg('Превʼю не запустилося: ' + e.message); }
+    try { sb.player = { player: new window.spine.SpinePlayer(div, cfg), key: key, ready: false, anim: null, urls: urls }; }
+    catch (e) { urls.forEach(function (u) { URL.revokeObjectURL(u); }); sbMsg('Превʼю не запустилося: ' + e.message); }
     renderSbTransport();
   }
   async function sbWait() {
@@ -11766,10 +12693,10 @@ details.tech[open] > summary { margin-bottom: 12px; }
         el('small', { text: t.name })
       ]);
     }));
-    var more = el('div', { class: 'row', style: 'justify-content: center;' }, [sbFromProjectBtn('З чернеток'), sbFileBtn()]);
+    var more = el('div', { class: 'row', style: 'justify-content: center;' }, [sbFromProjectBtn('З чернеток'), sbFileBtn(), sbSpineBtn()]);
     return el('div', { class: 'sb-start' }, [
       el('h3', { text: 'Пісочниця порожня' }),
-      el('p', { text: 'Ваш особистий верстак: його бачите лише ви і ваш Claude, він той самий у всіх проектах і не йде в чернетки чи експорт. Почніть із шаблону, відкрийте компонент з бібліотеки або попросіть Claude.' }),
+      el('p', { text: 'Ваш особистий верстак: його бачите лише ви і ваш Claude, він той самий у всіх проектах і не йде в чернетки чи експорт. Почніть із шаблону, відкрийте компонент з бібліотеки чи готовий спайн або попросіть Claude.' }),
       tpls,
       more,
       el('p', {}, ['Наприклад: ', el('code', { text: '«Зроби в пісочниці колектор монет: in, idle, add, win»' })])
@@ -11847,7 +12774,7 @@ details.tech[open] > summary { margin-bottom: 12px; }
       list.replaceChildren.apply(list, [
         sbnItem(sbnIco(SB_PLUS), 'Новий', 'З шаблону: свій, персонаж, логотип, попап, інфопанель, фон', '', function () { sbnGo('new'); }),
         sbnItem(sbnIco(SB_BOX), 'З проекту', 'Копія компонента з чернеток цього чи іншого проекту', '', function () { sbnGo('projects'); })
-      ].concat(sbnFile()));
+      ].concat(sbnSpine(), sbnFile()));
       return;
     }
     if (step === 'new') {
@@ -12010,7 +12937,7 @@ details.tech[open] > summary { margin-bottom: 12px; }
     }
     var sel = el('select', { 'aria-label': 'Компонент у пісочниці' });
     list.forEach(function (c) {
-      sel.appendChild(el('option', { value: c.id, text: c.label || spineOf(c), 'data-img': thumb(art('c:' + c.id)), 'data-sub': spineOf(c) + (c.lib ? ' · у бібліотеці' : '') }));
+      sel.appendChild(el('option', { value: c.id, text: c.label || spineOf(c), 'data-img': thumb(c.raw ? sbRawPic(c) : art('c:' + c.id)), 'data-sub': spineOf(c) + (c.raw ? ' · готовий спайн' : c.lib ? ' · у бібліотеці' : '') }));
     });
     var pick = dropdown(sel);
     pick.classList.add('sb-pick');
@@ -12025,7 +12952,7 @@ details.tech[open] > summary { margin-bottom: 12px; }
       if (nb) { nb.focus({ preventScroll: true }); nb.click(); }
     };
     box.appendChild(pick);
-    if (cur) box.appendChild(iconBtn('sb-ren-btn', 'Перейменувати', ICONS.pencil, function () { sbRenameStart(cur); }));
+    if (cur && !cur.raw) box.appendChild(iconBtn('sb-ren-btn', 'Перейменувати', ICONS.pencil, function () { sbRenameStart(cur); }));
     box.appendChild(el('button', { type: 'button', class: 'btn sm', 'aria-haspopup': 'dialog', text: '+ Новий', onclick: openSbNew }));
   }
   function renderSbAnims() {
@@ -12033,7 +12960,7 @@ details.tech[open] > summary { margin-bottom: 12px; }
     box.textContent = '';
     var sp = sbCur() ? sbSpine() : null;
     if (!sp) return;
-    Object.keys(sp.json.animations).forEach(function (n) {
+    Object.keys(sp.json.animations || {}).forEach(function (n) {
       box.appendChild(el('button', { type: 'button', class: 'chip', 'aria-pressed': String(n === sb.anim), title: sbFmt(K.durationOf(sp.json.animations[n])) + ' с', text: n, onclick: function () { sb.anim = n; sb.playing = true; sbPlay(n); renderSbAnims(); } }));
     });
   }
@@ -12051,7 +12978,7 @@ details.tech[open] > summary { margin-bottom: 12px; }
     ['sb-zoom-out', 'sb-zoom-v', 'sb-zoom-in', 'sb-center'].forEach(function (id) { $(id).disabled = !ready; });
     $('sb-loop').checked = sb.loop;
     $('sb-bones').checked = sb.bones;
-    var sp = sbCur() ? sbSpine() : null, skins = sp ? sp.json.skins.map(function (s) { return s.name; }) : [];
+    var sp = sbCur() ? sbSpine() : null, skins = sp ? skinNames(sp.json) : [];
     var sel = $('sb-skin');
     var now = Array.prototype.map.call(sel.options, function (o) { return o.value; });
     if (now.join('|') !== skins.join('|')) { sel.textContent = ''; skins.forEach(function (n) { sel.appendChild(el('option', { value: n, text: n })); }); }
@@ -12063,6 +12990,13 @@ details.tech[open] > summary { margin-bottom: 12px; }
     box.textContent = '';
     var c = sbCur();
     if (!c) return;
+    if (c.raw) {
+      box.appendChild(labelBtn('Експорт .zip', ICONS.download, { type: 'button', class: 'btn sm', title: 'json, atlas і png як є', onclick: function () { sbSpineExport(c); } }));
+      box.appendChild(el('span', { class: 'sb-gap' }));
+      box.appendChild(el('span', { class: 'note', text: 'Готовий спайн · лише перегляд' }));
+      sbRmBtn(box, c);
+      return;
+    }
     var meta = c.lib ? (Lib.cached() || []).filter(function (m) { return m.id === c.lib; })[0] : null;
     var mine = !!meta && Lib.canEdit(meta);
     var busy = !!sb.libBusy;
@@ -12081,8 +13015,7 @@ details.tech[open] > summary { margin-bottom: 12px; }
     box.appendChild(el('span', { class: 'sb-gap' }));
     if (sb.libBusy) box.appendChild(el('span', { class: 'note', text: sb.libBusy }));
     else if (meta) box.appendChild(el('span', { class: 'note', text: mine ? 'Є в бібліотеці' : 'З бібліотеки · ' + ((meta.by && (meta.by.name || meta.by.email)) || '') }));
-    if (sb.confirm === c.id) box.appendChild(el('button', { type: 'button', class: 'btn sm sb-del', text: 'Точно прибрати?', onclick: function () { sbRemoveClick(c); } }));
-    else box.appendChild(iconBtn('ghost sb-rm', 'Прибрати з пісочниці', ICONS.trash, function () { sbRemoveClick(c); }));
+    sbRmBtn(box, c);
   }
   function renderSbStage() {
     var stage = $('sb-stage');
@@ -12101,6 +13034,7 @@ details.tech[open] > summary { margin-bottom: 12px; }
     renderSbAnims();
     renderSbTransport();
     renderSbActs();
+    optBox($('sb-opt'), c ? sbSpine() : null);
   }
   function sbBody(c) {
     var key = 'c:' + c.id;
@@ -12114,6 +13048,7 @@ details.tech[open] > summary { margin-bottom: 12px; }
         listField('Спейсери', c.spacers, function (v) { c.spacers = v; changed(); }, 'txt_amount', 'spacers')
       ]),
       imageRow(key, null, function (natural) { fitSize(c, natural); }),
+      el('div', { class: 'row', style: 'align-items: center; gap: 4px;' }, [el('label', { class: 'switch' }, [el('input', { type: 'checkbox', checked: c.bone === true, onchange: function (e) { if (e.target.checked) c.bone = true; else delete c.bone; changed({ render: true }); } }), 'Без основної картинки, лише кістка'])]),
       el('div', { class: 'row' }, [
         numPair('Розмір у грі, px', c.w, c.h, function (v) { c.w = Number(v); changed(); }, function (v) { c.h = Number(v); changed(); }, ['Ширина', 'Висота'], 'custom'),
         pivotField(c, 'Опорна точка компонента', true),
@@ -12135,8 +13070,10 @@ details.tech[open] > summary { margin-bottom: 12px; }
     var active = inside && ae.getAttribute('aria-label');
     var caret = inside && typeof ae.selectionStart === 'number' ? [ae.selectionStart, ae.selectionEnd] : null;
     box.textContent = '';
+    var tog = $('h-sb-edit').querySelector('.lay-tog');
+    if (tog && tog.lastChild) tog.lastChild.textContent = c && c.raw ? 'Спайн' : 'Компонент';
     if (!c) { box.appendChild(el('p', { class: 'note', text: 'Тут будуть налаштування компонента: картинка, частини, анімації з ключами.' })); return; }
-    box.appendChild(sbBody(c));
+    box.appendChild(c.raw ? sbRawBody(c) : sbBody(c));
     if (active) {
       var again = box.querySelector('[aria-label="' + active.replace(/"/g, '\\"') + '"]');
       if (again) again.focus({ preventScroll: true });
@@ -12321,30 +13258,6 @@ details.tech[open] > summary { margin-bottom: 12px; }
       await saveFile((m.name || 'component') + '.component.json', new Blob([text], { type: 'application/json' }));
     } catch (e) { toast('Не вдалося зберегти: ' + e.message); }
   }
-  async function sbSpineExport(c) {
-    if (!window.JSZip) { toast(state.lib.zip === 'fail' ? 'JSZip не завантажився з cdnjs.cloudflare.com' : 'Ще завантажую JSZip, спробуйте за мить'); return; }
-    var plan;
-    try { plan = K.planAll(Object.assign({}, state.s, { components: [c] }), px); } catch (e) { toast('Не вдалося зібрати: ' + e.message); return; }
-    var sp = plan.spines[0];
-    if (!sp) { toast('Немає що експортувати'); return; }
-    try {
-      var zip = new window.JSZip();
-      var root = sp.name + '-spine/';
-      var folder = String(plan.tech.folder || '').replace(/^\/+/, '').replace(/\/?$/, '/');
-      if (folder === '/') folder = '';
-      zip.file(root + folder + sp.name + '.json', sp.jsonText);
-      zip.file(root + folder + sp.name + '.atlas', sp.atlasText);
-      zip.file(root + folder + sp.pageName, await canvasBlob(pageCanvas(sp.page)));
-      var ed = root + 'spine-editor/';
-      zip.file(ed + sp.name + '.json', sp.importJsonText);
-      for (var j = 0; j < sp.regions.length; j++) {
-        var r = sp.regions[j];
-        zip.file(ed + r.name + '.png', await canvasBlob(regionCanvas(r.src, r.w, r.h)));
-      }
-      if (sp.warnings && sp.warnings.length) zip.file(root + 'WARNINGS.txt', sp.warnings.join('\n'));
-      await saveFile(sp.name + '-spine.zip', await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' }));
-    } catch (e) { toast('Архів не зібрався: ' + ((e && e.message) || e)); }
-  }
   async function sbExport(c) {
     try {
       var r = await exportComponent(c);
@@ -12412,6 +13325,8 @@ details.tech[open] > summary { margin-bottom: 12px; }
   function sbRemove(c) {
     sb.items = sb.items.filter(function (x) { return x !== c; });
     forgetComponentImages(c);
+    delete sb.rawSp[c.id];
+    delete sb.pics[c.id];
     if (sb.cur === c.id) { sb.cur = null; sb.anim = null; sb.skin = null; }
     sb.confirm = null;
     changed({ render: true, images: true, now: true });
@@ -12448,10 +13363,10 @@ details.tech[open] > summary { margin-bottom: 12px; }
     if (c.id !== sb.cur) { sb.cur = c.id; sb.anim = null; sb.skin = null; }
     var sp0 = sbPlanOf(c);
     if (!sp0) throw new Error('Спайн не зібрався');
-    var all = Object.keys(sp0.json.animations);
+    var all = Object.keys(sp0.json.animations || {});
     var names = Array.isArray(o.animations) && o.animations.length ? o.animations.filter(function (n, i, l) { return l.indexOf(n) === i; }) : !o.animation || o.animation === 'all' ? all : [o.animation];
     names.forEach(function (n) { if (all.indexOf(n) === -1) throw new Error('У ' + spineOf(c) + ' немає анімації ' + n + '. Є: ' + all.join(', ')); });
-    var skins = sp0.json.skins.map(function (s) { return s.name; });
+    var skins = skinNames(sp0.json);
     if (o.skin && skins.indexOf(o.skin) === -1) throw new Error('Немає скіна ' + o.skin + '. Є: ' + skins.join(', '));
     if (o.skin) sb.skin = o.skin;
     if (names.length === 1) sb.anim = names[0];
@@ -12459,7 +13374,7 @@ details.tech[open] > summary { margin-bottom: 12px; }
     if (state.view !== 'sandbox') showView('sandbox');
     else renderSandbox();
     var sp = sbSpine() || sp0;
-    var info = { item: c.id, spine: spineOf(c), skin: sb.skin, animations: all.map(function (n) { return { name: n, duration: K.roundTo(K.durationOf(sp.json.animations[n]), 3) }; }), warnings: sp.warnings };
+    var info = { item: c.id, spine: spineOf(c), skin: sb.skin, animations: all.map(function (n) { return { name: n, duration: K.roundTo(K.durationOf(sp.json.animations[n]), 3) }; }), warnings: sp.warnings, optimization: sp.audit };
     if (!await sbWait()) return Object.assign(info, { note: 'Рантайм Spine не готовий, кадрів немає', images: [] });
     var p = sb.player.player, cv = p.canvas;
     if (!cv || !cv.width || !cv.height) return Object.assign(info, { note: 'Сцена не має розміру', images: [] });
@@ -12527,6 +13442,16 @@ details.tech[open] > summary { margin-bottom: 12px; }
     return Object.assign(info, { shown: rows.map(function (r) { return { name: r.name, at: r.times }; }), images: sheets });
   }
   function sbInfo(c, full) {
+    if (c.raw) {
+      var rs = sbRawSpine(c), pre = 's:' + c.id + ':';
+      var ro = { id: c.id, label: c.label, spine: spineOf(c), kind: 'spine', anims: rs ? rs.contract.animations.map(function (a) { return a.name; }) : [], library: null };
+      if (!full) return ro;
+      ro.note = 'Готовий спайн (імпорт): кіт його не редагує. Щоб змінити, візьми файли через sandbox_export, відредагуй JSON і поверни їх через sandbox_update from_spine.';
+      ro.files = { json: (sb.store.images[pre + 'json'] || {}).fileName || null, atlas: (sb.store.images[pre + 'atlas'] || {}).fileName || null, pages: (c.raw.pages || []).slice() };
+      if (rs) ro.spine_info = Object.assign({}, rs.stats, { skins: rs.contract.skins, animations: rs.contract.animations, slots: (rs.json.slots || []).map(function (s) { return s.name; }), findings: rs.findings, warnings: rs.warnings, optimization: rs.audit });
+      else ro.error = sb.rawErr[c.id] || 'файли не читаються';
+      return ro;
+    }
     var o = { id: c.id, label: c.label, spine: spineOf(c), size: (Number(c.w) || 0) + 'x' + (Number(c.h) || 0), parts: (c.parts || []).map(function (p) { return p.name; }), anims: (c.anims || []).map(function (a) { return a.name + (a.keys ? ' (ключі)' : ''); }), library: c.lib || null };
     if (!full) return o;
     var sp = sbPlanOf(c);
@@ -12534,7 +13459,7 @@ details.tech[open] > summary { margin-bottom: 12px; }
     Object.keys(keys).forEach(function (r) { var im = imgs(keys[r]).images[keys[r]]; images[r] = im ? im.fileName || true : false; });
     o.settings = clone(c);
     o.images = images;
-    if (sp) o.spine_info = { skins: sp.json.skins.map(function (s) { return s.name; }), animations: Object.keys(sp.json.animations).map(function (n) { return { name: n, duration: K.roundTo(K.durationOf(sp.json.animations[n]), 3) }; }), slots: sp.json.slots.map(function (s) { return s.name; }), warnings: sp.warnings };
+    if (sp) o.spine_info = { skins: sp.json.skins.map(function (s) { return s.name; }), animations: Object.keys(sp.json.animations).map(function (n) { return { name: n, duration: K.roundTo(K.durationOf(sp.json.animations[n]), 3) }; }), slots: sp.json.slots.map(function (s) { return s.name; }), warnings: sp.warnings, optimization: sp.audit };
     return o;
   }
 
@@ -12587,14 +13512,21 @@ details.tech[open] > summary { margin-bottom: 12px; }
     });
     $('view-sandbox').appendChild(file);
     dropTarget($('sb-stage'), async function (fs) {
+      if (fs.some(function (x) { return /\.(zip|atlas|atlas\.txt)$/i.test(x.name) || (/\.json$/i.test(x.name) && !/\.component\.json$/i.test(x.name)); })) {
+        try {
+          var list = await finRead(fs);
+          if (sbRawGroups(list).length) { sbSpineToast(await sbFromSpine(null, { list: list })); return; }
+        } catch (e) { toast(e.message); return; }
+      }
       var f = fs.filter(function (x) { return /\.json$/i.test(x.name); })[0];
       if (f) { try { await sbFromFile(f); } catch (e) { toast(e.message); } return; }
       var c = sbCur();
       var pics = fs.filter(function (x) { return /^image\//.test(x.type); });
+      if (c && c.raw && pics.length) { toast('Це готовий спайн: щоб оновити його файли, натисніть «Замінити файли»'); return; }
       if (!c || !pics.length) return;
       if (pics.length === 1 && !sb.store.images['c:' + c.id]) addImageFile('c:' + c.id, pics[0], function (natural) { fitSize(c, natural); });
       else addPartFiles(c, pics);
-    });
+    }, true);
     $('sb-stage').addEventListener('keydown', function (e) {
       if (e.target !== $('sb-stage')) return;
       if (e.key === ' ') { e.preventDefault(); sbToggle(); }
@@ -13182,7 +14114,7 @@ details.tech[open] > summary { margin-bottom: 12px; }
   var App = {
     K: K, state: state, A: A, defaults: defaults, newId: newId, templates: TEMPLATES, fromTemplate: fromTemplate, fitSize: fitSize,
     partKey: partKey, movePartImage: movePartImage, forgetComponentImages: forgetComponentImages, exportComponent: exportComponent, importComponent: importComponent, COMP_KIT: COMP_KIT,
-    setImage: setImage, forgetImage: forgetImage, moveSymbolImages: moveSymbolImages, forgetSymbolImages: forgetSymbolImages, changed: changed, saveNow: saveNow, flush: flush, saveProject: saveProject,
+    setImage: setImage, sheetFrom: sheetFrom, forgetImage: forgetImage, moveSymbolImages: moveSymbolImages, forgetSymbolImages: forgetSymbolImages, changed: changed, saveNow: saveNow, flush: flush, saveProject: saveProject,
     renderGame: renderGame, renderComponents: renderComponents, renderPreview: renderPreview, renderWizard: renderWizard,
     openProject: openProject, createProject: createProject, startSpin: startSpin, buildZip: buildZip, toast: toast, panel: panel,
     applyRemote: applyRemote, histParts: histParts, setProjects: setProjects, clearProject: clearProject, hist: hist, dirty: function () { return hist.dirty; },
@@ -13196,6 +14128,7 @@ details.tech[open] > summary { margin-bottom: 12px; }
       flush: sbFlush,
       forget: sbForget,
       fromTemplate: sbFromTemplate, fromComp: sbFromComp, fromLib: sbFromLib, fromData: function (data, opts) { return importComponent(data, Object.assign({}, opts || {}, { sandbox: true })); },
+      fromSpine: sbFromSpine, setSpine: sbRawReplace, zip: sbZip,
       save: sbSave, toProject: sbToProject, remove: sbRemove, render: renderSandbox
     },
     lib: { api: Lib, add: libToProject },

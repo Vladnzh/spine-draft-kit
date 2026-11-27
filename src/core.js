@@ -1,7 +1,7 @@
 (function (root) {
   'use strict';
 
-  var VERSION = '2.0.0';
+  var VERSION = '@VERSION@';
   var TECH = { spineVersion: '4.1.24', fps: 30, folder: 'skins/main/Motion/spine/', spacer: 'shapes/spacer', white: 'shapes/bg_white', maxPage: 4096, padding: 2, timingTolerance: 0.1 };
 
   function roundTo(v, d) {
@@ -320,7 +320,7 @@
       if (!sp.name || json.animations[sp.name]) return;
       json.animations[sp.name] = buildAnimation(sp, sp.ctx || o.ctx);
     });
-    var regions = [{ name: o.region, w: o.px.w, h: o.px.h, src: o.src }];
+    var regions = [{ name: o.region, w: o.px.w, h: o.px.h, src: o.src, sum: o.px.sum }];
     if ((o.spacers || []).length) regions.push({ name: tech.spacer, w: 1, h: 1, src: 'clear' });
     return { name: o.name, json: withEvents(json), regions: regions, loops: o.specs.filter(function (s) { return s.loop; }).map(function (s) { return s.name; }) };
   }
@@ -653,7 +653,7 @@
       else if (r4(v) !== 1) { o.x = r4(v); o.y = r4(v); }
       var n = keys[i + 1], e = k[2];
       if (n && e === 'stepped') o.curve = 'stepped';
-      else if (n && e) {
+      else if (n && e && r4(n[1]) !== r4(v)) {
         var ch = function (v0, v1) { return [r4(k[0] + (n[0] - k[0]) * e[0]), r4(v0 + (v1 - v0) * e[1]), r4(k[0] + (n[0] - k[0]) * e[2]), r4(v0 + (v1 - v0) * e[3])]; };
         var cx = ch(v, n[1]);
         o.curve = kind === 'alpha' ? cx : kind === 'x' ? cx.concat(ch(0, 0)) : kind === 'sx' ? cx.concat(ch(1, 1)) : cx.concat(cx);
@@ -687,64 +687,88 @@
 
   function pulseKeys(t, from, peak, at, end, e) { return [[t, from, e || BAR_OUT], [t + at, peak, e || BAR_OUT], [t + end, from]]; }
 
+  function barMesh(tw, h, cap, G, F) {
+    var hh = r2(h / 2), u = r4(cap / tw);
+    var cols = [[G, 0, 0], [G, cap, u], [F, -cap, r4(1 - u)], [F, 0, 1]], back = cols.slice().reverse();
+    var flat = function (rows) { return [].concat.apply([], rows); };
+    return {
+      type: 'mesh',
+      uvs: flat(cols.map(function (c) { return [c[2], 0]; }).concat(back.map(function (c) { return [c[2], 1]; }))),
+      triangles: [0, 1, 6, 0, 6, 7, 1, 2, 5, 1, 5, 6, 2, 3, 4, 2, 4, 5],
+      vertices: flat(cols.map(function (c) { return [1, c[0], c[1], hh, 1]; }).concat(back.map(function (c) { return [1, c[0], c[1], -hh, 1]; }))),
+      hull: 8,
+      edges: [0, 2, 2, 4, 4, 6, 6, 8, 8, 10, 10, 12, 12, 14, 14, 0, 2, 12, 4, 10],
+      width: tw,
+      height: h
+    };
+  }
+
+  function barTracks(fr, w, cap) {
+    var f0 = 2 * cap / w, keys = [];
+    fr.forEach(function (k, i) {
+      var n = fr[i + 1];
+      if (!n || (k[1] - f0) * (n[1] - f0) >= 0) { keys.push(k); return; }
+      var up = n[1] > k[1];
+      keys.push([k[0], k[1], up ? undefined : k[2]], [k[0] + (n[0] - k[0]) * (f0 - k[1]) / (n[1] - k[1]), f0, up ? k[2] : undefined]);
+    });
+    var lean = function (list) {
+      return list.filter(function (k, i) { var p = list[i - 1], n = list[i + 1]; return !(p && r4(p[1]) === r4(k[1]) && (!n || r4(n[1]) === r4(k[1]))); });
+    };
+    var track = function (value) { return lean(keys.map(function (k) { return [k[0], value(k[1]), k[2]]; })); };
+    return {
+      grow: track(function (f) { return Math.max(0.001, Math.min(1, f / f0)); }),
+      fill: track(function (f) { return Math.max(0, (f - f0) * w); }),
+      sweep: track(function (f) { return Math.max(0.001, f); })
+    };
+  }
+
   function withBar(spine, b, name, tech) {
     var json = spine.json;
     var w = r2(b.w), h = r2(b.h), hw = r2(w / 2), hh = r2(h / 2);
     var r = r2(Math.min(hh, 0.175 * h));
-    var sw = r2(h * 1.4), head = { w: r2(h * 0.9), h: r2(h * 1.5) }, glow = { w: r2(w + h * 0.8), h: r2(h * 2.2) };
+    var cap = Math.max(1, Math.min(Math.ceil(r * 1.1) + 2, Math.floor(hw))), tw = 2 * cap + 4;
+    var sw = r2(Math.min(h * 1.4, w / 2)), head = { w: r2(h * 0.9), h: r2(h * 1.15) }, glow = { w: r2(w + h * 0.8), h: r2(h * 2.2) };
     var base = 'art/' + name.replace(/^animation_/, '') + '/bar_';
     var bone = function (n, parent, x, y) { var o = { name: n, parent: parent }; if (r2(x || 0)) o.x = r2(x); if (r2(y || 0)) o.y = r2(y); return o; };
-    var track = bone('bar_shine_track', 'bar_sweep');
-    track.transform = 'noScale';
-    json.bones.push(bone('bar', 'art', b.x, b.y), bone('bar_fill', 'bar', -w), bone('bar_head', 'bar_fill', hw), bone('bar_sweep', 'bar', -hw), track, bone('bar_shine', 'bar_shine_track', -sw / 2));
+    json.bones.push(bone('bar', 'art', b.x, b.y), bone('bar_grow', 'bar', -hw), bone('bar_fill', 'bar_grow', 2 * cap), bone('bar_head', 'bar_fill'), bone('bar_sweep', 'bar', -hw), bone('bar_shine', 'bar_sweep', sw / 2));
     var slots = [
+      { name: 'bar_fill', bone: 'bar_fill' },
       { name: 'bar_glow', bone: 'bar', color: 'ffffff00', attachment: base + 'glow', blend: 'additive' },
-      { name: 'bar_clip', bone: 'bar', attachment: 'bar_clip' },
-      { name: 'bar_fill', bone: 'bar_fill', attachment: base + 'fill' },
-      { name: 'bar_flash', bone: 'bar_fill', color: 'ffffff00', attachment: base + 'flash', blend: 'additive' },
-      { name: 'bar_head', bone: 'bar_head', attachment: base + 'head', blend: 'additive' },
-      { name: 'bar_shine_clip', bone: 'bar', attachment: 'bar_shine_clip' },
-      { name: 'bar_shine', bone: 'bar_shine', blend: 'additive' }
+      { name: 'bar_flash', bone: 'bar_fill', color: 'ffffff00', blend: 'additive' },
+      { name: 'bar_head', bone: 'bar_head', blend: 'additive' },
+      { name: 'bar_shine', bone: 'bar_shine', color: 'ffffff00', blend: 'additive' }
     ];
     var at = json.slots.map(function (s) { return s.name; }).indexOf('art');
     json.slots.splice.apply(json.slots, [at + 1, 0].concat(slots));
-    var arc = [];
-    [[hw - r, hh - r, 90], [hw - r, -hh + r, 0], [-hw + r, -hh + r, -90], [-hw + r, hh - r, -180]].forEach(function (k) {
-      for (var j = 0; j <= 4; j++) { var t = (k[2] - j * 22.5) * Math.PI / 180; arc.push(r2(k[0] + r * Math.cos(t)), r2(k[1] + r * Math.sin(t))); }
-    });
     var bi = function (n) { return json.bones.map(function (x) { return x.name; }).indexOf(n); };
-    var c = r2(r * 0.6), B = bi('bar'), F = bi('bar_fill');
-    var cut = [[B, -hw + c, hh], [F, hw - c, hh], [F, hw, hh - c], [F, hw, -hh + c], [F, hw - c, -hh], [B, -hw + c, -hh], [B, -hw, -hh + c], [B, -hw, hh - c]];
-    var att = {
-      bar_glow: {}, bar_fill: {}, bar_shine: {}, bar_flash: {}, bar_head: {},
-      bar_clip: { bar_clip: { type: 'clipping', end: 'bar_head', vertexCount: arc.length / 2, vertices: arc } },
-      bar_shine_clip: { bar_shine_clip: { type: 'clipping', end: 'bar_shine', vertexCount: cut.length, vertices: [].concat.apply([], cut.map(function (v) { return [1, v[0], r2(v[1]), r2(v[2]), 1]; })) } }
-    };
+    var G = bi('bar_grow'), F = bi('bar_fill');
+    var att = { bar_fill: {}, bar_glow: {}, bar_flash: {}, bar_head: {}, bar_shine: {} };
+    att.bar_fill[base + 'fill'] = barMesh(tw, h, cap, G, F);
     att.bar_glow[base + 'glow'] = { width: glow.w, height: glow.h };
-    att.bar_fill[base + 'fill'] = { width: w, height: h };
+    att.bar_flash[base + 'flash'] = barMesh(tw, h, cap, G, F);
+    att.bar_head[base + 'head'] = { x: r2(-h * 0.2), width: head.w, height: head.h };
     att.bar_shine[base + 'shine'] = { width: sw, height: h };
-    att.bar_flash[base + 'flash'] = { width: w, height: h };
-    att.bar_head[base + 'head'] = { width: head.w, height: head.h };
     json.skins.forEach(function (s) { if (s.attachments) Object.assign(s.attachments, clone(att)); });
     var R = Math.round;
     var src = function (kind, rw, rh) { return 'bar:' + kind + ':' + R(rw) + ':' + R(rh) + ':' + R(r); };
     spine.regions.push(
-      { name: base + 'fill', w: R(w), h: R(h), src: src('fill', w, h) },
-      { name: base + 'flash', w: R(w), h: R(h), src: src('flash', w, h) },
-      { name: base + 'shine', w: R(sw), h: R(h), src: src('shine', sw, h) },
-      { name: base + 'head', w: R(head.w), h: R(head.h), src: src('head', head.w, head.h) },
-      { name: base + 'glow', w: R(glow.w), h: R(glow.h), src: 'bar:glow:' + R(glow.w) + ':' + R(glow.h) + ':' + R(r) + ':' + R(w) + ':' + R(h) }
+      { name: base + 'fill', w: tw, h: R(h), src: src('fill', tw, h) },
+      { name: base + 'flash', w: tw, h: R(h), src: src('flash', tw, h) },
+      { name: base + 'shine', w: R(sw), h: R(h), src: src('shine', sw, h), tex: 0.5 },
+      { name: base + 'head', w: R(head.w), h: R(head.h), src: src('head', head.w, head.h), tex: 0.5 },
+      { name: base + 'glow', w: R(glow.w), h: R(glow.h), src: 'bar:glow:' + R(glow.w) + ':' + R(glow.h) + ':' + R(r) + ':' + R(w) + ':' + R(h), tex: 0.5 }
     );
-    var shown = [[0, null, 'stepped'], [0.04, base + 'shine']];
+    var run = r2(w - sw);
+    var on = { 'bar_fill..att': [[0, base + 'fill']], 'bar_flash..att': [[0, base + 'flash']], 'bar_head..att': [[0, base + 'head']] };
     var anims = json.animations;
     var loops = Object.keys(anims).filter(function (n) { return /^(loop|idle)/.test(n); });
     if (!loops.length) { anims.loop_1 = {}; loops = ['loop_1']; spine.loops.push('loop_1'); }
     loops.forEach(function (n) {
       var d = durationOf(anims[n]) || 1.6;
-      anims[n] = mergeAnim(anims[n], barAnim({ 'bar_shine_track..x': [[0, 0], [d, w]], 'bar_shine..x': [[0, 0], [d, sw]] }));
+      anims[n] = mergeAnim(anims[n], barAnim({ 'bar_shine..x': [[0, 0], [d, run]], 'bar_shine..alpha': [[0, 0], [d * 0.15, 1], [d * 0.85, 1], [d, 0]] }));
     });
     var own = {
-      progress: { 'bar_fill..x': [[0, 0], [1, w]], 'bar_sweep..sx': [[0, 0.001], [1, 1]], 'bar_shine..att': shown },
+      progress: Object.assign({ 'bar_grow..sx': [[0, 0.001], [2 * cap / w, 1]], 'bar_fill..x': [[2 * cap / w, 0], [1, w - 2 * cap]], 'bar_sweep..sx': [[0, 0.001], [1, 1]], 'bar_shine..att': [[0, null], [0.04, base + 'shine']] }, on),
       add: { 'bar_head..scale': pulseKeys(0, 1, 1.6, 0.14, 0.35), 'bar_flash..alpha': pulseKeys(0, 0, 0.5, 0.14, 0.35) },
       anticipation: { 'bar_glow..alpha': pulseKeys(0, 0.3, 0.85, 0.575, 1.15, BAR_IO), 'bar_head..scale': pulseKeys(0, 1, 1.3, 0.575, 1.15, BAR_IO) },
       trigger: {
@@ -755,30 +779,30 @@
       }
     };
     var steps = [[0.4, 0.3], [1.6, 0.55], [2.8, 0.8], [4, 1]];
-    var fill = [[0, 0]], sweep = [[0, 0.001]], head = [[0, 1]], flash = [[0, 0]];
+    var level = [[0, 0]], pulse = [[0, 1]], flash = [[0, 0]], shineX = [], shineA = [];
     steps.forEach(function (s, i) {
-      var from = i ? steps[i - 1][1] : 0;
-      fill.push([s[0], from * w, BAR_OVER], [s[0] + 0.7, s[1] * w]);
-      sweep.push([s[0], Math.max(0.001, from), BAR_OVER], [s[0] + 0.7, s[1]]);
-      if (s[1] < 1) { head = head.concat(pulseKeys(s[0], 1, 1.6, 0.14, 0.35)); flash = flash.concat(pulseKeys(s[0], 0, 0.5, 0.14, 0.35)); }
+      level.push([s[0], i ? steps[i - 1][1] : 0, s[1] < 1 ? BAR_OVER : BAR_OUT], [s[0] + 0.7, s[1]]);
+      if (s[1] < 1) { pulse = pulse.concat(pulseKeys(s[0], 1, 1.6, 0.14, 0.35)); flash = flash.concat(pulseKeys(s[0], 0, 0.5, 0.14, 0.35)); }
+      shineX.push([i * 1.6, 0], [(i + 1) * 1.6 - 0.0333, run, 'stepped']);
+      shineA.push([i * 1.6, 0], [i * 1.6 + 0.24, 1], [(i + 1) * 1.6 - 0.27, 1], [(i + 1) * 1.6 - 0.0333, 0]);
     });
     var tg = 4.7, drain = tg + 1.15;
-    fill.push([drain, w, BAR_IO], [drain + 0.5, 0], [drain + 0.8, 0]);
-    sweep.push([drain, 1, BAR_IO], [drain + 0.5, 0.001], [drain + 0.8, 0.001]);
-    flash = flash.concat(pulseKeys(tg, 0, 0.85, 0.23, 0.9));
-    var shineAt = function (len) { var k = []; for (var i = 0; i < 4; i++) k.push([i * 1.6, 0], [(i + 1) * 1.6 - 0.0333, len, 'stepped']); return k.concat([[6.4, 0]]); };
-    own.demo = {
-      'bar_fill..x': fill,
-      'bar_sweep..sx': sweep,
-      'bar_flash..alpha': flash,
-      'bar_shine_track..x': shineAt(w),
-      'bar_shine..x': shineAt(sw),
-      'bar_shine..att': [[0, null, 'stepped'], [0.46, base + 'shine', 'stepped'], [drain + 0.42, null]],
+    level.push([drain, 1, BAR_IO], [drain + 0.5, 0]);
+    var T = barTracks(level, w, cap);
+    own.demo = Object.assign({
+      'bar_grow..sx': T.grow,
+      'bar_fill..x': T.fill,
+      'bar_sweep..sx': T.sweep,
+      'bar_flash..alpha': flash.concat(pulseKeys(tg, 0, 0.85, 0.23, 0.9)),
+      'bar_shine..x': shineX.concat([[6.4, 0]]),
+      'bar_shine..alpha': shineA,
+      'bar_shine..att': [[0, null], [0.46, base + 'shine'], [drain + 0.42, null]],
       'bar_glow..alpha': [[0, 0], [3.4, 0], [3.5, 0.3, BAR_IO], [4.075, 0.85, BAR_IO], [tg, 0.3, BAR_OUT], [tg + 0.23, 1, BAR_OUT], [drain, 0]],
-      'bar_head..scale': head.concat([[3.5, 1, BAR_IO], [4.075, 1.3, BAR_IO], [tg, 1, BAR_OUT], [tg + 0.23, 2, BAR_OUT], [drain, 1]]),
+      'bar_head..scale': pulse.concat([[3.5, 1, BAR_IO], [4.075, 1.3, BAR_IO], [tg, 1, BAR_OUT], [tg + 0.23, 2, BAR_OUT], [drain, 1]]),
       'art..scale': pulseKeys(tg, 1, 1.035, 0.23, 1.15)
-    };
+    }, on);
     Object.keys(own).forEach(function (n) { anims[n] = mergeAnim(anims[n], barAnim(own[n])); });
+    padTo(anims.demo, drain + 0.8);
     if (spine.loops.indexOf('anticipation') === -1) spine.loops.push('anticipation');
     return spine;
   }
@@ -787,8 +811,9 @@
   var PIVOT_AT = /^\s*(-?\d+(?:\.\d+)?)\s*:\s*(-?\d+(?:\.\d+)?)\s*$/;
   var BLENDS = ['normal', 'additive', 'multiply', 'screen'];
   var SHAPES = ['', 'rect', 'circle', 'ring', 'glow', 'star'];
-  var BAR_NAMES = ['bar', 'bar_fill', 'bar_shine', 'bar_head', 'bar_glow', 'bar_clip', 'bar_flash'];
+  var BAR_NAMES = ['bar', 'bar_grow', 'bar_fill', 'bar_head', 'bar_sweep', 'bar_shine', 'bar_glow', 'bar_flash'];
   var KEY_NUM = ['x', 'y', 'scale', 'sx', 'sy', 'rotate', 'alpha'];
+  var PLAYS = ['loop', 'once', 'pingpong'];
 
   function pivotName(v) {
     var s = String(v === undefined || v === null ? '' : v).trim().toLowerCase();
@@ -815,11 +840,22 @@
     var name = slug(p.name);
     if (!name) return null;
     var o = { name: name, parent: slug(p.parent) || 'art', x: given(p.x) ? r2(Number(p.x)) : 0, y: given(p.y) ? r2(Number(p.y)) : 0 };
+    if (given(p.rotate) && r2(Number(p.rotate))) o.rotate = r2(Number(p.rotate));
+    if (p.bone === true) { o.bone = true; return o; }
     if (given(p.w) && Number(p.w) > 0) o.w = r2(Number(p.w));
     if (given(p.h) && Number(p.h) > 0) o.h = r2(Number(p.h));
     var pv = pivotName(p.pivot);
     if (pv) o.pivot = pv;
-    if (given(p.rotate) && r2(Number(p.rotate))) o.rotate = r2(Number(p.rotate));
+    var lim = function (v, lo, hi, d) { return given(v) ? Math.max(lo, Math.min(hi, Number(v))) : d; };
+    var gl = isObj(p.glint) ? p.glint : null, sh = isObj(p.sheet) ? p.sheet : null;
+    if (gl) o.glint = { of: slug(gl.of) || 'art', bands: Math.round(lim(gl.bands, 1, 6, 3)), angle: r2(lim(gl.angle, -180, 180, 20)), level: r2(lim(gl.level, 0, 0.95, 0.6)), step: r4(lim(gl.step, 0, 1, 0.06)) };
+    else if (sh && Number(sh.cols) >= 1 && Number(sh.rows) >= 1) {
+      var cols = Math.round(lim(sh.cols, 1, 32, 1)), rows = Math.round(lim(sh.rows, 1, 32, 1));
+      o.sheet = { cols: cols, rows: rows, count: Math.round(lim(sh.count, 1, cols * rows, cols * rows)) };
+      if (given(p.fps)) o.fps = r2(lim(p.fps, 1, 60, 24));
+      if (PLAYS.indexOf(p.play) > 0) o.play = p.play;
+    } else if (slug(p.slot)) o.slot = slug(p.slot);
+    if (given(p.tex) && Number(p.tex) < 1) o.tex = r2(Math.max(0.1, Number(p.tex)));
     if (p.behind === true) o.behind = true;
     if (BLENDS.indexOf(p.blend) > 0) o.blend = p.blend;
     if (given(p.alpha) && Number(p.alpha) < 1) o.alpha = r4(Math.max(0, Number(p.alpha)));
@@ -865,6 +901,8 @@
           } else if (f === 'color') {
             if (hexOf(v)) o.color = hexOf(v);
             else errors.push(at + ': color як "ffcc00"');
+          } else if (f === 'show') {
+            o.show = v === null || v === false ? '' : slug(v);
           } else if (f === 'ease') {
             if (v === 'linear' || v === null || v === '') return;
             if (easeOf(v)) o.ease = Array.isArray(v) ? v.map(Number) : v;
@@ -906,9 +944,10 @@
     });
   }
 
-  function keyedAnim(keys, json, fade) {
+  function keyedAnim(keys, json, fade, meta) {
     var anim = {}, notes = [];
-    var bones = {}, slots = {}, tint = {};
+    var bones = {}, slots = {}, tint = {}, shown = {};
+    var fans = (meta && meta.fans) || {}, variants = (meta && meta.variants) || {};
     json.bones.forEach(function (b) { bones[b.name] = b; });
     json.slots.forEach(function (s) { slots[s.name] = s; });
     var names = Object.keys(keys).sort(function (a, b) { return (a === 'all' ? 0 : 1) - (b === 'all' ? 0 : 1); });
@@ -922,12 +961,34 @@
         if (k.rotate !== undefined) o.rotate = k.rotate;
         if (k.color) { var c = parseHex(k.color); o.r = c.r; o.g = c.g; o.b = c.b; }
         if (k.alpha !== undefined) o.a = k.alpha;
+        if (k.show !== undefined) o.show = k.show;
         return o;
       });
       var all = target === 'all';
+      var fan = fans[target];
+      if (fan) {
+        if (list.some(function (k) { return k.x !== undefined || k.y !== undefined || k.sx !== undefined || k.rotate !== undefined; })) notes.push('ключі ' + target + ': блік бере лише alpha і color, рухається він разом із джерелом');
+        var pulse = list.filter(function (k) { return k.a !== undefined || k.r !== undefined; });
+        fan.slots.forEach(function (sn, i) { tint[sn] = (tint[sn] || []).concat(pulse.map(function (k) { return Object.assign({}, k, { t: r4(k.t + i * fan.step) }); })); });
+        return;
+      }
+      var owner = Object.keys(variants).filter(function (s) { return variants[s].names[target]; })[0];
+      if (owner && !slots[target] && !bones[target]) { notes.push('ключі ' + target + ': це варіант слота ' + owner + ', став ключі на ' + owner + ' і перемикай картинку "show": "' + target + '"'); return; }
       var slotList = all ? fade.filter(function (n) { return slots[n]; }) : slots[target] ? [target] : [];
       var bone = all ? null : bones[target] ? target : slots[target] ? slots[target].bone : null;
       if (!bone && !slotList.length) { notes.push('ключі: немає частини ' + target); return; }
+      var shows = list.filter(function (k) { return k.show !== undefined; });
+      if (shows.length && !variants[target]) notes.push('ключі ' + target + ': show тільки для слота з варіантами');
+      else if (shows.length) {
+        var group = variants[target], tl = [];
+        shows.forEach(function (k) {
+          if (k.show && !group.names[k.show]) { notes.push('ключі ' + target + ': немає варіанта ' + k.show + '. Є: ' + Object.keys(group.names).join(', ')); return; }
+          var name = k.show ? group.names[k.show] : null;
+          if (name === (tl.length ? tl[tl.length - 1].name : slots[target].attachment || null)) return;
+          tl.push(k.t > 0 ? { time: r4(k.t), name: name } : { name: name });
+        });
+        if (tl.length) shown[target] = tl;
+      }
       var tr = keyGroup(list, ['x', 'y'], [0, 0]);
       var sc = keyGroup(list, ['sx', 'sy'], [1, 1]);
       var ro = keyGroup(list, ['rotate'], [0]);
@@ -957,6 +1018,10 @@
       anim.slots = anim.slots || {};
       anim.slots[sn] = s;
     });
+    Object.keys(shown).forEach(function (sn) {
+      anim.slots = anim.slots || {};
+      anim.slots[sn] = Object.assign({ attachment: shown[sn] }, anim.slots[sn] || {});
+    });
     return { anim: anim, notes: notes };
   }
 
@@ -967,7 +1032,7 @@
       Object.keys(anim[g] || {}).forEach(function (n) {
         Object.keys(anim[g][n]).forEach(function (t) {
           var tl = anim[g][n][t];
-          if (!Array.isArray(tl) || !tl.length) return;
+          if (t === 'attachment' || !Array.isArray(tl) || !tl.length) return;
           var lt = tl[tl.length - 1].time || 0;
           if (lt > bt) { bt = lt; best = tl; }
         });
@@ -984,6 +1049,157 @@
     best.push(f);
   }
 
+  var CLEAN_KINDS = ['rotate', 'translate', 'scale', 'rgba', 'rgb', 'alpha'];
+  var HIDE_MIN = 0.2;
+
+  function keyVals(kind, k) {
+    if (kind === 'rotate') return [k.value || 0];
+    if (kind === 'alpha') return [k.value === undefined ? 1 : k.value];
+    if (kind === 'translate') return [k.x || 0, k.y || 0];
+    if (kind === 'scale') return [k.x === undefined ? 1 : k.x, k.y === undefined ? 1 : k.y];
+    var c = parseHex(k.color);
+    return kind === 'rgb' ? [c.r, c.g, c.b] : [c.r, c.g, c.b, c.a];
+  }
+  function keySig(kind, k) {
+    return kind === 'rgba' || kind === 'rgb' ? String(k.color).toLowerCase() : keyVals(kind, k).join(',');
+  }
+  function setupSig(kind, slot) {
+    if (kind === 'rotate') return '0';
+    if (kind === 'translate') return '0,0';
+    if (kind === 'scale') return '1,1';
+    var c = String((slot && slot.color) || 'ffffffff').toLowerCase();
+    if (kind === 'alpha') return String(r4(parseHex(c).a));
+    return kind === 'rgb' ? c.slice(0, 6) : c;
+  }
+  function flatKeys(kind, a, b) {
+    if (keySig(kind, a) !== keySig(kind, b)) return false;
+    if (!Array.isArray(a.curve)) return true;
+    return keyVals(kind, a).every(function (v, j) { return Math.abs(a.curve[j * 4 + 1] - v) < 0.0002 && Math.abs(a.curve[j * 4 + 3] - v) < 0.0002; });
+  }
+  function cleanTrack(kind, tl, setup) {
+    if (CLEAN_KINDS.indexOf(kind) === -1 || !Array.isArray(tl)) return tl;
+    var out = tl.slice();
+    for (var i = out.length - 2; i > 0; i--) if (flatKeys(kind, out[i - 1], out[i]) && flatKeys(kind, out[i], out[i + 1])) out.splice(i, 1);
+    while (out.length > 1 && flatKeys(kind, out[out.length - 2], out[out.length - 1])) out.pop();
+    while (out.length > 1 && keySig(kind, out[0]) === setup && flatKeys(kind, out[0], out[1])) out.shift();
+    if (out.length === 1 && keySig(kind, out[0]) === setup) return [];
+    return out.map(function (k, j) {
+      var n = out[j + 1];
+      if (k.curve === undefined || (n && !flatKeys(kind, k, n))) return k;
+      var o = Object.assign({}, k);
+      delete o.curve;
+      return o;
+    });
+  }
+  function cleanAnim(anim, json) {
+    var slots = {}, d = durationOf(anim);
+    json.slots.forEach(function (s) { slots[s.name] = s; });
+    ['bones', 'slots'].forEach(function (g) {
+      Object.keys(anim[g] || {}).forEach(function (n) {
+        if (/^bar(_|$)/.test(n)) return;
+        Object.keys(anim[g][n]).forEach(function (kind) {
+          var tl = cleanTrack(kind, anim[g][n][kind], setupSig(kind, slots[n]));
+          if (tl.length) anim[g][n][kind] = tl;
+          else delete anim[g][n][kind];
+        });
+        if (!Object.keys(anim[g][n]).length) delete anim[g][n];
+      });
+      if (anim[g] && !Object.keys(anim[g]).length) delete anim[g];
+    });
+    padTo(anim, d);
+  }
+
+  function toggleKeys(spine, an, S, region, a0) {
+    var A = spine.json.animations[an], shown = a0 > 0.002;
+    var pts = (S.alpha || S.rgba || []).map(function (k) {
+      return { t: k.time || 0, a: S.alpha ? (k.value === undefined ? 1 : k.value) : parseHex(k.color).a, step: k.curve === 'stepped' };
+    });
+    if (!pts.length || pts[0].t > 0) pts.unshift({ t: 0, a: a0, step: true });
+    var d = durationOf(A), loop = spine.loops.indexOf(an) !== -1, runs = [], state = shown, keys = [];
+    pts.forEach(function (q, i) {
+      var n = pts[i + 1], prev = runs[runs.length - 1];
+      var vis = q.a > 0.002 || (!!n && !q.step && n.a > 0.002);
+      if (prev && prev.vis === vis) prev.to = n ? n.t : d;
+      else runs.push({ from: q.t, to: n ? n.t : d, vis: vis });
+    });
+    runs.forEach(function (r, i) {
+      if (!r.vis && i < runs.length - 1 && r.to - r.from < HIDE_MIN) return;
+      if (r.vis === state || (loop && r.from >= d - 0.0001)) return;
+      state = r.vis;
+      var k = r.from > 0 ? { time: r4(r.from) } : {};
+      k.name = r.vis ? region : null;
+      keys.push(k);
+    });
+    return keys;
+  }
+  function toggleParts(spine, names, seqs) {
+    var json = spine.json, slots = {};
+    json.slots.forEach(function (s) { slots[s.name] = s; });
+    names.forEach(function (name) {
+      var slot = slots[name];
+      if (!slot || !slot.attachment) return;
+      var region = slot.attachment, a0 = parseHex(slot.color || 'ffffffff').a, shown = a0 > 0.002, seq = seqs[name];
+      Object.keys(json.animations).forEach(function (an) {
+        var A = json.animations[an], S = (A.slots || {})[name] || {};
+        var keys = S.attachment || toggleKeys(spine, an, S, region, a0);
+        if (keys.length && !S.attachment) {
+          A.slots = A.slots || {};
+          A.slots[name] = Object.assign({ attachment: keys }, A.slots[name] || {});
+        }
+        if (!seq) return;
+        var starts = (shown && !(keys.length && !keys[0].time && !keys[0].name) ? [0] : []).concat(keys.filter(function (k) { return k.name; }).map(function (k) { return k.time || 0; }));
+        starts = starts.filter(function (t, i) { return starts.indexOf(t) === i; });
+        if (!starts.length) return;
+        A.attachments = A.attachments || {};
+        json.skins.forEach(function (sk) {
+          if (!sk.attachments || !sk.attachments[name] || !sk.attachments[name][seq.att]) return;
+          var at = A.attachments[sk.name] = A.attachments[sk.name] || {};
+          at[name] = {};
+          at[name][seq.att] = { sequence: starts.map(function (t) { var k = t > 0 ? { time: r4(t) } : {}; k.mode = seq.mode; k.delay = seq.delay; return k; }) };
+        });
+      });
+      if (!shown) delete slot.attachment;
+    });
+  }
+
+  function tidyRegions(spine) {
+    var shown = {}, refs = [], first = {}, alias = {}, out = [];
+    (spine.json.skins || []).forEach(function (sk) {
+      Object.keys(sk.attachments || {}).forEach(function (sn) {
+        Object.keys(sk.attachments[sn]).forEach(function (an) {
+          var a = sk.attachments[sn][an];
+          if (a.type || !(a.width > 0) || !(a.height > 0)) return;
+          var base = a.path || a.name || an, list = [base];
+          if (a.sequence) {
+            list = [];
+            for (var i = 0; i < a.sequence.count; i++) {
+              var n = String((a.sequence.start || 0) + i);
+              while (n.length < (a.sequence.digits || 0)) n = '0' + n;
+              list.push(base + n);
+            }
+          } else refs.push({ a: a, name: base });
+          list.forEach(function (name) {
+            var s = shown[name] = shown[name] || { w: 0, h: 0 };
+            s.w = Math.max(s.w, a.width * Math.abs(a.scaleX === undefined ? 1 : a.scaleX));
+            s.h = Math.max(s.h, a.height * Math.abs(a.scaleY === undefined ? 1 : a.scaleY));
+          });
+        });
+      });
+    });
+    spine.regions.forEach(function (r) {
+      var o = Object.assign({}, r), s = shown[r.name];
+      var f = s && typeof r.src === 'string' && r.src !== 'clear' && r.src !== 'white' ? Math.min(1, Math.max(s.w / r.w, s.h / r.h)) : 1;
+      f *= r.tex || 1;
+      if (f < 0.95) { o.w = Math.max(1, Math.ceil(r.w * f)); o.h = Math.max(1, Math.ceil(r.h * f)); }
+      var same = r.sum ? first[r.sum] : null;
+      if (same) { same.w = Math.max(same.w, o.w); same.h = Math.max(same.h, o.h); alias[r.name] = same.name; return; }
+      if (r.sum) first[r.sum] = o;
+      out.push(o);
+    });
+    refs.forEach(function (x) { if (alias[x.name]) x.a.path = alias[x.name]; });
+    return out;
+  }
+
   function partList(comp, reserved, notes) {
     var taken = {}, out = [], by = {};
     reserved.forEach(function (n) { taken[n] = true; });
@@ -995,68 +1211,148 @@
       by[p.name] = p;
       out.push(p);
     });
+    var groups = {};
     out.forEach(function (p) {
-      if (p.parent !== 'art' && !by[p.parent]) { notes.push('Частина ' + p.name + ': немає батька ' + p.parent + ', стала на art'); p.parent = 'art'; return; }
-      for (var q = by[p.parent], n = 0; q && n <= out.length; q = by[q.parent], n++) {
+      if (!p.slot) return;
+      if (reserved.indexOf(p.slot) !== -1 || by[p.slot]) { notes.push('Частина ' + p.name + ': слот ' + p.slot + ' збігається з назвою частини чи кістки, варіант став окремою частиною'); delete p.slot; return; }
+      if (!groups[p.slot]) groups[p.slot] = p;
+    });
+    var at = function (n) { return by[n] || groups[n]; };
+    out.forEach(function (p) {
+      var first = p.slot && groups[p.slot];
+      if (first && first !== p) { p.parent = first.parent; return; }
+      var par = at(p.parent);
+      if (p.parent !== 'art' && (!par || par.glint)) { notes.push('Частина ' + p.name + ': немає батька ' + p.parent + ', стала на art'); p.parent = 'art'; return; }
+      for (var q = par, n = 0; q && n <= out.length; q = at(q.parent), n++) {
         if (q === p) { notes.push('Частина ' + p.name + ': батьки по колу, стала на art'); p.parent = 'art'; break; }
       }
+    });
+    out.forEach(function (p) {
+      var s = p.glint && p.glint.of !== 'art' ? by[p.glint.of] : null;
+      if (!p.glint || p.glint.of === 'art' || (s && !s.bone && !s.glint && !s.slot && !s.sheet)) return;
+      notes.push('Блік ' + p.name + ': джерело ' + p.glint.of + ' має бути звичайною частиною з картинкою, взято art');
+      p.glint.of = 'art';
     });
     return out;
   }
 
-  function addParts(spine, comp, parts, ap, cx, cy, px) {
-    if (!parts.length) return;
+  function addParts(spine, comp, parts, ap, cx, cy, px, main, notes) {
+    var meta = { toggle: [], variants: {}, fans: {}, seqs: {} };
+    if (!parts.length) return meta;
     var json = spine.json;
     var short = spine.name.replace(/^animation_/, '');
-    var info = { art: { pv: ap, cx: cx, cy: cy } };
+    var info = { art: { bone: 'art', pv: ap, cx: cx, cy: cy } };
+    var geo = main ? { art: { bone: 'art', key: 'c:' + comp.id, x: -ap.x, y: -ap.y, w: main.w, h: main.h, px: main.px } } : {};
     var done = { art: true }, order = [];
     while (order.length < parts.length) {
       var moved = false;
-      parts.forEach(function (p) { if (!done[p.name] && done[p.parent]) { done[p.name] = true; order.push(p); moved = true; } });
+      parts.forEach(function (p) {
+        if (order.indexOf(p) !== -1 || !done[p.parent] || (p.glint && p.glint.of !== 'art' && !done[p.glint.of])) return;
+        done[p.name] = true;
+        if (p.slot) done[p.slot] = true;
+        order.push(p);
+        moved = true;
+      });
       if (!moved) break;
     }
-    var pts = [], slotOf = {}, att = {};
+    var pts = [], slotsOf = {}, att = {};
+    var regionOf = function (n) { return 'art/' + short + '/' + (n === short ? n + '_part' : n); };
+    var put = function (slot, key, a) { att[slot] = att[slot] || {}; att[slot][key] = a; };
+    var offset = function (o, x, y) { if (r2(x)) o.x = r2(x); if (r2(y)) o.y = r2(y); return o; };
     order.forEach(function (p) {
-      var key = 'p:' + comp.id + ':' + p.name;
-      var q = px(key);
-      var w = p.w || (q ? q.w : 100), h = p.h || (q ? q.h : 100);
-      if (!q) q = { w: Math.max(1, Math.round(w)), h: Math.max(1, Math.round(h)) };
-      var pv = pivotOf(p.pivot, w, h);
+      if (p.glint) {
+        var src = geo[p.glint.of];
+        if (!src) { notes.push('Блік ' + p.name + ': у джерела ' + p.glint.of + ' немає картинки'); return; }
+        var kx = src.w / src.px.w, ky = src.h / src.px.h, bands = [], dark = 0;
+        for (var i = 0; i < p.glint.bands; i++) {
+          var gk = ['gl', i, p.glint.bands, p.glint.angle, p.glint.level, p.tex || 0.5, src.key].join(':');
+          var gq = px(gk), sn = p.name + '_' + (i + 1), reg = regionOf(p.name) + '_' + (i + 1);
+          if (gq && gq.empty) dark++;
+          var ga = gq ? offset({}, src.x + gq.ox * kx, src.y - gq.oy * ky) : offset({}, src.x, src.y);
+          ga.width = r2(gq ? gq.cw * kx : src.w);
+          ga.height = r2(gq ? gq.ch * ky : src.h);
+          put(sn, reg, ga);
+          bands.push({ name: sn, bone: src.bone, color: 'ffffff00', attachment: reg, blend: p.blend || 'additive' });
+          spine.regions.push({ name: reg, w: gq ? gq.w : 16, h: gq ? gq.h : 16, src: gk, sum: gq ? gq.sum : undefined });
+          meta.toggle.push(sn);
+        }
+        if (dark === p.glint.bands) notes.push('Блік ' + p.name + ': у джерелі немає пікселів, яскравіших за level ' + p.glint.level + ', знизь level');
+        slotsOf[p.name] = bands;
+        meta.fans[p.name] = { slots: bands.map(function (s) { return s.name; }), step: p.glint.step };
+        return;
+      }
       var par = info[p.parent];
-      var b = { name: p.name, parent: p.parent };
-      var bx = r2(p.x + pv.x - par.pv.x), by = r2(p.y + pv.y - par.pv.y);
-      if (bx) b.x = bx;
-      if (by) b.y = by;
+      if (p.bone) {
+        var pb = offset({ name: p.name, parent: par.bone }, p.x - par.pv.x, p.y - par.pv.y);
+        if (p.rotate) pb.rotation = p.rotate;
+        json.bones.push(pb);
+        info[p.name] = { bone: p.name, pv: { x: 0, y: 0 }, cx: par.cx + p.x, cy: par.cy + p.y };
+        return;
+      }
+      var key = 'p:' + comp.id + ':' + p.name, q = px(key), region = regionOf(p.name);
+      var sheet = p.sheet && q && q.sum ? p.sheet : null;
+      if (p.sheet && !sheet) notes.push('Сиквенція ' + p.name + ': немає картинки з розкладкою кадрів');
+      var fw = sheet ? Math.floor(q.w / sheet.cols) : 0, fh = sheet ? Math.floor(q.h / sheet.rows) : 0;
+      var w = p.w || (sheet ? fw : q ? q.w : 100), h = p.h || (sheet ? fh : q ? q.h : 100);
+      if (!q) q = { w: Math.max(1, Math.round(w)), h: Math.max(1, Math.round(h)) };
+      pts = pts.concat(corners(par.cx + p.x, par.cy + p.y, w, h));
+      if (!sheet) spine.regions.push({ name: region, w: q.w, h: q.h, src: key, sum: q.sum, tex: p.tex });
+      var group = p.slot ? meta.variants[p.slot] : null;
+      if (group) {
+        var f = group.first, rad = -(f.rotate || 0) * Math.PI / 180, dx = p.x - f.x - group.pv.x, dy = p.y - f.y - group.pv.y;
+        var va = offset({}, dx * Math.cos(rad) - dy * Math.sin(rad), dx * Math.sin(rad) + dy * Math.cos(rad));
+        if (r2((p.rotate || 0) - (f.rotate || 0))) va.rotation = r2((p.rotate || 0) - (f.rotate || 0));
+        va.width = r2(w);
+        va.height = r2(h);
+        put(p.slot, region, va);
+        group.names[p.name] = region;
+        if (!group.slot.attachment && p.alpha === undefined) group.slot.attachment = region;
+        info[p.name] = info[p.slot];
+        return;
+      }
+      var pv = pivotOf(p.pivot, w, h), bone = p.slot || p.name;
+      var b = offset({ name: bone, parent: par.bone }, p.x + pv.x - par.pv.x, p.y + pv.y - par.pv.y);
       if (p.rotate) b.rotation = p.rotate;
       json.bones.push(b);
-      info[p.name] = { pv: pv, cx: par.cx + p.x, cy: par.cy + p.y };
-      pts = pts.concat(corners(par.cx + p.x, par.cy + p.y, w, h));
-      var region = 'art/' + short + '/' + (p.name === short ? p.name + '_part' : p.name);
-      var slot = { name: p.name, bone: p.name, attachment: region };
-      if (p.alpha !== undefined) slot.color = 'ffffff' + hex2(p.alpha);
-      if (p.blend) slot.blend = p.blend;
-      slotOf[p.name] = slot;
-      var a = {};
-      if (r2(-pv.x)) a.x = r2(-pv.x);
-      if (r2(-pv.y)) a.y = r2(-pv.y);
+      info[p.name] = { bone: bone, pv: pv, cx: par.cx + p.x, cy: par.cy + p.y };
+      var slot = { name: bone, bone: bone };
+      var a = offset({}, -pv.x, -pv.y);
       a.width = r2(w);
       a.height = r2(h);
-      att[p.name] = {};
-      att[p.name][region] = a;
-      spine.regions.push({ name: region, w: q.w, h: q.h, src: key });
+      if (p.slot) {
+        info[p.slot] = info[p.name];
+        meta.variants[p.slot] = { first: p, pv: pv, slot: slot, names: {} };
+        meta.variants[p.slot].names[p.name] = region;
+        if (p.alpha === undefined) slot.attachment = region;
+        put(bone, region, a);
+      } else if (sheet) {
+        a.sequence = { count: sheet.count, start: 0 };
+        slot.attachment = region + '_';
+        put(bone, region + '_', a);
+        for (var j = 0; j < sheet.count; j++) spine.regions.push({ name: region + '_' + j, w: fw, h: fh, src: ['fr', j, sheet.cols, sheet.rows, key].join(':'), sum: q.sum + '#' + j + '/' + sheet.cols + 'x' + sheet.rows, tex: p.tex });
+        meta.seqs[bone] = { att: region + '_', mode: p.play || 'loop', delay: r4(1 / (p.fps || 24)) };
+      } else {
+        slot.attachment = region;
+        put(bone, region, a);
+        geo[p.name] = { bone: bone, key: key, x: -pv.x, y: -pv.y, w: w, h: h, px: q };
+      }
+      if (!p.slot && p.alpha !== undefined) slot.color = 'ffffff' + hex2(p.alpha);
+      if (p.blend) slot.blend = p.blend;
+      slotsOf[p.name] = [slot];
+      meta.toggle.push(bone);
     });
     var at = json.slots.map(function (s) { return s.name; }).indexOf('art');
-    var over = parts.filter(function (p) { return slotOf[p.name] && !p.behind; }).map(function (p) { return slotOf[p.name]; });
-    var under = parts.filter(function (p) { return slotOf[p.name] && p.behind; }).map(function (p) { return slotOf[p.name]; });
-    json.slots.splice.apply(json.slots, [at + 1, 0].concat(over));
-    json.slots.splice.apply(json.slots, [at, 0].concat(under));
+    var layer = function (behind) { return [].concat.apply([], parts.filter(function (p) { return slotsOf[p.name] && !!p.behind === behind; }).map(function (p) { return slotsOf[p.name]; })); };
+    json.slots.splice.apply(json.slots, [at + 1, 0].concat(layer(false)));
+    json.slots.splice.apply(json.slots, [at, 0].concat(layer(true)));
     json.skins.forEach(function (s) { if (s.attachments) Object.assign(s.attachments, clone(att)); });
     var sk = json.skeleton;
     var bb = bounds(pts.concat([[sk.x, sk.y], [sk.x + sk.width, sk.y + sk.height]]));
     sk.x = bb.x; sk.y = bb.y; sk.width = bb.width; sk.height = bb.height;
+    return meta;
   }
 
-  function applyKeys(spine, comp, fade, notes) {
+  function applyKeys(spine, comp, fade, notes, meta) {
     var anims = spine.json.animations;
     var seen = {};
     (comp.anims || []).forEach(function (row) {
@@ -1067,7 +1363,7 @@
       var nk = normKeys(row.keys);
       nk.errors.forEach(function (e) { notes.push(n + ': ' + e); });
       if (!Object.keys(nk.keys).length) return;
-      var k = keyedAnim(nk.keys, spine.json, fade);
+      var k = keyedAnim(nk.keys, spine.json, fade, meta);
       k.notes.forEach(function (e) { notes.push(n + ': ' + e); });
       anims[n] = mergeAnim(anims[n], k.anim);
       padTo(anims[n], specsFrom([row], 'custom')[0].duration);
@@ -1090,8 +1386,12 @@
     var reserved = ['root', 'art'].concat(bar ? BAR_NAMES : []);
     spacers.forEach(function (sp) { reserved.push(sp.slot, sp.slot + '_bone'); });
     var parts = partList(comp, reserved, notes);
-    var shown = parts.filter(function (q) { return q.alpha === undefined; }).map(function (q) { return q.name; });
-    var also = txt.concat(bar ? ['bar_fill', 'bar_shine', 'bar_head'] : [], shown);
+    var shown = [];
+    parts.forEach(function (q) {
+      var n = q.slot || q.name;
+      if (!q.bone && !q.glint && q.alpha === undefined && shown.indexOf(n) === -1) shown.push(n);
+    });
+    var also = txt.concat(bar ? ['bar_fill', 'bar_head'] : [], shown);
     var specs = specsFrom(comp.anims, 'custom').map(function (sp) {
       if (txt.length && /(^|_)txt$/.test(sp.name)) sp.ctx = { bone: txt[0], slot: txt[0], w: w, h: h, cellH: g.H, also: txt.slice(1) };
       return sp;
@@ -1111,9 +1411,17 @@
       specs: specs,
       ctx: { bone: 'art', slot: 'art', w: w, h: h, cellH: g.H, also: also }
     }, tech);
-    addParts(spine, comp, parts, ap, cx, cy, px);
+    if (comp.bone === true) {
+      spine.json.slots.forEach(function (s) { if (s.name === 'art') delete s.attachment; });
+      spine.json.skins.forEach(function (s) { if (s.attachments) delete s.attachments.art; });
+      spine.regions = spine.regions.filter(function (r) { return r.src !== key; });
+    }
+    var meta = addParts(spine, comp, parts, ap, cx, cy, px, comp.bone === true ? null : { w: w, h: h, px: p }, notes);
     if (bar) withBar(spine, { x: bar.x - ap.x, y: bar.y - ap.y, w: bar.w, h: bar.h }, name, tech);
-    applyKeys(spine, comp, ['art'].concat(also), notes);
+    applyKeys(spine, comp, ['art'].concat(also), notes, meta);
+    Object.keys(spine.json.animations).forEach(function (n) { cleanAnim(spine.json.animations[n], spine.json); });
+    toggleParts(spine, meta.toggle, meta.seqs);
+    spine.custom = true;
     spine.notes = notes;
     return spine;
   }
@@ -1178,14 +1486,133 @@
     };
   }
 
+  var SOFT_NAME = /(glow|flash|blur|smoke|shadow|light|ray|fog|shine|flare|dim|haze)/;
+
+  function audit(spine, regions, page, tech) {
+    var json = spine.json, slots = json.slots || [], anims = json.animations || {};
+    var atts = {}, px = {}, on = {}, keys = 0, secs = 0, dense = [], swaps = [], long = [], raw = !!spine.raw;
+    var deepKeys = function (o) { if (Array.isArray(o)) return o.length; var n = 0; if (isObj(o)) Object.keys(o).forEach(function (k) { n += deepKeys(o[k]); }); return n; };
+    skinList(json).forEach(function (sk) {
+      Object.keys(sk.attachments || {}).forEach(function (sn) { if (isObj(sk.attachments[sn])) atts[sn] = Object.assign({}, sk.attachments[sn], atts[sn] || {}); });
+    });
+    regions.forEach(function (r) { px[r.name] = r; });
+    Object.keys(anims).forEach(function (an) {
+      var A = anims[an];
+      secs += durationOf(A);
+      if (raw) keys += deepKeys(A.ik) + deepKeys(A.transform) + deepKeys(A.path) + deepKeys(A.attachments) + deepKeys(A.deform) + deepKeys(A.drawOrder || A.draworder) + deepKeys(A.events);
+      ['bones', 'slots'].forEach(function (g) {
+        Object.keys(A[g] || {}).forEach(function (n) {
+          Object.keys(A[g][n]).forEach(function (kind) {
+            var tl = A[g][n][kind];
+            if (!Array.isArray(tl) || !tl.length) return;
+            keys += tl.length;
+            if (kind === 'attachment') { if (tl.some(function (k) { return k.name; })) on[n] = true; return; }
+            if (g === 'slots' && kind === 'alpha' && tl.length > 1 && swaps.indexOf(n) === -1 && tl.every(function (k, i) { return (k.value === 0 || k.value === 1) && (i === tl.length - 1 || k.curve === 'stepped'); })) swaps.push(n);
+            var span = (tl[tl.length - 1].time || 0) - (tl[0].time || 0);
+            if (tl.length >= 12 && span > 0 && (tl.length - 1) / span >= 20 && dense.indexOf(an + ' / ' + n) === -1) dense.push(an + ' / ' + n);
+          });
+        });
+      });
+    });
+    var masks = [], unused = [], stretched = [], soft = [], groups = {}, seen = {}, runs = 0, last = null;
+    slots.forEach(function (s) {
+      var list = Object.keys(atts[s.name] || {}).map(function (k) { return { key: k, a: atts[s.name][k] }; }).filter(function (x) { return isObj(x.a); });
+      if (list.some(function (x) { return x.a.type === 'clipping'; })) { masks.push(s.name); return; }
+      var imgs = list.filter(function (x) { return (!x.a.type || x.a.type === 'region' || x.a.type === 'mesh' || x.a.type === 'linkedmesh') && x.key !== tech.spacer && x.a.path !== tech.spacer; });
+      if (!imgs.length) return;
+      if (!s.attachment && !on[s.name]) { unused.push(s.name); return; }
+      var blend = s.blend || 'normal';
+      if (blend !== last) { runs++; last = blend; }
+      var base = /^(.*?)[_-]?\d+$/.exec(s.name);
+      if (base && base[1]) groups[base[1]] = (groups[base[1]] || 0) + 1;
+      imgs.forEach(function (x) {
+        if (x.a.sequence && x.a.sequence.count > 24) long.push(s.name + ' ' + x.a.sequence.count);
+        var r = px[x.a.path || x.a.name || x.key];
+        if (!r || !r.sum || seen[r.name] || !(x.a.width > 0) || !(x.a.height > 0)) return;
+        var aw = x.a.width * Math.abs(x.a.scaleX === undefined ? 1 : x.a.scaleX), ah = x.a.height * Math.abs(x.a.scaleY === undefined ? 1 : x.a.scaleY);
+        var k = Math.max(aw / r.w, ah / r.h), mild = blend !== 'normal' || SOFT_NAME.test(s.name);
+        var label = r.name.split('/').pop();
+        if (!mild && k > (Math.max(aw, ah) > 2048 ? 2.5 : 1.3)) { seen[r.name] = true; stretched.push(label + ' ×' + r2(k)); }
+        if (mild && k < 1.5 && Math.max(r.w, r.h) > 512) { seen[r.name] = true; soft.push(label + ' ' + r.w + '×' + r.h); }
+      });
+    });
+    var notes = [], rate = secs > 0 ? Math.round(keys / secs) : 0;
+    if (spine.custom) {
+      var many = Object.keys(groups).filter(function (g) { return groups[g] >= 8; }).map(function (g) { return g + ' ×' + groups[g]; });
+      if (masks.length) notes.push('Маски: ' + masks.join(', ') + '. Кожна рве батч у грі: лишай маску лише там, де без неї ніяк');
+      if (unused.length) notes.push(raw ? 'Слоти без картинки в сетапі й без ключів attachment: ' + unused.join(', ') + '. Якщо гра не вмикає їх сама, вони зайві' : 'Ніде не показуються: ' + unused.join(', ') + '. Прибери ці частини або додай їм ключі alpha');
+      if (stretched.length) notes.push('Розтягнуті картинки: ' + stretched.join(', ') + '. Чітка графіка змилиться: дай більший файл або зменш розмір у грі');
+      if (soft.length) notes.push('Мʼякі текстури на повний розмір: ' + soft.join(', ') + (raw ? '. Збережи їх удвічі меншими й розтягни в скелеті: світінню, диму і спалахам це не шкодить' : '. Постав цим частинам текстуру 0.5 ("tex"): світіння, дим і спалахи скелет розтягне сам'));
+      if (swaps.length > 1) notes.push('Підміна картинок через alpha: ' + swaps.join(', ') + (raw ? '. Склади їх в один слот і перемикай ключами attachment' : '. Зроби їх варіантами одного слота ("slot") і перемикай ключем "show"'));
+      if (long.length) notes.push('Довгі сиквенції: ' + long.join(', ') + ' кадрів. У готових іграх зазвичай 9–16: проріди кадри');
+      if (many.length && !raw) notes.push('Багато однотипних частин: ' + many.join(', ') + '. Схоже на покадровий ефект із частин: спрости до кількох рухомих або лиши покадровку аніматору');
+      if (dense.length) notes.push('Ключ на кожен кадр: ' + dense.slice(0, 6).join(', ') + (dense.length > 6 ? ' і ще ' + (dense.length - 6) : '') + '. Лиши ключі тільки там, де рух змінюється');
+      if (rate > 220) notes.push('Ключів на секунду: ' + rate + ' (у 90 % готових спайнів до 220). Спрости рух або прибери зайві ' + (raw ? 'слоти' : 'частини'));
+      if (slots.length > 70) notes.push('Слотів: ' + slots.length + ' (у 90 % готових спайнів до 70). Обʼєднай або прибери ' + (raw ? 'слоти' : 'частини'));
+      if (runs > 4) notes.push('Блендинг чергується: ' + runs + ' груп normal / additive поспіль, кожна дає окремий draw call. ' + (raw ? 'Постав адитивні слоти поруч у порядку малювання' : 'Постав адитивні частини поруч у списку'));
+    }
+    return {
+      slots: slots.length, on_in_setup: slots.filter(function (s) { return s.attachment; }).length, masks: masks.length, draw_calls: runs + masks.length * 2,
+      keys: keys, keys_per_second: rate, atlas: page.label || page.width + '×' + page.height, images: regions.length, notes: notes
+    };
+  }
+
+  function rawSpine(input, techIn) {
+    var tech = Object.assign({}, TECH, techIn || {});
+    var name = String(input.name || '').replace(/\.json$/i, '');
+    var jsonText = String(input.jsonText || '').replace(/^\uFEFF/, '');
+    var json = JSON.parse(jsonText);
+    if (!isObj(json) || !isObj(json.skeleton) || !Array.isArray(json.bones)) throw new Error('Це не файл Spine: немає skeleton і bones');
+    var atlasText = String(input.atlasText || '');
+    var atlas = atlasOf(atlasText);
+    var nums = function (v) { return String(v === undefined ? '' : v).split(',').map(function (x) { return parseFloat(x); }).filter(function (x) { return isFinite(x); }); };
+    var regions = atlas.regions.map(function (r) { var o = nums(r.f.orig), f = nums(r.f.offsets); return { name: r.name, w: f[2] || o[0] || r.w || 1, h: f[3] || o[1] || r.h || 1, sum: r.name }; });
+    var page = { width: 0, height: 0, label: atlas.pages.map(function (p) { return p.w + '×' + p.h; }).join(' + ') };
+    atlas.pages.forEach(function (p) { page.width = Math.max(page.width, p.w); page.height = Math.max(page.height, p.h); });
+    var anims = isObj(json.animations) ? json.animations : {};
+    var entry = {
+      name: name,
+      skins: skinList(json).map(function (s) { return s.name; }),
+      animations: Object.keys(anims).map(function (n) {
+        var a = { name: n, duration: durationOf(anims[n]) };
+        var ev = ((anims[n] && anims[n].events) || []).map(function (e) { var o = { name: e.name }; if (e.int !== undefined && e.int !== 0) o.int = e.int; return o; });
+        if (ev.length) a.events = ev;
+        return a;
+      }),
+      decorationSpacers: spacerSlots(json, tech.spacer)
+    };
+    var findings = checkExport({ spineName: name, jsonText: jsonText, atlasText: atlasText, pngs: input.pages || {} }, { tech: tech, spines: [entry] }).findings;
+    var kinds = { region: 0, mesh: 0, clipping: 0, other: 0 };
+    skinList(json).forEach(function (s) {
+      Object.keys(s.attachments || {}).forEach(function (sl) {
+        var o = s.attachments[sl];
+        if (!isObj(o)) return;
+        Object.keys(o).forEach(function (k) { var t = (o[k] && o[k].type) || 'region'; kinds[t === 'region' ? 'region' : t === 'mesh' || t === 'linkedmesh' ? 'mesh' : t === 'clipping' ? 'clipping' : 'other']++; });
+      });
+    });
+    return {
+      name: name, raw: true, json: json, jsonText: jsonText, atlasText: atlasText, loops: [], regions: regions, contract: entry, findings: findings,
+      warnings: findings.filter(function (f) { return f.level !== 'info'; }).map(function (f) { return f.title + (f.detail ? ': ' + f.detail : ''); }),
+      audit: audit({ name: name, json: json, custom: true, raw: true }, regions, page, tech),
+      stats: {
+        version: String(json.skeleton.spine || ''), bones: json.bones.length, slots: (json.slots || []).length, skins: entry.skins.length, animations: entry.animations.length,
+        constraints: (json.ik || []).length + (json.transform || []).length + (json.path || []).length, attachments: kinds,
+        events: isObj(json.events) ? Object.keys(json.events) : [], pages: atlas.pages.map(function (p) { return { name: p.name, w: p.w, h: p.h }; })
+      }
+    };
+  }
+
   function finalize(spine, tech) {
-    var page = pack(spine.regions, tech.padding, tech.maxPage);
+    var regions = tidyRegions(spine);
+    var page = pack(regions, tech.padding, tech.maxPage);
     var pageName = spine.name + '.png';
     var importJson = clone(spine.json);
     importJson.skeleton.images = './';
     var warnings = (spine.notes || []).slice();
     if (page.width > tech.maxPage || page.height > tech.maxPage) warnings.push('Атлас ' + page.width + '×' + page.height + ' більший за ' + tech.maxPage + ' px');
     return Object.assign({}, spine, {
+      regions: regions,
+      audit: audit(spine, regions, page, tech),
       pageName: pageName,
       page: page,
       atlasText: atlasText(pageName, page),
@@ -1407,7 +1834,7 @@
         if (r.r.index !== undefined && parseInt(r.r.index, 10) >= 0) add('warning', 'Атлас з індексами: ' + r.name + ' index ' + r.r.index, 'пакуйте з useIndexes: false');
         if (r.r.rotate !== undefined && ['true', 'false', '0', '90'].indexOf(String(r.r.rotate)) === -1) add('error', 'Регіон ' + r.name + ': rotate ' + r.r.rotate);
       });
-      atts.forEach(function (a) { if (names.indexOf(a) === -1) add('error', 'Регіону ' + a + ' немає в атласі'); });
+      atts.forEach(function (a) { if (!names.some(function (n) { return n.indexOf(a) === 0 && /^\d*$/.test(n.slice(a.length)); })) add('error', 'Регіону ' + a + ' немає в атласі'); });
       var pngs = input.pngs || {};
       if (Object.keys(pngs).length) {
         pages.forEach(function (pg) {
@@ -1560,8 +1987,18 @@
   }
   function boundsOf(rt) {
     var off = new rt.sp.Vector2(), size = new rt.sp.Vector2();
+    var x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
     rt.sk.setToSetupPose();
     rt.sk.updateWorldTransform();
+    rt.sk.drawOrder.forEach(function (slot) {
+      var a = slot.getAttachment(), v = null;
+      if (!a || !slot.bone.active || !(slot.color.a > 0) || typeof a.computeWorldVertices !== 'function') return;
+      if (a.offset) { v = new Float32Array(8); a.computeWorldVertices(slot, v, 0, 2); }
+      else if (a.triangles) { v = new Float32Array(a.worldVerticesLength); a.computeWorldVertices(slot, 0, a.worldVerticesLength, v, 0, 2); }
+      if (!v) return;
+      for (var i = 0; i < v.length; i += 2) { x0 = Math.min(x0, v[i]); x1 = Math.max(x1, v[i]); y0 = Math.min(y0, v[i + 1]); y1 = Math.max(y1, v[i + 1]); }
+    });
+    if (x1 >= x0 && y1 >= y0) return { w: x1 - x0, h: y1 - y0 };
     rt.sk.getBounds(off, size, []);
     return isFinite(size.x) && isFinite(size.y) ? { w: size.x, h: size.y } : null;
   }
@@ -1917,6 +2354,7 @@
     findWindow: findWindow,
     readme: readme,
     checkExport: checkExport,
+    rawSpine: rawSpine,
     finalCheck: finalCheck,
     atlasOf: atlasOf,
     renamePages: renamePages,

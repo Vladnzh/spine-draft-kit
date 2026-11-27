@@ -90,19 +90,20 @@
     dimCache.set(blob, d);
     return d;
   }
-  async function ref(S, blob, name) {
+  async function ref(S, blob, name, role) {
     var h = await S.hashOf(blob);
-    if (!h.type) return null;
+    var type = h.type || (role === 'spine:json' ? 'json' : role === 'spine:atlas' ? 'atlas' : null);
+    if (!type) return null;
     await S.upload(h.sha);
-    var d = await dims(blob);
-    return { sha: h.sha, name: String(name || '').slice(0, 200), type: h.type, w: d.w, h: d.h };
+    var d = h.type ? await dims(blob) : { w: 0, h: 0 };
+    return { sha: h.sha, name: String(name || '').slice(0, 200), type: type, w: d.w, h: d.h };
   }
   async function refs(S, images) {
     var out = {};
     var roles = Object.keys(images || {});
     for (var i = 0; i < roles.length; i++) {
       var x = images[roles[i]];
-      var rf = x && x.blob ? await ref(S, x.blob, x.name) : null;
+      var rf = x && x.blob ? await ref(S, x.blob, x.name, roles[i]) : null;
       if (rf) out[roles[i]] = rf;
     }
     return out;

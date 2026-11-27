@@ -132,7 +132,7 @@
   function K() { return App.K; }
   function needProject() { if (!S().pid) throw new Error('Немає відкритого проекту'); }
   function symComp() { return S().s.components.filter(function (c) { return c.type === 'symbols'; })[0]; }
-  function spineOf(c) { return 'animation_' + (K().slug(c.name).replace(/^animation_/, '') || 'element'); }
+  function spineOf(c) { return c.raw ? c.raw.name : 'animation_' + (K().slug(c.name).replace(/^animation_/, '') || 'element'); }
   function symName(n) { return K().slug(n).replace(/^animation_symbol_/, '').replace(/^symbol_/, '').replace(/_blur$/, ''); }
   function clamp(v, a, b) { return Math.min(b, Math.max(a, Math.round(Number(v)))); }
   function num(v) { return v !== undefined && v !== null && isFinite(Number(v)); }
@@ -188,7 +188,7 @@
     return rows;
   }
 
-  var BAR_PARTS = ['bar', 'bar_fill', 'bar_shine', 'bar_head', 'bar_glow', 'bar_clip', 'bar_flash'];
+  var BAR_PARTS = ['bar', 'bar_grow', 'bar_fill', 'bar_head', 'bar_sweep', 'bar_shine', 'bar_glow', 'bar_flash'];
   function reservedOf(c) {
     var out = ['root', 'art'];
     K().listOf(c.spacers).forEach(function (s) { var n = K().slug(String(s).split('@')[0]); if (n) out.push(n, n + '_bone'); });
@@ -204,15 +204,16 @@
     });
   }
   function renamePartRefs(c, from, to) {
-    (c.parts || []).forEach(function (p) { if (p.parent === from) p.parent = to; });
+    (c.parts || []).forEach(function (p) { if (p.parent === from) p.parent = to; if (p.glint && p.glint.of === from) p.glint.of = to; });
     (c.anims || []).forEach(function (a) {
+      Object.keys(a.keys && typeof a.keys === 'object' ? a.keys : {}).forEach(function (t) { if (Array.isArray(a.keys[t])) a.keys[t].forEach(function (k) { if (k && k.show === from) k.show = to; }); });
       if (!a.keys || !a.keys[from]) return;
       var next = {};
       Object.keys(a.keys).forEach(function (k) { next[k === from ? to : k] = a.keys[k]; });
       a.keys = next;
     });
   }
-  var PART_FIELDS = ['parent', 'x', 'y', 'w', 'h', 'pivot', 'rotate', 'behind', 'blend', 'alpha', 'shape', 'color'];
+  var PART_FIELDS = ['parent', 'x', 'y', 'w', 'h', 'pivot', 'rotate', 'behind', 'blend', 'alpha', 'shape', 'color', 'bone', 'slot', 'glint', 'sheet', 'fps', 'play', 'tex'];
   async function applyParts(c, list, mode, remove) {
     var Kit = K();
     if (!Array.isArray(c.parts)) c.parts = [];
@@ -250,13 +251,28 @@
       if (set(it.shape) && Kit.SHAPES.indexOf(it.shape) === -1) throw new Error(name + ': shape ' + it.shape + ', можна ' + Kit.SHAPES.filter(Boolean).join(', '));
       if (set(it.pivot) && it.pivot !== 'center' && !Kit.pivotName(it.pivot)) throw new Error(name + ': pivot ' + it.pivot + ', можна center, bottom, top, left, right або "x:y"');
       if (set(it.color) && !Kit.hexOf(it.color)) throw new Error(name + ': color як "ffcc00"');
-      ['x', 'y', 'w', 'h', 'rotate', 'alpha'].forEach(function (f) { if (set(it[f]) && !num(it[f])) throw new Error(name + '.' + f + ' має бути числом'); });
+      ['x', 'y', 'w', 'h', 'rotate', 'alpha', 'fps', 'tex'].forEach(function (f) { if (set(it[f]) && !num(it[f])) throw new Error(name + '.' + f + ' має бути числом'); });
+      if (set(it.slot) && !Kit.slug(it.slot)) throw new Error(name + ': slot як "eyes"');
+      if (set(it.glint) && typeof it.glint !== 'object') throw new Error(name + ': glint як {"of": "art", "bands": 3}');
+      if (set(it.sheet) && (typeof it.sheet !== 'object' || !num(it.sheet.cols) || !num(it.sheet.rows))) throw new Error(name + ': sheet як {"cols": 4, "rows": 3, "count": 12}');
+      if (set(it.play) && ['loop', 'once', 'pingpong'].indexOf(it.play) === -1) throw new Error(name + ': play loop, once або pingpong');
       if (!p) { p = { name: name }; c.parts.push(p); }
       PART_FIELDS.forEach(function (f) { if (it[f] === null) delete p[f]; else if (it[f] !== undefined) p[f] = it[f]; });
       if (it.remove_image) App.forgetImage(App.partKey(c, name));
       if (it.image) {
         var nat = await putImage(App.partKey(c, name), it.image);
-        if (!num(it.w) && !num(it.h)) { p.w = nat.w; p.h = nat.h; }
+        if (!num(it.w) && !num(it.h)) { p.w = p.sheet ? Math.floor(nat.w / p.sheet.cols) : nat.w; p.h = p.sheet ? Math.floor(nat.h / p.sheet.rows) : nat.h; }
+      }
+      if (Array.isArray(it.frames) && it.frames.length) {
+        var shots = [];
+        for (var fi = 0; fi < it.frames.length; fi++) shots.push(await getBlob(it.frames[fi]));
+        var made = await App.sheetFrom(App.partKey(c, name), shots, { name: name, max_frames: it.max_frames, max_px: it.max_px });
+        delete p.bone;
+        delete p.glint;
+        delete p.slot;
+        p.sheet = { cols: made.cols, rows: made.rows, count: made.count };
+        if (!num(it.w) && !num(it.h)) { p.w = made.w; p.h = made.h; }
+        p.fps = Math.max(1, Math.round((num(it.fps) ? Number(it.fps) : 24) / made.step));
       }
       var clean = Kit.normPart(p);
       Object.keys(p).forEach(function (k) { delete p[k]; });
@@ -264,7 +280,7 @@
       if (names.indexOf(name) === -1) names.push(name);
     }
     c.parts.forEach(function (p) {
-      if (p.parent !== 'art' && !find(p.parent)) throw new Error(p.name + ': немає батька ' + p.parent + '. Є: art, ' + c.parts.map(function (x) { return x.name; }).join(', '));
+      if (p.parent !== 'art' && !find(p.parent) && !c.parts.some(function (x) { return x.slot === p.parent; })) throw new Error(p.name + ': немає батька ' + p.parent + '. Є: art, ' + c.parts.map(function (x) { return x.name; }).join(', '));
     });
     if (mode === 'replace') {
       c.parts.filter(function (p) { return names.indexOf(p.name) === -1; }).forEach(drop);
@@ -272,6 +288,7 @@
     }
     if (!c.parts.length) delete c.parts;
   }
+  function setBone(c, v) { if (v === true) c.bone = true; else delete c.bone; }
   function setPivot(c, v) {
     if (v === null || v === '' || v === 'center') { delete c.pivot; return; }
     var pv = K().pivotName(v);
@@ -279,11 +296,14 @@
     c.pivot = pv;
   }
 
-  async function putImage(key, img) {
+  async function getBlob(img) {
     if (!img || !img.blob) throw new Error('картинка не передана');
     var r = await fetch('/api/bridge/blobs/' + img.blob, { cache: 'no-store' });
     if (!r.ok) throw new Error('картинка не дійшла: ' + img.name);
-    var blob = await r.blob();
+    return r.blob();
+  }
+  async function putImage(key, img) {
+    var blob = await getBlob(img);
     try { return await App.setImage(key, blob, img.name); } catch (e) { throw new Error('картинка не читається: ' + img.name); }
   }
 
@@ -313,6 +333,8 @@
     if (key) o.image = S().images[key] ? S().images[key].fileName || true : false;
     if (c.anims) o.anims = c.anims;
     if (c.finals && Object.keys(c.finals).length) o.finals = App.fin.list(c);
+    var sp = c.type === 'custom' && S().plan ? S().plan.spines.filter(function (s) { return s.comp === c.id; })[0] : null;
+    if (sp && sp.audit) o.optimization = sp.audit;
     return o;
   }
   function finalOf(sp) {
@@ -479,6 +501,7 @@
     return c;
   }
   function sbWarn(c) { var sp = SB().plan(c); return sp ? sp.warnings : ['спайн не зібрався']; }
+  function sbOpt(c) { var sp = SB().plan(c); return sp ? sp.audit : null; }
   function animSnap(c) { var o = {}; (c.anims || []).forEach(function (a) { if (a) o[a.name] = JSON.stringify(a); }); return o; }
   function animChanged(before, c) { return (c.anims || []).filter(function (a) { return a && before[a.name] !== JSON.stringify(a); }).map(function (a) { return a.name; }); }
   async function sbFields(c, a) {
@@ -488,6 +511,7 @@
     if (typeof a.spacers === 'string') c.spacers = a.spacers;
     if (typeof a.bar === 'string') c.bar = a.bar.trim();
     if (a.pivot !== undefined) setPivot(c, a.pivot);
+    if (a.bone !== undefined) setBone(c, a.bone);
     if (Array.isArray(a.anims)) c.anims = a.anims_mode === 'merge' ? mergeAnims(c.anims || [], a.anims) : normAnims(a.anims);
     if (a.parts || a.remove_parts) await applyParts(c, a.parts, a.parts_mode, a.remove_parts);
     if (a.remove_image) App.forgetImage('c:' + c.id);
@@ -511,6 +535,21 @@
     out.images = film.images || [];
     return out;
   }
+  async function bridgeFiles(list) {
+    var src = (Array.isArray(list) ? list : [list]).filter(Boolean), out = [];
+    if (!src.length) throw new Error('from_spine порожній: потрібні <спайн>.json, <спайн>.atlas і .png сторінки атласу');
+    for (var i = 0; i < src.length; i++) {
+      var f = src[i];
+      if (!f.blob) throw new Error('файл не передано: ' + (f.name || i));
+      var r = await fetch('/api/bridge/blobs/' + f.blob, { cache: 'no-store' });
+      if (!r.ok) throw new Error('файл не дійшов: ' + f.name);
+      var b = await r.blob(), file = new File([b], f.name, { type: b.type });
+      file.kitPath = f.path || f.name;
+      out.push(file);
+    }
+    return out;
+  }
+  function notRaw(c, what) { if (c.raw) throw new Error(spineOf(c) + ' — готовий спайн (імпорт), ' + what + ' для нього не діє. Кіт його лише показує: зміни JSON сам і поверни через sandbox_update from_spine.'); }
   async function fileData(f) {
     if (!f || !f.blob) throw new Error('файл не передано');
     var r = await fetch('/api/bridge/blobs/' + f.blob, { cache: 'no-store' });
@@ -580,7 +619,7 @@
         id: st.pid,
         settings: JSON.parse(JSON.stringify(st.s)),
         images: Object.keys(st.images).filter(function (k) { return k.indexOf('f:') !== 0; }).map(function (k) { var im = st.images[k]; return { key: k, file: im.fileName, w: im.w, h: im.h }; }),
-        spines: st.plan ? st.plan.spines.map(function (sp) { var o = { name: sp.name, component: sp.comp, skins: sp.json.skins.map(function (s) { return s.name; }), animations: Object.keys(sp.json.animations), warnings: sp.warnings }; if (sp.final) o.final = finalOf(sp); return o; }) : []
+        spines: st.plan ? st.plan.spines.map(function (sp) { var o = { name: sp.name, component: sp.comp, skins: sp.json.skins.map(function (s) { return s.name; }), animations: Object.keys(sp.json.animations), warnings: sp.warnings }; if (sp.custom) o.optimization = sp.audit; if (sp.final) o.final = finalOf(sp); return o; }) : []
       };
     },
     update_game: async function (a) {
@@ -662,6 +701,7 @@
         if (typeof a.label === 'string' && a.label.trim()) c.label = a.label.trim();
         if (typeof a.bar === 'string') c.bar = a.bar.trim();
         if (a.pivot !== undefined) setPivot(c, a.pivot);
+        if (a.bone !== undefined) setBone(c, a.bone);
         ['w', 'h', 'x', 'y'].forEach(function (k) { if (num(a[k])) c[k] = Number(a[k]); });
         if (a.parts || a.remove_parts) await applyParts(c, a.parts, a.parts_mode, a.remove_parts);
       }
@@ -691,6 +731,7 @@
       if (typeof a.spacers === 'string') c.spacers = a.spacers;
       if (typeof a.bar === 'string') c.bar = a.bar.trim();
       if (a.pivot !== undefined) setPivot(c, a.pivot);
+      if (a.bone !== undefined) setBone(c, a.bone);
       if (Array.isArray(a.anims)) c.anims = a.anims_mode === 'merge' ? mergeAnims(c.anims, a.anims) : normAnims(a.anims);
       try {
         if (a.parts) { delete c.parts; await applyParts(c, a.parts, 'replace'); }
@@ -1063,9 +1104,20 @@
     sandbox_new: async function (a) {
       needProject();
       await sbIn();
-      var srcs = ['template', 'from_library', 'from_component', 'file'].filter(function (k) { return a[k]; });
-      if (srcs.length > 1) throw new Error('Одне джерело: template, from_library, from_component або from_file');
+      var srcs = ['template', 'from_library', 'from_component', 'file', 'spine'].filter(function (k) { return a[k]; });
+      if (srcs.length > 1) throw new Error('Одне джерело: template, from_library, from_component, from_file або from_spine');
       var c;
+      if (a.spine) {
+        var got = await SB().fromSpine(await bridgeFiles(a.spine), { label: a.label });
+        await sbOut();
+        c = got.items[got.items.length - 1];
+        SB().show(c.id);
+        App.toast('Claude відкрив у пісочниці ' + got.items.map(spineOf).join(', '));
+        var res = { item: SB().info(c, true), warnings: sbWarn(c), optimization: sbOpt(c), note: 'Готовий спайн відкрито для перегляду. Користувач бачить його наживо у вкладці «Пісочниця».' };
+        if (got.items.length > 1) res.items = got.items.map(function (x) { return SB().info(x, false); });
+        if (got.skipped.length) res.skipped = got.skipped;
+        return withFilm(res, await sbLook(c, a.preview, null));
+      }
       if (a.from_library) c = await SB().fromLib(a.from_library);
       else if (a.from_component) {
         var src = findComp(a.from_component);
@@ -1082,26 +1134,47 @@
       await sbOut();
       SB().show(c.id);
       App.toast('Claude: у пісочниці ' + spineOf(c));
-      var out = { item: SB().info(c, false), warnings: sbWarn(c), note: 'Користувач бачить це наживо у вкладці «Пісочниця».' };
+      var out = { item: SB().info(c, false), warnings: sbWarn(c), optimization: sbOpt(c), note: 'Користувач бачить це наживо у вкладці «Пісочниця».' };
       return withFilm(out, await sbLook(c, a.preview, null));
     },
     sandbox_update: async function (a) {
       needProject();
       await sbIn();
       var c = sbFind(a.id);
+      if (c.raw) {
+        var extra = Object.keys(a).filter(function (k) { return ['id', 'label', 'spine', 'preview'].indexOf(k) === -1 && a[k] !== undefined; });
+        if (extra.length) notRaw(c, extra.join(', '));
+        if (typeof a.label === 'string' && a.label.trim()) c.label = a.label.trim();
+        if (a.spine) await SB().setSpine(c, await bridgeFiles(a.spine));
+        await sbOut();
+        SB().show(c.id);
+        App.toast('Claude оновив ' + spineOf(c) + ' у пісочниці');
+        return withFilm({ item: SB().info(c, true), warnings: sbWarn(c), optimization: sbOpt(c) }, await sbLook(c, a.preview, null));
+      }
+      if (a.spine) throw new Error('from_spine оновлює лише готовий спайн. ' + spineOf(c) + ' — компонент кита: міняй його parts і anims.');
       var before = animSnap(c);
       await sbFields(c, a);
       var ch = animChanged(before, c);
       await sbOut();
       SB().show(c.id, ch[0]);
       App.toast('Claude змінив ' + spineOf(c) + ' у пісочниці');
-      return withFilm({ item: SB().info(c, false), changed_animations: ch, warnings: sbWarn(c) }, await sbLook(c, a.preview, ch));
+      return withFilm({ item: SB().info(c, false), changed_animations: ch, warnings: sbWarn(c), optimization: sbOpt(c) }, await sbLook(c, a.preview, ch));
     },
     sandbox_preview: async function (a) {
       needProject();
       await sbIn();
       var c = sbFind(a.id);
       return SB().film({ id: c.id, animation: a.animation, at: a.at, skin: a.skin, bg: a.bg });
+    },
+    sandbox_export: async function (a) {
+      needProject();
+      await sbIn();
+      var c = sbFind(a.id);
+      for (var i = 0; i < 100 && !window.JSZip; i++) await sleep(100);
+      var z = await SB().zip(c);
+      var r = await fetch('/api/bridge/blobs?name=' + encodeURIComponent(z.name), { method: 'PUT', headers: { 'content-type': 'application/zip' }, body: z.blob });
+      if (!r.ok) throw new Error('zip не передався: ' + r.status);
+      return { blob: (await r.json()).id, name: z.name, spine: z.spine, kind: c.raw ? 'spine' : 'component' };
     },
     sandbox_remove: async function (a) {
       needProject();
@@ -1116,6 +1189,7 @@
       needProject();
       await sbIn();
       var c = sbFind(a.id);
+      notRaw(c, 'бібліотека');
       var r = await SB().save(c, { asNew: !!a.as_new, label: a.label, note: a.note, tags: Array.isArray(a.tags) ? a.tags : undefined });
       await sbOut();
       return { saved: true, updated_existing: r.updated, library: libOut(r.item), where: App.lib.api.mode() === 'server' ? 'бібліотека команди на сервері' : 'бібліотека цього браузера' };
@@ -1124,6 +1198,7 @@
       needProject();
       await sbIn();
       var c = sbFind(a.id);
+      notRaw(c, 'додавання в чернетки');
       var nc = await SB().toProject(c, { name: a.name });
       await commit();
       App.toast('Claude додав ' + spineOf(nc) + ' у «Чернетки»');

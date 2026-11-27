@@ -6,7 +6,8 @@ const PORT = Number(process.env.SPINE_KIT_PORT) || 5180;
 const DATA = process.env.SPINE_KIT_DATA || join(HERE, 'projects');
 
 const PRESETS = 'hold, fade_in, fade_out, pop_in, pop_out, pulse, breathe, land, win, shake, float_up, glow, flash';
-const SANDBOX_STEP = 'Sandbox (the «Пісочниця» tab): the user\'s PERSONAL workbench to test and make components with a live preview. Only they and their Claude see it, it is the same in every project, it is not in the drafts, their export or the project history (so save what matters to the library). DEFAULT for every new component: when the user asks to make, generate or design one (collector, meter, character, panel, popup, logo, any custom element) or to try an animation, build it here with sandbox_new right away, without asking where; put it into the drafts (add_component) only when the user says so (into the project, the drafts or a named project). Call sandbox_guide once first (rules and recipes for a good result in 2-3 calls), look for a base in library_list, then sandbox_new with everything planned in one call and preview: true, read the filmstrip, fix with sandbox_update (anims_mode "merge", preview), check everything with sandbox_preview animation "all". When the user likes it: sandbox_save puts it into the component library (reusable in any project and game); sandbox_to_project or library_add copy it into the drafts only when the user asks. Changing the sandbox needs no permission; the drafts do.';
+const SANDBOX_STEP = 'Sandbox (the «Пісочниця» tab): the user\'s PERSONAL workbench to test and make components with a live preview. Only they and their Claude see it, it is the same in every project, it is not in the drafts, their export or the project history (so save what matters to the library). DEFAULT for every new component: when the user asks to make, generate or design one (collector, meter, character, panel, popup, logo, any custom element) or to try an animation, build it here with sandbox_new right away, without asking where; put it into the drafts (add_component) only when the user says so (into the project, the drafts or a named project). Call sandbox_guide once first (rules and recipes for a good result in 2-3 calls), look for a base in library_list, then sandbox_new with everything planned in one call and preview: true, read the filmstrip, fix with sandbox_update (anims_mode "merge", preview), check everything with sandbox_preview animation "all". When the user likes it: sandbox_save puts it into the component library (reusable in any project and game); sandbox_to_project or library_add copy it into the drafts only when the user asks. Changing the sandbox needs no permission; the drafts do. A finished Spine export (json + atlas + png pages, for example from the art repo) opens in the sandbox as a read-only item: sandbox_new with from_spine. Use it to look at a spine (sandbox_preview), to review it (findings = what the art validator would reject, optimization = masks, draw calls, keys, atlas and notes) and, when the user asks to refine it, to change it yourself: sandbox_export saves its files, edit the JSON (keep the spine name and the atlas regions), then sandbox_update with from_spine reloads it and the user sees the result live. The kit never turns such a spine into parts and keys, so parts / anims do not apply to it.';
+const OPTIMIZE = 'Optimization (the animators\' rules for every custom component and its animations): no masks (never move a stripe across the art for a shine; "bar" needs none: its fill is a three-slice mesh); glints and shines come from the art itself (a part with "glint", or the same image file once more as an additive part), shown by alpha; show and hide a part only with alpha keys to and from 0 (the kit turns them into attachment on / off keys and keeps a part with setup alpha 0 switched off); images that replace each other are variants of one slot ("slot" + the key "show"), never stepped alpha on separate parts; a frame-by-frame effect is one part with "frames", never dozens of parts; a pivot or group without an image is a part with "bone": true, not a dummy picture; keys only where a value changes. The kit already removes redundant keys, packs identical image files once and downscales images bigger than they are shown. Every result for a custom component carries "optimization" (slots, on_in_setup, masks, draw_calls, keys, keys_per_second, atlas, images, notes): treat its notes like warnings and fix them, or tell the user why one stays.';
 const finalStep = how => `Animator finals: the drafts go to animators, who polish them in Spine Editor (first animations, text spacers, events) and export under the same names. When the user brings such an export for a component (<spine>.json, <spine>.atlas and every .png page${how}; for symbols or reels the file names tell which spine they belong to), call import_final with apply false first. It checks the export against the component's draft, the contract the game and the art-repo validator rely on, and returns errors, warnings (each with an id) and the changes (animations, durations, events, spacers, skins, size, images). Errors block the import: tell the user what to fix in Spine and re-export; never change the component or the files to make an error go away. Show the user every warning as it is (title and detail) and the main changes, and ask about each warning; never accept a warning on your own, in bulk or because it looks harmless. Then call import_final with apply true, the same files, check = the check value of that result and accept = exactly the ids the user confirmed; if it answers that the warnings changed, show the new ones and ask again. If runtime_checked is false, the game-load, spacer, size and seam checks did not run: say so. After the import the preview and the export (zip, art repo) use the final instead of the draft. The component settings stay the contract: if they change later, get_project and the card show that the final no longer matches, so tell the user and suggest a new export or remove_final. preview with draft true shows the kit draft for comparison; remove_final goes back to the draft, only when the user asks.`;
 const FINAL_DESC = 'Check an animator\'s finished Spine export (json, atlas and png pages from Spine Editor, under the draft\'s names) against a component\'s draft and, when allowed, import it INSTEAD of the draft: the preview and the export (zip, art repo) then use the animator\'s files. apply false (default) only checks: it returns errors, warnings (id, title, detail) and the changes, and nothing changes. apply true imports only when there are no errors, every warning id is in accept and check is the value from the apply false result (if the files or the draft changed since, nothing is imported and the new warnings come back). Errors: another Spine version, nonessential data, missing skins, animations, spacers or events of the draft, missing, broken or oversized (over 8192 px) atlas pages, missing regions, page names taken by another spine, a file the runtime cannot load. Warnings: anything that differs from the draft (new or reordered animations, durations beyond ±10 %, moved spacers or events, changed event fields, loops with a seam, another size or root, removed slots or images, a kit draft instead of an export, the Spine runtime not loaded so the runtime checks did not run). The user reads and confirms each warning; show them all and never accept one yourself.';
 const finalSchema = files => ({
@@ -34,7 +35,9 @@ WORKFLOW
 STRUCTURE
 - art = the main image; w x h is its box in game px. Parts = everything that moves, fades or blends on its own: glow, rays, shine, sparkles, coin, icon, plate, counter background, character limbs. Name parts by role: glow, rays, coin, plate, star_1...
 - Draw order = the parts list; "behind": true puts a part under art (glows, rays, shadows).
-- Light: "blend": "additive", setup "alpha": 0 (hidden until an animation shows it), placeholder "shape" glow / star / ring with a warm colour (ffd34d, ffb020, fff2b0): reads as light on dark game backgrounds.
+- Images that replace each other (eyes, mouths, hands, button states): give them the same "slot": "eyes". They become variants of ONE slot named eyes; the first one without "alpha": 0 shows in the setup pose. Switch with {"eyes": [{"t": 0.2, "show": "eyes_wide"}, {"t": 1.2, "show": "eyes_normal"}]}; move, scale and fade the slot by its name.
+- A pivot or a group without an image (body, head, a hinge): {"name": "head", "bone": true}. A character made only of parts: "bone": true on the component, so there is no main image.
+- Light: "blend": "additive", setup "alpha": 0 (switched off until an animation's alpha keys show it), placeholder "shape" glow / star / ring with a warm colour (ffd34d, ffb020, fff2b0): reads as light on dark game backgrounds.
 - "parent": a part that must follow another part sits on it (a sparkle on a coin); x / y are from the parent's image centre, y up.
 - "pivot": bottom for characters and anything standing, centre for badges, coins, buttons, "x:y" for hinges (a lid).
 - Keep the motion compact: the stage fits every animation at one scale, a part flying 2000 px away makes everything tiny.
@@ -63,14 +66,29 @@ MOTION THAT READS
 - Loops: the first key equals the last key on every channel, the last key t equals the duration, no hold at the seam.
 - Spinning rays: {"rays": [{"t": 0, "rotate": 0, "ease": "linear"}, {"t": 8, "rotate": -360}]} (rotate = degrees counter-clockwise, negative = clockwise), duration 8.
 
+OPTIMIZATION (the animators' rules: a game runs dozens of spines at once)
+- Read "optimization" in every result: slots, on_in_setup, masks, draw_calls, keys, keys_per_second, atlas, images, notes. Fix every note like a warning, or tell the user why it stays.
+- The kit does this for you, do not work around it: redundant keys are removed (holds, keys equal to their neighbours or to the setup pose); a part with setup "alpha": 0 is switched off and gets attachment on / off keys wherever your alpha keys leave and return to 0; an image file used by several parts is packed once; an image bigger than it is shown is downscaled.
+- No masks. Parts have none and "bar" has none either (its fill is a three-slice mesh that stretches, its shine scales with the fill). A shine is never a stripe moving across the art: without a mask it leaves the silhouette.
+- Glints and shines come from the art itself. A travelling glint: one part {"name": "shine", "glint": {"of": "art"}}; the kit cuts the bright pixels of the art into 3 soft bands (bands, angle, level, step tune it) and one alpha pulse on "shine" runs across them. A flash of the whole image: a part with the SAME image file as the art (or as the part it lights), same size and place, "blend": "additive", "alpha": 0, keyed 0 -> 0.5-0.9 -> 0; it costs no texture. Sparkles and flares: one small image (64-128 px) reused by several parts.
+- Show and hide a part only with alpha keys to and from 0: not by scale 0, not by moving it off-screen, not by alpha 0.01. Images that replace each other are variants of one slot switched with "show", never stepped alpha on separate parts (a note appears).
+- A frame-by-frame effect (fire, sparks, smoke, a spinning coin) is ONE part with "frames": a folder or a list of frame images. The kit keeps up to 16 frames (max_frames), stores frames above 256 px smaller (max_px) and scales them up in the skeleton, and the sequence plays from the moment the part is shown. Never build it from dozens of parts (a note appears from 8 numbered parts). Without frame images, 2-4 parts that move, rotate or pulse read just as well.
+- Textures: "tex": 0.5 on soft parts (glow, flash, smoke, blurred or huge backgrounds) stores them at half size, the skeleton scales them up; crisp art must not be stretched above about 1.3x. Keep the atlas at 2048 or less when the content allows (4096 is the limit).
+- Keys only where a value changes: 2-5 keys per channel are typical, never a key on every frame, no "ease" on a hold. Finished games: a symbol has about 18 slots (90 % under 45) and about 50 keys per second of animation (90 % under 220).
+- Keep additive parts next to each other in the parts list: every switch between normal and additive is one more draw call.
+
 KEYS (recap)
-{"<target>": [key, ...]}, target = art, a part, a spacer slot, a bar part or all. key: t (s), x / y (px offset, y up), scale or sx / sy (multiplier of setup), rotate (deg CCW, added), alpha (absolute), color ("ffcc00", absolute), ease. A channel missing in a key keeps its previous value; a channel with no key at 0 starts from the setup pose; values hold after the last key. Keys override the preset on the same channels; to control everything set preset "hold" and key it all. Duration = max(duration, last key t).
+{"<target>": [key, ...]}, target = art, a part, a slot of variants, a glint part (alpha and color only, played band by band), a spacer slot, a bar part or all. key: t (s), x / y (px offset, y up), scale or sx / sy (multiplier of setup), rotate (deg CCW, added), alpha (absolute), color ("ffcc00", absolute), show (variant of a slot, null hides), ease. A channel missing in a key keeps its previous value; a channel with no key at 0 starts from the setup pose; values hold after the last key. Keys override the preset on the same channels; to control everything set preset "hold" and key it all. Duration = max(duration, last key t).
 
 RECIPES (copy and adapt)
 - in 0.45 (pop): {"all": [{"t": 0, "alpha": 0}, {"t": 0.12, "alpha": 1}], "art": [{"t": 0, "scale": 0.2, "ease": "back"}, {"t": 0.4, "scale": 1}]}
 - idle 2 (breathe, loop): {"art": [{"t": 0, "scale": 1, "ease": "ease-in-out"}, {"t": 1, "scale": 1.04, "ease": "ease-in-out"}, {"t": 2, "scale": 1}]}
 - glow pulse 1.2 (loop, glow behind, additive, alpha 0): {"glow": [{"t": 0, "alpha": 0.25, "scale": 0.95, "ease": "ease-in-out"}, {"t": 0.6, "alpha": 0.7, "scale": 1.05, "ease": "ease-in-out"}, {"t": 1.2, "alpha": 0.25, "scale": 0.95}]}
 - win 1.1 (anticipation, burst, settle; glow + flash parts): {"art": [{"t": 0, "scale": 1, "ease": "ease-in"}, {"t": 0.08, "scale": 0.93, "ease": "back"}, {"t": 0.35, "scale": 1.22, "rotate": 4, "ease": "ease-in-out"}, {"t": 0.6, "scale": 0.98, "rotate": -2, "ease": "ease-out"}, {"t": 0.85, "scale": 1, "rotate": 0}], "glow": [{"t": 0.05, "alpha": 0, "scale": 0.9, "ease": "ease-out"}, {"t": 0.3, "alpha": 0.85, "scale": 1.15, "ease": "ease-in"}, {"t": 1.1, "alpha": 0, "scale": 1.4}], "flash": [{"t": 0.3, "alpha": 0, "ease": "ease-out"}, {"t": 0.36, "alpha": 0.9, "ease": "ease-in"}, {"t": 0.55, "alpha": 0}]}
+- flash from the art 0.4 (part "flash": the same image file as art, same w / h, additive, alpha 0): {"flash": [{"t": 0, "alpha": 0, "ease": "ease-out"}, {"t": 0.08, "alpha": 0.8, "ease": "ease-in"}, {"t": 0.4, "alpha": 0}]}
+- glint sweep 0.45 (part {"name": "shine", "glint": {"of": "art"}}; the 3 bands play the pulse 0.06 s apart): {"shine": [{"t": 0, "alpha": 0, "ease": "ease-out"}, {"t": 0.1, "alpha": 0.9, "ease": "ease-in"}, {"t": 0.3, "alpha": 0}]}
+- swap an image 1.2 (parts eyes_normal, eyes_wide with "slot": "eyes", eyes_wide has "alpha": 0): {"eyes": [{"t": 0.1, "show": "eyes_wide", "scale": 1.15, "ease": "back"}, {"t": 0.4, "scale": 1}, {"t": 1, "show": "eyes_normal"}]}
+- fire burst 0.8 (part {"name": "fx", "frames": "<folder>", "blend": "additive", "alpha": 0, "play": "once"}; the sequence starts when alpha leaves 0): {"fx": [{"t": 0.1, "alpha": 0, "ease": "stepped"}, {"t": 0.1, "alpha": 1}, {"t": 0.7, "alpha": 1, "ease": "ease-in"}, {"t": 0.8, "alpha": 0}]}
 - add 0.32 (bump): {"art": [{"t": 0, "sx": 1, "sy": 1, "ease": "ease-out"}, {"t": 0.08, "sx": 1.12, "sy": 0.9, "ease": "back"}, {"t": 0.32, "sx": 1, "sy": 1}]}
 - collect 0.6 (a coin part flies up into the meter): {"coin": [{"t": 0, "x": 0, "y": -220, "scale": 1, "alpha": 1, "ease": "ease-in"}, {"t": 0.45, "x": 0, "y": 0, "scale": 0.5, "ease": "ease-out"}, {"t": 0.6, "alpha": 0}]}
 - anticipation_loop 0.6: {"art": [{"t": 0, "x": 0, "rotate": 0, "ease": "ease-in-out"}, {"t": 0.15, "x": -6, "rotate": 2, "ease": "ease-in-out"}, {"t": 0.3, "x": 6, "rotate": -2, "ease": "ease-in-out"}, {"t": 0.45, "x": -4, "rotate": 1, "ease": "ease-in-out"}, {"t": 0.6, "x": 0, "rotate": 0}]}
@@ -83,6 +101,7 @@ REVIEW CHECKLIST (every filmstrip)
 - The silhouette and the main move read even at half size.
 - Glows do not wash out the art (alpha <= 0.9, additive on dark).
 - No warnings in the result (bad keys, unknown targets, reserved names).
+- "optimization" notes are empty, or each one left is explained to the user: no masks, glints from the art, variants instead of alpha swaps, no part that never shows, no key on every frame.
 - The game contract: spine name animation_<name>, the animation names the game calls (in, idle / loop_1, out, win...), events only if the game listens.
 
 SPEED
@@ -101,12 +120,13 @@ Workflow:
 5. Look at the result: screenshot (grid + preview), preview a spine and animation, spin to play a real reel spin. Fix what looks wrong.
 6. Layouts (the «Лейаути» tab): every project starts with the Pandora template layouts layout_landscape_16_9 (2560x1440), layout_landscape_4_3 (1920x1440), layout_portrait_9_16 (1440x2560); the game picks one by window aspect and puts each component on a position_* bone. If the game already has layouts (art repo skins/main/Motion/layouts/), import_layouts them (ask before replacing). get_layouts shows bones and which component sits where; place_components binds components to bones; update_layout moves, adds, renames bones; show_layout with screen "all" checks wider and taller windows; spin with layout plays the spin there.
 7. export_drafts writes the zip with all spines (and the layouts) when the user wants files.
-8. Custom components (collectors, meters, characters, panels like Lucky 5): a NEW one goes to the sandbox (the sandbox step below) unless the user asks for the project. In the drafts: add_component (template custom or character) or update_component with parts (extra images: each part is its own bone + slot with the same name, region art/<spine>/<part>; parent, x/y from the parent's image centre with y up, w/h, pivot, behind, blend, setup alpha, placeholder shape/color) and per-animation keys ({"<part|art|spacer|all>": [{"t": 0, "y": 0, "alpha": 0, "ease": "ease-out"}, {"t": 0.3, "y": 120, "alpha": 1}]}). Use anims_mode "merge" to change one animation without resending the rest. Then preview each new animation (at several "at" values) and fix what looks wrong. export_component saves a component (settings, parts, keys, images) to a .component.json file; import_component adds such a file to the open project (another game or project).
+8. Custom components (collectors, meters, characters, panels like Lucky 5): a NEW one goes to the sandbox (the sandbox step below) unless the user asks for the project. In the drafts: add_component (template custom or character) or update_component with parts (extra images: each part is its own bone + slot with the same name, region art/<spine>/<part>; parent, x/y from the parent's image centre with y up, w/h, pivot, behind, blend, setup alpha, placeholder shape/color) and per-animation keys ({"<part|art|spacer|all>": [{"t": 0, "y": 0, "alpha": 0, "ease": "ease-out"}, {"t": 0.3, "y": 120, "alpha": 1}]}). Use anims_mode "merge" to change one animation without resending the rest. Then preview each new animation (at several "at" values) and fix what looks wrong. export_component saves a component (settings, parts, keys, images) to a .component.json file; import_component adds such a file to the open project (another game or project). ${OPTIMIZE}
 9. ${SANDBOX_STEP} The user sees every step live in the «Пісочниця» tab (a project must be open in the kit). The sandbox and the library of this local kit live in the browser.
 10. ${finalStep(' as local paths or their folder')}
 Talk to the user in their language (the kit UI is Ukrainian). Motion presets: ${PRESETS}. Events format: "onEvent@0.5, onOther(2)@0.1".`;
 
-const KEYS = 'Custom components only. Keyframes on top of the preset, as {"<target>": [key, ...]}. target: "art" (main image), a part name, a spacer slot (e.g. txt_count), a progress-bar part (bar, bar_fill, bar_head, bar_glow, bar_flash, bar_shine) or "all" (alpha / color of every visible slot). key: t (seconds, required), x, y (px offset from the setup position, y up), scale (both axes) or sx / sy (multiplier of setup), rotate (degrees counter-clockwise, added to setup), alpha (0..1, absolute), color ("ffcc00" tint, absolute), ease (how the motion runs from THIS key to the next: linear default, ease-in, ease-out, ease-in-out, back, soft, shake, stepped, or a bezier [x1, y1, x2, y2] like CSS cubic-bezier). A key keeps the previous value of channels it leaves out; a channel whose first key is after 0 starts from the setup pose at t 0; after the last key the value holds. Keys override the preset on the same channels (translate, scale, rotate, rgb, alpha). The animation lasts max(duration, last key t). null removes the keys.';
+const fromSpine = { type: ['string', 'array'], items: { type: 'string' }, description: 'A finished Spine export: a list of absolute file paths (<spine>.json, <spine>.atlas and every .png page of the atlas), or an absolute folder that holds them. A folder with several spines opens up to 12 of them, so from a big folder (an art repo has dozens) pass the files of the one spine you need.' };
+const KEYS = 'Custom components only. Keyframes on top of the preset, as {"<target>": [key, ...]}. target: "art" (main image), a part name, a spacer slot (e.g. txt_count), a progress-bar part (bar, bar_fill, bar_head, bar_glow, bar_flash, bar_shine) or "all" (alpha / color of every visible slot). key: t (seconds, required), x, y (px offset from the setup position, y up), scale (both axes) or sx / sy (multiplier of setup), rotate (degrees counter-clockwise, added to setup), alpha (0..1, absolute), color ("ffcc00" tint, absolute), show (slots with variants only: the name of the variant part shown from this key on, null hides the slot), ease (how the motion runs from THIS key to the next: linear default, ease-in, ease-out, ease-in-out, back, soft, shake, stepped, or a bezier [x1, y1, x2, y2] like CSS cubic-bezier). A key keeps the previous value of channels it leaves out; a channel whose first key is after 0 starts from the setup pose at t 0; after the last key the value holds. Keys override the preset on the same channels (translate, scale, rotate, rgb, alpha). The animation lasts max(duration, last key t). null removes the keys.';
 const anims = {
   type: 'array',
   description: `Animations. Each: name, duration (seconds), preset (one of: ${PRESETS}), loop (seamless loop hint), events ("onEvent@0.5, onOther(2)@0.1"), keys (keyframes on parts, custom components).`,
@@ -140,11 +160,32 @@ const parts = {
       blend: { type: 'string', enum: ['normal', 'additive', 'multiply', 'screen'] },
       alpha: { type: 'number', description: 'Setup opacity 0..1; 0 hides the part until an animation shows it (glow, flash). Fade presets (fade_in, fade_out...) only fade parts with alpha 1.' },
       shape: { type: 'string', enum: ['', 'rect', 'circle', 'ring', 'glow', 'star'], description: 'Placeholder drawn when the part has no image ("" = labelled card).' },
-      color: { type: ['string', 'null'], description: 'Placeholder colour "ffcc00".' }
+      color: { type: ['string', 'null'], description: 'Placeholder colour "ffcc00".' },
+      bone: { type: 'boolean', description: 'A bone without an image: a point other parts hang on (body, head, a group). Only parent, x, y and rotate apply.' },
+      slot: { type: 'string', description: 'Variants of one image: parts with the same slot value share ONE slot and bone named like it (eyes, mouth, hand_l). Each part keeps its own image, size and place; the first one without "alpha": 0 shows in the setup pose. Switch with the key "show" on the slot name; x / y / scale / rotate / alpha keys and "parent" of other parts also use the slot name.' },
+      glint: {
+        type: ['object', 'null'],
+        description: 'A glint cut from the art, no mask needed: the kit takes the bright pixels of the source image and splits them into soft bands across it. Each band is an additive slot "<part>_1..n" on the source, switched off until keyed. alpha (and color) keys on the part name play on every band one after another, "step" seconds apart, so one pulse gives a sweep. x, y, w, h do not apply.',
+        properties: {
+          of: { type: 'string', description: '"art" (default) or a plain image part.' },
+          bands: { type: 'number', description: '1-6, default 3. 1 = all bright areas at once.' },
+          angle: { type: 'number', description: 'Tilt of the sweep in degrees, default 20.' },
+          level: { type: 'number', description: 'Brightness threshold 0-0.95, default 0.6; 0 = the whole image.' },
+          step: { type: 'number', description: 'Delay between bands in seconds, default 0.06.' }
+        }
+      },
+      frames: { type: ['array', 'string'], items: { type: 'string' }, description: 'A frame sequence: a folder with the frames or a list of frame images in order (absolute paths). The kit builds one sprite sheet from them and a native Spine sequence that plays from the moment the part is shown.' },
+      max_frames: { type: 'number', description: 'With frames: keep at most this many, dropping frames evenly and lowering fps to match. Default 16.' },
+      max_px: { type: 'number', description: 'With frames: the longest side of a stored frame in px, default 256. Bigger frames are stored smaller and scaled up in the skeleton.' },
+      sheet: { type: ['object', 'null'], description: 'A ready sprite sheet passed as "image": the grid of frames, row by row.', properties: { cols: { type: 'number' }, rows: { type: 'number' }, count: { type: 'number', description: 'Frames used, default cols x rows.' } } },
+      fps: { type: 'number', description: 'Sequence speed, default 24.' },
+      play: { type: 'string', enum: ['loop', 'once', 'pingpong'], description: 'Sequence mode, default loop.' },
+      tex: { type: ['number', 'null'], description: 'Texture scale 0.1-1: store the image smaller than it is shown, the skeleton scales it up. 0.5 for glows, flashes, smoke; glints use 0.5 already.' }
     },
     required: ['name']
   }
 };
+const hollow = { type: 'boolean', description: 'Custom only. true: no main image, "art" is only a bone the parts hang on (a character made of parts). false brings the image back.' };
 const sbId = { type: 'string', description: 'Sandbox item id (sandbox_get lists them) or its spine name. Omitted: the item the sandbox shows now (the last one worked on).' };
 const look = {
   type: ['boolean', 'object'],
@@ -184,7 +225,7 @@ const TOOLS = [
       required: ['name']
     }
   },
-  { name: 'get_project', title: 'Get project', description: 'Full settings of the open project (game, grid, cell, tech, components with animations), which images are set, generated spines with skins, animations and warnings.', inputSchema: { type: 'object', properties: {} } },
+  { name: 'get_project', title: 'Get project', description: 'Full settings of the open project (game, grid, cell, tech, components with animations), which images are set, generated spines with skins, animations, warnings and, for custom components, optimization (slots, masks, draw calls, keys, atlas, notes).', inputSchema: { type: 'object', properties: {} } },
   {
     name: 'update_game', title: 'Update game', mutates: true,
     description: 'Change game settings of the open project.',
@@ -236,9 +277,10 @@ const TOOLS = [
         fill: { type: 'number', description: 'Symbols only: symbol size as % of the cell (default 84); images are scaled up or down to fit.' },
         name: { type: 'string', description: 'Custom only: spine name.' },
         label: { type: 'string', description: 'Custom only: card title in the kit.' },
-        bar: { type: 'string', description: 'Custom only: progress bar "x:y:w:h" (track centre and size in px from the image centre, y up; "" removes it). Adds fill, shine, head, flash, glow and the animations progress (1 s scrub: the game sets track time = fraction), add, anticipation (loop), trigger, demo.' },
+        bar: { type: 'string', description: 'Custom only: progress bar "x:y:w:h" (track centre and size in px from the image centre, y up; "" removes it). Adds fill, shine, head, flash, glow (no masks: the fill is a three-slice mesh) and the animations progress (1 s scrub: the game sets track time = fraction; it is the only thing that moves the fill), add, anticipation (loop), trigger, demo.' },
         w: { type: 'number' }, h: { type: 'number' }, x: { type: 'number' }, y: { type: 'number' },
         pivot: { ...pivot, type: ['string', 'null'], description: 'Custom only. ' + pivot.description },
+        bone: hollow,
         anims_mode: animsMode,
         parts,
         parts_mode: { type: 'string', enum: ['merge', 'replace'], description: '"merge" (default) keeps parts not listed; "replace" makes the list exactly these parts in this order.' },
@@ -261,6 +303,7 @@ const TOOLS = [
         skins: { type: 'string' }, spacers: { type: 'string', description: 'Comma separated slot names the game reads; name@x:y = exact point from the image centre, y up.' },
         bar: { type: 'string', description: 'Progress bar "x:y:w:h", see update_component.' },
         pivot,
+        bone: hollow,
         parts: { ...parts, description: 'Extra images inside the component (replaces template parts). ' + parts.description },
         w: { type: 'number' }, h: { type: 'number' }, x: { type: 'number' }, y: { type: 'number' }
       },
@@ -397,17 +440,17 @@ const TOOLS = [
   },
   {
     name: 'sandbox_guide', title: 'Sandbox guide',
-    description: 'Rules and recipes for a good-looking component in 2-3 calls: workflow, parts and pivots, timing and easing per animation type, amplitudes that read at game scale, keyframe recipes (pop in, idle, glow, win burst, bump, collect, anticipation, out, text), the review checklist. Read it once before the first sandbox_new. Read-only.',
+    description: 'Rules and recipes for a good-looking component in 2-3 calls: workflow, parts and pivots, timing and easing per animation type, amplitudes that read at game scale, the building blocks (variants of one slot, bones, glints cut from the art, frame sequences), the optimization rules (no masks, textures, keys), keyframe recipes (pop in, idle, glow, win burst, flash, glint, image swap, fire burst, bump, collect, anticipation, out, text), the review checklist. Read it once before the first sandbox_new. Read-only.',
     inputSchema: { type: 'object', properties: {} }
   },
   {
     name: 'sandbox_get', title: 'Get sandbox',
-    description: 'The user\'s personal sandbox (the «Пісочниця» tab): a workbench for testing and making components with a live preview, the same in every project, apart from the drafts. Without id: the items on it (id, label, spine, size, parts, animations, library link) and which one it shows. With id: the full item (settings, parts, animations with keys, images, the generated spine: skins, animations with durations, slots, warnings). Read-only.',
+    description: 'The user\'s personal sandbox (the «Пісочниця» tab): a workbench for testing and making components with a live preview, the same in every project, apart from the drafts. Without id: the items on it (id, label, spine, size, parts, animations, library link; kind "spine" marks a finished Spine export opened for viewing) and which one it shows. With id: the full item (settings, parts, animations with keys, images, the generated spine: skins, animations with durations, slots, warnings); for kind "spine": its files and spine_info (version, bones, slots, skins, animations with durations and events, attachment kinds, atlas pages, findings of the art-validator rules, optimization). Read-only.',
     inputSchema: { type: 'object', properties: { id: sbId } }
   },
   {
     name: 'sandbox_new', title: 'New sandbox item', mutates: true,
-    description: 'Put a new component on the sandbox and show it (the user watches the «Пісочниця» tab live). Source: template (default custom), from_library (a library item), from_component (a copy of a custom component of the project) or from_file (.component.json). The other fields work as in add_component and override the source. Send everything you planned in this one call: parts and every animation with keys. The drafts and their export are not touched.',
+    description: 'Put a new component on the sandbox and show it (the user watches the «Пісочниця» tab live). Source: template (default custom), from_library (a library item), from_component (a copy of a custom component of the project), from_file (.component.json) or from_spine (a finished Spine export: it opens as a read-only item of kind "spine" with findings and optimization, only label and preview apply). The other fields work as in add_component and override the source. Send everything you planned in this one call: parts and every animation with keys. The result carries warnings and optimization (slots, masks, draw calls, keys, atlas and notes to fix). The drafts and their export are not touched.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -415,6 +458,7 @@ const TOOLS = [
         from_library: { type: 'string', description: 'Library item id (library_list).' },
         from_component: { type: 'string', description: 'A custom component of the project: id or spine name.' },
         from_file: { type: 'string', description: 'Absolute path to a .component.json file.' },
+        from_spine: fromSpine,
         name: { type: 'string', description: 'Spine name, e.g. animation_coin_collector.' },
         label: { type: 'string', description: 'Title in the kit, in the user\'s language, e.g. Колектор монет.' },
         image, anims,
@@ -422,6 +466,7 @@ const TOOLS = [
         skins: { type: 'string' }, spacers: { type: 'string', description: 'Comma separated slot names the game reads; name@x:y = exact point from the image centre, y up.' },
         bar: { type: 'string', description: 'Progress bar "x:y:w:h", see update_component.' },
         pivot,
+        bone: hollow,
         parts: { ...parts, description: 'Extra images inside the component, merged by name into the source parts. ' + parts.description },
         w: { type: 'number' }, h: { type: 'number' }, x: { type: 'number' }, y: { type: 'number' },
         preview: look
@@ -430,17 +475,19 @@ const TOOLS = [
   },
   {
     name: 'sandbox_update', title: 'Update sandbox item', mutates: true,
-    description: 'Change a sandbox item; the same fields as update_component for a custom component (parts merge by name, anims_mode "merge" patches rows by name). The sandbox shows the item and plays the animation you changed.',
+    description: 'Change a sandbox item; the same fields as update_component for a custom component (parts merge by name, anims_mode "merge" patches rows by name). The sandbox shows the item and plays the animation you changed. An item of kind "spine" (a finished Spine export) takes only label, from_spine (new files) and preview.',
     inputSchema: {
       type: 'object',
       properties: {
         id: sbId,
+        from_spine: { ...fromSpine, description: 'Only for an item of kind "spine": replace its files. ' + fromSpine.description + ' A file you leave out keeps its current version, so after editing only the JSON pass just that file.' },
         name: { type: 'string' }, label: { type: 'string' },
         image, remove_image: { type: 'boolean' },
         anims, anims_mode: animsMode,
         skins: { type: 'string' }, spacers: { type: 'string' }, bar: { type: 'string' },
         w: { type: 'number' }, h: { type: 'number' }, x: { type: 'number' }, y: { type: 'number' },
         pivot: { ...pivot, type: ['string', 'null'] },
+        bone: hollow,
         parts,
         parts_mode: { type: 'string', enum: ['merge', 'replace'], description: '"merge" (default) keeps parts not listed; "replace" makes the list exactly these parts in this order.' },
         remove_parts: { type: 'array', items: { type: 'string' } },
@@ -461,6 +508,11 @@ const TOOLS = [
         bg: { type: 'string', enum: ['dark', 'light', 'checker'], description: 'Frame background, default dark (like most slot games).' }
       }
     }
+  },
+  {
+    name: 'sandbox_export', title: 'Export sandbox item', timeout: 180000,
+    description: 'Save the spine of a sandbox item to disk: <spine>.json, <spine>.atlas and the .png pages. For a finished Spine export (kind "spine") these are its files as they are, the way to get the JSON for editing; for a kit component it is the generated spine plus the Spine Editor import folder.',
+    inputSchema: { type: 'object', properties: { id: sbId, out_dir: { type: 'string', description: `Absolute folder, default ${join(DATA, 'exports')}.` }, unzip: { type: 'boolean', description: 'Extract the zip next to it (default true).' } } }
   },
   {
     name: 'sandbox_remove', title: 'Remove sandbox item', mutates: true, destructive: true,
@@ -510,7 +562,7 @@ export const listTools = TOOLS => TOOLS.map(t => ({
   title: t.title,
   description: t.description,
   inputSchema: t.inputSchema,
-  annotations: { title: t.title, readOnlyHint: !t.mutates && !['open_kit', 'export_drafts', 'export_component', 'spin', 'preview', 'show_layout', 'sandbox_preview'].includes(t.name), destructiveHint: !!t.destructive || t.name === 'remove_component' || t.name === 'set_symbols', openWorldHint: false }
+  annotations: { title: t.title, readOnlyHint: !t.mutates && !['open_kit', 'export_drafts', 'export_component', 'spin', 'preview', 'show_layout', 'sandbox_preview', 'sandbox_export'].includes(t.name), destructiveHint: !!t.destructive || t.name === 'remove_component' || t.name === 'set_symbols', openWorldHint: false }
 }));
 
 export const LABELS = {
@@ -520,7 +572,7 @@ export const LABELS = {
   get_layouts: 'читає лейаути', update_layout: 'лейаут', place_components: 'компоненти на лейауті', import_layouts: 'імпорт лейаутів', show_layout: 'показує лейаут',
   export_component: 'експорт компонента', import_component: 'імпорт компонента', import_final: 'імпорт фіналу', remove_final: 'повернув драфт',
   upload_files: 'завантаження файлів', get_history: 'читає історію', restore_version: 'відкат', save_version: 'версія',
-  sandbox_guide: 'читає правила пісочниці', sandbox_get: 'читає пісочницю', sandbox_new: 'новий компонент у пісочниці', sandbox_update: 'пісочниця', sandbox_preview: 'дивиться пісочницю',
+  sandbox_guide: 'читає правила пісочниці', sandbox_get: 'читає пісочницю', sandbox_new: 'новий компонент у пісочниці', sandbox_update: 'пісочниця', sandbox_preview: 'дивиться пісочницю', sandbox_export: 'експорт з пісочниці',
   sandbox_remove: 'прибрав з пісочниці', sandbox_save: 'зберіг у бібліотеку', sandbox_to_project: 'з пісочниці в чернетки',
   library_list: 'бібліотека', library_add: 'з бібліотеки в чернетки', library_remove: 'прибрав з бібліотеки'
 };
@@ -537,7 +589,9 @@ const refs = schema => {
       out.properties = {};
       for (const [name, p] of Object.entries(v)) {
         if (name === 'image') out.properties.image = { type: 'string', description: REF };
+        else if (name === 'frames') out.properties.frames = { type: 'array', items: { type: 'string' }, description: 'A frame sequence: refs "upload:<id>" of the frame images in order (upload_files). The kit builds one sprite sheet from them and a native Spine sequence that plays from the moment the part is shown.' };
         else if (name === 'from_file') out.properties.from_file = { type: 'string', description: 'Ref "upload:<id>" of a .component.json file (upload_files).' };
+        else if (name === 'from_spine') out.properties.from_spine = { type: 'array', items: { type: 'string' }, description: 'A finished Spine export: refs "upload:<id>" of <spine>.json, <spine>.atlas and every .png page of the atlas (upload_files). In sandbox_update a file you leave out keeps its current version.' };
         else if (name === 'blur_image') out.properties.blur_image ={ type: ['string', 'null'], description: 'Ref "upload:<id>" of the motion-blurred image for the symbol_<name>_blur skin. Omitted: the kit blurs the symbol image itself. null drops an uploaded one.' };
         else out.properties[name] = refs(p);
       }
@@ -587,6 +641,10 @@ const HTTP_OVERRIDES = {
     description: 'Build the zip with every generated spine (json, atlas, png, Spine Editor import folder, README) and return a download link (GET, 15 minutes) with a ready curl command: replace <folder> with a local folder and run it, then unzip if the user wants the files extracted.',
     inputSchema: { type: 'object', properties: { layouts: { type: 'boolean', description: 'Include the layout_*.json files (skins/main/Motion/layouts/) and spine-editor/layouts. true = every layout, false = none. Default: all.' } } }
   },
+  sandbox_export: {
+    description: 'Pack the spine of a sandbox item (<spine>.json, <spine>.atlas, .png pages; for a finished Spine export these are its files as they are) into a zip and return a download link (GET, 15 minutes) with a curl command: replace <folder> with a local folder, run it and unzip.',
+    inputSchema: { type: 'object', properties: { id: sbId } }
+  },
   export_component: {
     description: 'Save one custom component of the project (settings, parts, animations with keys, its images embedded, its layout bone) as a .component.json and return a download link (GET, 15 minutes) with a curl command, so it can be imported into another project with import_component.',
     inputSchema: { type: 'object', properties: { id: { type: 'string', description: 'Component id or spine name.' } }, required: ['id'] }
@@ -622,7 +680,7 @@ Workflow:
 5. Look at the result: screenshot (grid + preview), preview a spine and animation, spin to play a real reel spin. Fix what looks wrong.
 6. Layouts (the «Лейаути» tab): every project starts with the Pandora template layouts layout_landscape_16_9 (2560x1440), layout_landscape_4_3 (1920x1440), layout_portrait_9_16 (1440x2560); the game picks one by window aspect and puts each component on a position_* bone. If the game already has layouts (art repo skins/main/Motion/layouts/), upload and import_layouts them (ask before replacing). get_layouts shows bones and which component sits where; place_components binds components to bones; update_layout moves, adds, renames bones; show_layout with screen "all" checks wider and taller windows; spin with layout plays the spin there.
 7. export_drafts returns a download link with a curl command when the user wants files.
-8. Custom components (collectors, meters, characters, panels like Lucky 5): a NEW one goes to the sandbox (the sandbox step below) unless the user asks for the project. In the drafts: add_component (template custom or character) or update_component with parts (extra images: each part is its own bone + slot with the same name, region art/<spine>/<part>; parent, x/y from the parent's image centre with y up, w/h, pivot, behind, blend, setup alpha, placeholder shape/color) and per-animation keys ({"<part|art|spacer|all>": [{"t": 0, "y": 0, "alpha": 0, "ease": "ease-out"}, {"t": 0.3, "y": 120, "alpha": 1}]}). Use anims_mode "merge" to change one animation without resending the rest. Then preview each new animation (at several "at" values) and fix what looks wrong. export_component gives a .component.json download; import_component adds such a file (uploaded) to the project.
+8. Custom components (collectors, meters, characters, panels like Lucky 5): a NEW one goes to the sandbox (the sandbox step below) unless the user asks for the project. In the drafts: add_component (template custom or character) or update_component with parts (extra images: each part is its own bone + slot with the same name, region art/<spine>/<part>; parent, x/y from the parent's image centre with y up, w/h, pivot, behind, blend, setup alpha, placeholder shape/color) and per-animation keys ({"<part|art|spacer|all>": [{"t": 0, "y": 0, "alpha": 0, "ease": "ease-out"}, {"t": 0.3, "y": 120, "alpha": 1}]}). Use anims_mode "merge" to change one animation without resending the rest. Then preview each new animation (at several "at" values) and fix what looks wrong. export_component gives a .component.json download; import_component adds such a file (uploaded) to the project. ${OPTIMIZE}
 9. Other people may be editing the same project at the same time: before a big change, say what you are going to do. Every change of yours is recorded as «Claude · <person>» in the history and can be rolled back (get_history, restore_version); save_version names the current state.
 10. ${SANDBOX_STEP} It belongs to the user of this MCP session and is stored on the server; the sandbox tools still run inside the project of this MCP session, so open one first (prefer the one the user has open: kit_status → viewing; opening a project only sets this session's project, it changes nothing). The user watches the changes live in the «Пісочниця» tab of whatever project they have open. The library is shared by the whole team: save there what is worth reusing, with a clear label and note.
 11. ${finalStep(', uploaded with upload_files (the server cannot read local paths)')}

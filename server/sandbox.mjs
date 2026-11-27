@@ -1,15 +1,15 @@
 import { mkdirSync, readFileSync, renameSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
-import { SHA, imageInfo, writeAtomic } from './data.mjs';
+import { SHA, imageInfo, textInfo, writeAtomic } from './data.mjs';
 
 const KIT = 'spine-draft-kit/sandbox@1';
 const MB = 1024 * 1024;
 const MAX_COMPONENT = MB;
 const MAX_DOC = 16 * MB;
 const MAX_ITEMS = 60;
-const TYPES = ['png', 'jpeg', 'webp'];
-const ROLE = /^(main|part:[a-z0-9_]{1,64})$/;
+const TYPES = ['png', 'jpeg', 'webp', 'json', 'atlas'];
+const ROLE = /^(main|part:[a-z0-9_]{1,64}|spine:(json|atlas)|page:[^\/\\:\0]{1,160})$/;
 const SBID = /^sb[A-Za-z0-9_-]{1,62}$/;
 
 const plain = o => !!o && typeof o === 'object' && !Array.isArray(o);
@@ -67,7 +67,7 @@ export function createSandbox({ data, log }) {
   const blobType = sha => {
     if (types.has(sha)) return types.get(sha);
     const buf = data.blobHas(sha) ? data.blobGet(sha) : null;
-    const t = buf ? (imageInfo(buf) || {}).type || null : null;
+    const t = buf ? (imageInfo(buf) || textInfo(buf) || {}).type || null : null;
     if (t) types.set(sha, t);
     return t;
   };
@@ -87,7 +87,7 @@ export function createSandbox({ data, log }) {
     if (!plain(src) || Object.keys(src).length > 300) return bad('images: обʼєкт до 300 картинок');
     const images = {};
     for (const [k, v] of Object.entries(src)) {
-      if (!ROLE.test(k)) return bad(`images.${k.slice(0, 80)}: ключ main або part:<назва з a-z, 0-9, _>`);
+      if (!ROLE.test(k)) return bad(`images.${k.slice(0, 80)}: ключ main, part:<назва з a-z, 0-9, _>, spine:json, spine:atlas або page:<файл>`);
       const im = image(v);
       if (!im) return bad(`images.${k}: потрібні {sha, name, type, w, h} і завантажений блоб`);
       images[k] = im;

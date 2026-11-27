@@ -11,7 +11,7 @@ const PORT = Number(process.env.SPINE_KIT_PORT) || 5180;
 const BASE = `http://127.0.0.1:${PORT}`;
 const PAGE = `http://localhost:${PORT}/?connect=1`;
 const DATA = process.env.SPINE_KIT_DATA || join(HERE, 'projects');
-const VERSION = '1.0.0';
+const VERSION = JSON.parse(readFileSync(join(HERE, 'package.json'), 'utf8')).version;
 const PROTOCOLS = ['2025-11-25', '2025-06-18', '2025-03-26', '2024-11-05'];
 const IMAGE_EXT = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp' };
 const FINAL_EXT = { ...IMAGE_EXT, '.json': 'application/json', '.atlas': 'text/plain' };
@@ -51,6 +51,20 @@ async function uploadFile(path) {
   return { blob: r.data.id, name: basename(p), path: p };
 }
 
+async function uploadFrames(frames) {
+  let list = Array.isArray(frames) ? frames : [];
+  if (typeof frames === 'string' && frames) {
+    const dir = resolve(frames);
+    if (!existsSync(dir) || !statSync(dir).isDirectory()) throw new Error(`frames: папку не знайдено: ${dir}`);
+    list = readdirSync(dir).filter(n => IMAGE_EXT[extname(n).toLowerCase()]).sort((a, b) => a.localeCompare(b, undefined, { numeric: true })).map(n => join(dir, n));
+  }
+  if (!list.length) throw new Error('frames: потрібна папка з кадрами або список картинок');
+  if (list.length > 240) throw new Error(`frames: ${list.length} кадрів, забагато (до 240)`);
+  const out = [];
+  for (const f of list) out.push(await uploadFile(f));
+  return out;
+}
+
 async function prepare(tool, args) {
   const a = JSON.parse(JSON.stringify(args || {}));
   if (tool === 'import_layouts') return { mode: a.mode, files: layoutFiles(a.paths) };
@@ -60,12 +74,19 @@ async function prepare(tool, args) {
     a.file = await uploadComponent(a.from_file);
     delete a.from_file;
   }
+  if ((tool === 'sandbox_new' || tool === 'sandbox_update') && a.from_spine) {
+    a.spine = await finalFiles(a.from_spine);
+    delete a.from_spine;
+  }
   if (typeof a.image === 'string' && a.image) a.image = await uploadFile(a.image);
   if (tool === 'set_symbols') for (const s of a.symbols || []) {
     if (typeof s.image === 'string' && s.image) s.image = await uploadFile(s.image);
     if (typeof s.blur_image === 'string' && s.blur_image) s.blur_image = await uploadFile(s.blur_image);
   }
-  if (Array.isArray(a.parts)) for (const p of a.parts) if (p && typeof p.image === 'string' && p.image) p.image = await uploadFile(p.image);
+  if (Array.isArray(a.parts)) for (const p of a.parts) {
+    if (p && typeof p.image === 'string' && p.image) p.image = await uploadFile(p.image);
+    if (p && p.frames) p.frames = await uploadFrames(p.frames);
+  }
   return a;
 }
 
@@ -254,6 +275,22 @@ async function exportDrafts(args) {
   return out;
 }
 
+async function sandboxExport(args) {
+  const r = await bridge('sandbox_export', { id: args.id }, 180000);
+  const dir = resolve(args.out_dir || join(DATA, 'exports'));
+  mkdirSync(dir, { recursive: true });
+  const res = await fetch(`${BASE}/api/bridge/blobs/${r.blob}`);
+  if (!res.ok) throw new Error('zip не дійшов від сторінки');
+  const file = join(dir, r.name);
+  writeFileSync(file, Buffer.from(await res.arrayBuffer()));
+  const out = { zip: file, spine: r.spine, kind: r.kind, bytes: statSync(file).size };
+  if (args.unzip !== false) {
+    const u = spawnSync('unzip', ['-o', '-q', file, '-d', dir], { encoding: 'utf8' });
+    out.extracted = u.status === 0 ? join(dir, r.name.replace(/\.zip$/, '')) : `unzip failed: ${u.stderr || u.status}`;
+  }
+  return out;
+}
+
 function content(result) {
   const parts = [];
   const shots = result && Array.isArray(result.images) && result.images.length && result.images.every(s => s && s.data) ? result.images : [];
@@ -273,6 +310,7 @@ async function runTool(name, args) {
   if (name === 'sandbox_guide') return GUIDE;
   if (name === 'export_drafts') return exportDrafts(args || {});
   if (name === 'export_component') return exportComponent(args || {});
+  if (name === 'sandbox_export') return sandboxExport(args || {});
   return bridge(name, await prepare(name, args), t.timeout || 90000);
 }
 

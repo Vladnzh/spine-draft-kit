@@ -1,8 +1,9 @@
 import { randomBytes } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { readBody } from './auth.mjs';
 import { HTTP_TOOLS, LABELS, listTools, httpInstructions, GUIDE } from './tools.mjs';
 
-const VERSION = '1.0.0';
+const VERSION = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version;
 const PROTOCOLS = ['2025-11-25', '2025-06-18', '2025-03-26'];
 const ACTIVE = 10 * 60 * 1000;
 const SESSION_IDLE = 24 * 3600 * 1000;
@@ -113,12 +114,23 @@ export function createMcpHttp({ hub, oauth, files, engine, publicUrl, log, limit
       a.file = { blob: engine.putBlob(f.buf, 'application/json', f.name), name: f.name, path: f.name };
       delete a.from_file;
     }
+    if ((tool === 'sandbox_new' || tool === 'sandbox_update') && a.from_spine) {
+      a.spine = (Array.isArray(a.from_spine) ? a.from_spine : [a.from_spine]).filter(Boolean).map(r => {
+        const f = files.resolve(s.owner, r, ['image', 'layout', 'atlas']);
+        const type = f.kind === 'atlas' ? 'text/plain' : f.kind === 'layout' ? 'application/json' : f.type;
+        return { blob: engine.putBlob(f.buf, type, f.name), name: f.name, path: f.name };
+      });
+      delete a.from_spine;
+    }
     if (typeof a.image === 'string' && a.image) a.image = img(a.image);
     if (tool === 'set_symbols') for (const x of a.symbols || []) {
       if (x && typeof x.image === 'string' && x.image) x.image = img(x.image);
       if (x && typeof x.blur_image === 'string' && x.blur_image) x.blur_image = img(x.blur_image);
     }
-    if (Array.isArray(a.parts)) for (const p of a.parts) if (p && typeof p.image === 'string' && p.image) p.image = img(p.image);
+    if (Array.isArray(a.parts)) for (const p of a.parts) {
+      if (p && typeof p.image === 'string' && p.image) p.image = img(p.image);
+      if (p && Array.isArray(p.frames)) p.frames = p.frames.filter(Boolean).map(img);
+    }
     return a;
   };
 
@@ -206,6 +218,13 @@ export function createMcpHttp({ hub, oauth, files, engine, publicUrl, log, limit
       if (!buf) throw new Error('zip не дійшов від рушія');
       const d = files.offer(s.owner, r.name, buf, 'application/zip');
       return { name: r.name, bytes: buf.length, spines: r.spines, layouts: r.layouts, download: d.url, expires_in: d.expires_in, curl: `curl -fsS -o ${files.quote('<folder>/' + r.name)} ${files.quote(d.url)}` };
+    },
+    sandbox_export: async (s, a) => {
+      const r = await inEngine(s, 'sandbox_export', { id: a.id });
+      const buf = engine.takeBlob(r.blob);
+      if (!buf) throw new Error('zip не дійшов від рушія');
+      const d = files.offer(s.owner, r.name, buf, 'application/zip');
+      return { name: r.name, bytes: buf.length, spine: r.spine, kind: r.kind, download: d.url, expires_in: d.expires_in, curl: `curl -fsS -o ${files.quote('<folder>/' + r.name)} ${files.quote(d.url)}` };
     },
     export_component: async (s, a) => {
       const r = await inEngine(s, 'export_component', { id: a.id });
