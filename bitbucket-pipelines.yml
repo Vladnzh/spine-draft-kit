@@ -1,0 +1,94 @@
+# Spine Draft Kit — build and run on our server via a self-hosted Linux Shell runner.
+# Public address: https://services.twinwingames.com/spine-kit (nginx on the same server
+# proxies /spine-kit/ to 127.0.0.1:$HOST_PORT, see deploy/nginx-spine-kit.conf).
+
+definitions:
+  steps:
+    - step: &build-and-run
+        name: Build image & run on server
+        runs-on:
+          - self.hosted
+          - linux.shell
+        script:
+          - set -eu
+          - unset DOCKER_HOST DOCKER_TLS_VERIFY DOCKER_CERT_PATH
+          - docker info --format 'Docker {{.ServerVersion}} on {{.Name}}'
+          # --- fail early if a required variable is missing ---
+          - for v in OIDC_CLIENT_ID OIDC_CLIENT_SECRET ALLOWED_EMAIL_DOMAINS SPINE_DATA_DIR; do
+              eval "val=\${$v:-}";
+              if [ -z "$val" ]; then echo "Repository variable $v is not set"; exit 1; fi;
+            done
+
+          - export APP=spine-kit
+          - export TAG=$(echo "$BITBUCKET_COMMIT" | cut -c1-7)
+          - export HOST_PORT=${SPINE_PORT:-8096}
+          # 127.0.0.1 = only nginx on this server can reach the app. Use 0.0.0.0 if nginx runs elsewhere.
+          - export BIND_ADDR=${SPINE_BIND_ADDR:-127.0.0.1}
+          # The app builds every link, cookie path and OAuth redirect from this URL (the /spine-kit prefix included).
+          - export PUBLIC_URL=${PUBLIC_URL:-https://services.twinwingames.com/spine-kit}
+          - export OIDC_ISSUER=${OIDC_ISSUER:-https://accounts.google.com}
+          - export OIDC_SCOPES="${OIDC_SCOPES:-openid email profile}"
+          - export ADMIN_EMAILS=${ADMIN_EMAILS:-}
+          - export TRUST_PROXY=1
+          - export ENGINE_NO_SANDBOX=1
+          - export ENGINE_MAX_TABS=${ENGINE_MAX_TABS:-6}
+          - export ENGINE_IDLE_MIN=${ENGINE_IDLE_MIN:-10}
+          - export MAX_IMAGE_MB=${MAX_IMAGE_MB:-64}
+
+          # --- build (Dockerfile runs build.mjs and vendor.mjs) ---
+          - docker build --pull --label org.opencontainers.image.revision="$BITBUCKET_COMMIT" -t "$APP:$TAG" -t "$APP:latest" .
+
+          # --- data folder: create on the host and give it to the container user (node, uid 1000) ---
+          - mkdir -p "$SPINE_DATA_DIR" 2>/dev/null || true
+          - docker run --rm --user 0 --entrypoint sh -v "$SPINE_DATA_DIR":/data "$APP:$TAG" -c "chown -R 1000:1000 /data"
+
+          # --- replace the running container (image already uses tini, so SIGTERM reaches node; wait up to 30 s) ---
+          - docker stop -t 30 "$APP" 2>/dev/null || true
+          - docker rm "$APP" 2>/dev/null || true
+
+          # "-e NAME" without a value passes the variable from the runner env, so secrets never appear in the log.
+          - docker run -d
+              --name "$APP"
+              --restart unless-stopped
+              --shm-size=1g
+              --memory=3g
+              --cpus=1.0
+              -p "$BIND_ADDR":"$HOST_PORT":8080
+              -v "$SPINE_DATA_DIR":/data
+              -e PUBLIC_URL
+              -e OIDC_ISSUER
+              -e OIDC_CLIENT_ID
+              -e OIDC_CLIENT_SECRET
+              -e OIDC_SCOPES
+              -e ALLOWED_EMAIL_DOMAINS
+              -e ADMIN_EMAILS
+              -e TRUST_PROXY
+              -e ENGINE_NO_SANDBOX
+              -e ENGINE_MAX_TABS
+              -e ENGINE_IDLE_MIN
+              -e MAX_IMAGE_MB
+              --log-opt max-size=10m --log-opt max-file=3
+              "$APP:$TAG"
+
+          # --- wait until the healthcheck passes (Dockerfile: first check after ~30 s) ---
+          - for i in $(seq 1 60); do
+              status=$(docker inspect -f '{{.State.Health.Status}}' "$APP" 2>/dev/null || echo missing);
+              restarts=$(docker inspect -f '{{.RestartCount}}' "$APP" 2>/dev/null || echo 0);
+              if [ "$status" = healthy ]; then echo "$APP is healthy on $BIND_ADDR:$HOST_PORT -> $PUBLIC_URL"; break; fi;
+              if [ "$status" = unhealthy ] || [ "$status" = missing ] || [ "$restarts" != 0 ] || [ "$i" = 60 ]; then echo "Container did not become healthy (status=$status, restarts=$restarts)"; docker logs --tail 100 "$APP"; exit 1; fi;
+              sleep 2;
+            done
+          - docker logs --tail 30 "$APP"
+
+          # --- keep the last 3 image tags, drop the rest ---
+          - docker images "$APP" --format '{{.Tag}}' | grep -v '^latest$' | tail -n +4 | xargs -r -I{} docker rmi "$APP:{}" || true
+          - docker image prune -f
+
+pipelines:
+  branches:
+    development:
+      - step: *build-and-run
+
+  custom:
+    deploy:
+      - step: *build-and-run
