@@ -299,7 +299,7 @@ button.info:active { transform: scale(0.95); }
 .layout { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-areas: "side" "comps"; gap: 24px; align-items: start; }
 .layout > * { min-width: 0; }
 .comps { grid-area: comps; display: grid; gap: 12px; }
-.side { grid-area: side; display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); align-items: stretch; }
+.side { grid-area: side; display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(max(280px, calc((100% - 16px) / 2)), 1fr)); align-items: stretch; }
 .side .window { scroll-margin-top: calc(env(safe-area-inset-top, 0px) + 64px + 16px); grid-template-rows: auto 1fr auto; }
 .side .window #grid-canvas { align-self: center; }
 .side .window .stage { height: auto; min-height: 300px; }
